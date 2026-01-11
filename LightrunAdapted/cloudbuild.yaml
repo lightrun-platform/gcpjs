@@ -29,6 +29,10 @@ steps:
       - '--set-env-vars=${_ENV_VARS}'         # Environment variables
       - '--min-instances=${_MIN_INSTANCES}'   # Min instances (0 = scale to zero)
       - '--max-instances=${_MAX_INSTANCES}'   # Max instances
+      - '--timeout=${_TIMEOUT}'              # Function timeout in seconds
+      - '--concurrency=${_CONCURRENCY}'       # Max concurrent requests per instance
+      - '--execution-environment=${_EXECUTION_ENV}'  # Execution environment (gen1/gen2)
+      - '--cpu-boost=${_CPU_BOOST}'          # Startup CPU boost (true/false)
 
 # Default substitution variables - ALL can be overridden in Cloud Build trigger settings
 # Override these in the trigger to deploy different functions without committing changes
@@ -42,6 +46,10 @@ substitutions:
   _ENV_VARS: 'BLURRED_BUCKET_NAME=lightrun-image-output'
   _MIN_INSTANCES: '0'                        # Scale to zero when idle (cost savings)
   _MAX_INSTANCES: '3'                       # Max 3 concurrent instances
+  _TIMEOUT: '540'                           # Function timeout: 540 seconds (9 minutes, max for Gen2)
+  _CONCURRENCY: '80'                        # Max concurrent requests per instance (default for Gen2)
+  _EXECUTION_ENV: 'gen2'                    # Execution environment: gen2 (Cloud Functions 2nd generation)
+  _CPU_BOOST: 'true'                        # Startup CPU boost: true (reduces cold start time)
 
 # Options - using default (cheapest) machine type
 options:
