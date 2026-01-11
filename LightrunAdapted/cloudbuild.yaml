@@ -27,6 +27,8 @@ steps:
       - '--entry-point=${_ENTRY_POINT}'       # Function entry point name
       - '--trigger-bucket=${_TRIGGER_BUCKET}' # Storage bucket trigger
       - '--set-env-vars=${_ENV_VARS}'         # Environment variables
+      - '--min-instances=${_MIN_INSTANCES}'   # Min instances (0 = scale to zero)
+      - '--max-instances=${_MAX_INSTANCES}'   # Max instances
 
 # Default substitution variables - ALL can be overridden in Cloud Build trigger settings
 # Override these in the trigger to deploy different functions without committing changes
@@ -38,6 +40,8 @@ substitutions:
   _ENTRY_POINT: 'blurOffensiveImages'
   _TRIGGER_BUCKET: 'lightrun-image-input'
   _ENV_VARS: 'BLURRED_BUCKET_NAME=lightrun-image-output'
+  _MIN_INSTANCES: '0'                        # Scale to zero when idle (cost savings)
+  _MAX_INSTANCES: '3'                       # Max 3 concurrent instances
 
 # Options - using default (cheapest) machine type
 options:
