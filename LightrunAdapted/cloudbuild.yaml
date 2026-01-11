@@ -16,6 +16,7 @@ steps:
   # Deploy the Cloud Function
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
+    dir: '${_FUNCTION_DIR}'                   # Change to function directory before deploying
     args:
       - 'functions'
       - 'deploy'
@@ -23,7 +24,7 @@ steps:
       - '--gen2'
       - '--runtime=${_RUNTIME}'               # Node.js runtime (e.g., nodejs20)
       - '--region=${_REGION}'                 # Region (e.g., europe-west3)
-      - '--source=${_FUNCTION_DIR}'           # Source directory path
+      - '--source=.'                          # Source is current directory (function dir)
       - '--entry-point=${_ENTRY_POINT}'       # Function entry point name
       - '--trigger-bucket=${_TRIGGER_BUCKET}' # Storage bucket trigger
       - '--set-env-vars=${_ENV_VARS}'         # Environment variables
