@@ -1,0 +1,23 @@
+{
+  "name": "nodejs-docs-samples-composer",
+  "description": "Node.js Google Composer sample.",
+  "version": "0.0.1",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "Google Inc.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GoogleCloudPlatform/nodejs-docs-samples.git"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "scripts": {
+    "test": "c8 mocha -p -j 2 --exit test/*.test.js"
+  },
+  "devDependencies": {
+    "c8": "^10.0.0",
+    "chai": "^4.5.0",
+    "mocha": "^10.0.0"
+  }
+}

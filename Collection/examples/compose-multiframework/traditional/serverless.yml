@@ -1,0 +1,18 @@
+service: traditional
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+
+functions:
+  hello:
+    handler: handler.handler
+    events:
+      - httpApi:
+          path: /
+          method: get
+    environment:
+      # We are using the output of the shared resources CloudFormation template
+      # that is passed down from Serverless Compose, and the staged param "domain".
+      TABLE_NAME: ${param:tableName}
+      DOMAIN: ${param:domain}

@@ -1,0 +1,22 @@
+{
+  "name": "cloud-tasks-app",
+  "description": "Creates Cloud Tasks from form submission",
+  "main": "index.js",
+  "private": true,
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "c8 mocha -p -j 2 --timeout 10000"
+  },
+  "dependencies": {
+    "@google-cloud/tasks": "^5.0.0",
+    "express": "^4.17.1"
+  },
+  "devDependencies": {
+    "c8": "^10.0.0",
+    "chai": "^4.5.0",
+    "mocha": "^10.0.0"
+  }
+}

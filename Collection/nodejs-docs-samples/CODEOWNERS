@@ -1,0 +1,53 @@
+# See https://help.github.com/articles/about-codeowners/
+# for more info about CODEOWNERS file
+
+# Repo owner
+## Default ownership
+* @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+
+## Repository Infrastructure
+/* @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-infra # root files
+.github/* @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-infra # common tooling configurations
+.github/workflows/utils/* @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-infra # reusable workflows components
+
+## Kokoro CI Configuration (Requires maintainer review)
+.kokoro @GoogleCloudPlatform/nodejs-docs-samples-owners @GoogleCloudPlatform/cloud-samples-infra
+
+# Infrastructure
+auth @GoogleCloudPlatform/googleapis-auth @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+batch @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+compute @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+iam @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+kms @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+orgpolicy @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+recaptcha_enterprise @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+recaptcha_enterprise/demosite @GoogleCloudPlatform/recaptcha-customer-obsession-reviewers @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+secret-manager @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers @GoogleCloudPlatform/cloud-secrets-team
+parametermanager @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers @GoogleCloudPlatform/cloud-secrets-team @GoogleCloudPlatform/cloud-parameters-team
+service-directory @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+tpu @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+webrisk @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+
+# SDK teams
+cloud-sql @GoogleCloudPlatform/cloud-sql-connectors @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+datastore @GoogleCloudPlatform/cloud-native-db-dpes @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+storagetransfer @GoogleCloudPlatform/gcs-sdk-team @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+
+# One-offs
+composer @GoogleCloudPlatform/cloud-dpes-composer @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+
+# Data & AI
+document-ai @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/document-ai-samples-contributors @GoogleCloudPlatform/cloud-samples-reviewers
+document-warehouse @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/document-ai-samples-contributors @GoogleCloudPlatform/cloud-samples-reviewers
+
+# Self-service
+ai-platform @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/text-embedding @GoogleCloudPlatform/cloud-samples-reviewers
+asset @GoogleCloudPlatform/cloud-asset-analysis-team @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+dlp @GoogleCloudPlatform/googleapis-dlp @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+model-armor @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers @GoogleCloudPlatform/cloud-modelarmor-team
+security-center @GoogleCloudPlatform/gcp-security-command-center @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+retail @GoogleCloudPlatform/cloud-retail-team @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+media @GoogleCloudPlatform/cloud-media-team @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+healthcare @GoogleCloudPlatform/healthcare-life-sciences @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+routeoptimization @GoogleCloudPlatform/geo-routeoptimization @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers
+translate @GoogleCloudPlatform/nodejs-samples-reviewers @GoogleCloudPlatform/cloud-samples-reviewers @GoogleCloudPlatform/cloud-ml-translate-dev

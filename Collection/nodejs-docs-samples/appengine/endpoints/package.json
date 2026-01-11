@@ -1,0 +1,33 @@
+{
+  "name": "appengine-endpoints",
+  "description": "Endpoints Node.js sample for Google App Engine Flexible Environment.",
+  "version": "0.0.1",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "Google Inc.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GoogleCloudPlatform/nodejs-docs-samples.git"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "deploy": "gcloud app deploy",
+    "start": "node app.js",
+    "unit-test": "c8 mocha -p -j 2 test/ --timeout=60000 --exit",
+    "test": "npm run unit-test"
+  },
+  "dependencies": {
+    "express": "^4.16.4"
+  },
+  "devDependencies": {
+    "c8": "^10.0.0",
+    "chai": "^4.5.0",
+    "mocha": "^10.0.0",
+    "proxyquire": "^2.1.0",
+    "sinon": "^18.0.0",
+    "supertest": "^7.0.0",
+    "wait-port": "^1.0.4"
+  }
+}

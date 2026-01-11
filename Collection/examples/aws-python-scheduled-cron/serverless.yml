@@ -1,0 +1,13 @@
+service: aws-python-scheduled-cron
+
+frameworkVersion: "4"
+
+provider:
+  name: aws
+  runtime: python3.12
+
+functions:
+  rateHandler:
+    handler: handler.run
+    events:
+      - schedule: rate(1 minute)

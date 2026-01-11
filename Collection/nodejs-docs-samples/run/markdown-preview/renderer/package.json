@@ -1,0 +1,35 @@
+{
+  "name": "markdown-preview-renderer",
+  "description": "Cloud Run service to demonstrate service-to-service authentication, paired with Editor service.",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "Google LLC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GoogleCloudPlatform/nodejs-docs-samples.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "npm -- run all-test",
+    "all-test": "npm run unit-test && npm run system-test",
+    "unit-test": "c8 mocha -p -j 2 test/app.test.js --exit",
+    "system-test": "c8 mocha -p -j 2 test/system.test.js --timeout=360000 --exit"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+    "markdown-it": "^14.0.0"
+  },
+  "devDependencies": {
+    "c8": "^10.0.0",
+    "google-auth-library": "^9.0.0",
+    "got": "^14.6.5",
+    "mocha": "^11.0.0",
+    "sinon": "^18.0.0",
+    "supertest": "^7.0.0"
+  }
+}

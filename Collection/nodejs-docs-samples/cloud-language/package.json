@@ -1,0 +1,29 @@
+{
+  "name": "nodejs-docs-samples-language",
+  "license": "Apache-2.0",
+  "author": "Google Inc.",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": "googleapis/nodejs-language",
+  "private": true,
+  "files": [
+    "*.js",
+    "resources"
+  ],
+  "scripts": {
+    "test": "c8 mocha -p -j 2 --timeout 60000"
+  },
+  "dependencies": {
+    "@google-cloud/language": "^6.1.0",
+    "@google-cloud/storage": "^7.0.0",
+    "mathjs": "^13.0.0",
+    "yargs": "^17.0.0"
+  },
+  "devDependencies": {
+    "c8": "^10.0.0",
+    "chai": "^4.5.0",
+    "mocha": "^10.0.0",
+    "uuid": "^10.0.0"
+  }
+}

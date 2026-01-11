@@ -1,0 +1,30 @@
+{
+  "name": "helloworld",
+  "description": "Simple hello world sample in Node",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "npm -- run all-test",
+    "all-test": "npm run unit-test && npm run system-test",
+    "unit-test": "c8 mocha -p -j 2 test/index.test.js --exit",
+    "system-test": "NAME=Cloud c8 mocha -p -j 2 test/system.test.js --timeout=180000"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "author": "Google LLC",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "express": "^4.17.1"
+  },
+  "devDependencies": {
+    "c8": "^10.0.0",
+    "google-auth-library": "^9.0.0",
+    "got": "^11.5.0",
+    "mocha": "^10.0.0",
+    "supertest": "^7.0.0"
+  }
+}

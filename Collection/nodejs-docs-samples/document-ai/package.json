@@ -1,0 +1,26 @@
+{
+  "name": "nodejs-document-ai-samples",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "Google LLC",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "files": [
+    "*.js"
+  ],
+  "scripts": {
+    "test": "c8 mocha -p -j 2 test/*.js --timeout 600000"
+  },
+  "dependencies": {
+    "@google-cloud/documentai": "^8.0.0",
+    "@google-cloud/storage": "^7.0.0",
+    "p-queue": "^8.0.0"
+  },
+  "devDependencies": {
+    "c8": "^10.0.0",
+    "chai": "^4.5.0",
+    "mocha": "^10.0.0",
+    "uuid": "^10.0.0"
+  }
+}

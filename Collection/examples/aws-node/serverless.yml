@@ -1,0 +1,11 @@
+service: aws-node # NOTE: update this with your service name
+
+frameworkVersion: '4'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+
+functions:
+  hello:
+    handler: handler.hello

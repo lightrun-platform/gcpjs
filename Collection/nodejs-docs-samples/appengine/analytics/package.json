@@ -1,0 +1,30 @@
+{
+  "name": "appengine-analytics",
+  "description": "Sample for Google Analytics Measurement Protocol on Google App Engine.",
+  "version": "0.0.1",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "Google Inc.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GoogleCloudPlatform/nodejs-docs-samples.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "start": "node app.js",
+    "system-test": "c8 mocha -p -j 2 --exit test/*.test.js",
+    "test": "npm run system-test"
+  },
+  "dependencies": {
+    "express": "^4.16.4",
+    "node-fetch": "^3.0.0"
+  },
+  "devDependencies": {
+    "c8": "^10.0.0",
+    "mocha": "^10.0.0",
+    "supertest": "^7.0.0"
+  }
+}

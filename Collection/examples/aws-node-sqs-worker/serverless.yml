@@ -1,0 +1,20 @@
+service: aws-node-sqs-worker
+frameworkVersion: '4'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+
+functions:
+  producer:
+    handler: handler.consumer
+    events:
+      - sqs: arn:aws:sqs:${aws:region}:${aws:accountId}:MyFirstQueue
+
+resources:
+  Resources:
+    JobQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: MyFirstQueue
+
