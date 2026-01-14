@@ -1,0 +1,6 @@
+Filtering the log data using "composedMessage CONTAINS "HID""
+Timestamp                       (process)[PID]    
+2026-01-13 07:56:31.549937+0200  localhost WindowServer[394]: (IOKit) [com.apple.iohid:default] Connection added: IOHIDEventSystemConnection uuid:CD3179C9-ECE5-4620-BE23-FB3B34F7A231 pid:72842 process:iTerm2 type:Passive entitlements:0x0 caller:HIToolbox: _TISCopyAttachedKeyboardLanguages + 112 attributes:(null) state:0x0 events:0 mask:0x0 dropped:0 dropStatus:0 droppedMask:0x0 lastDroppedTime:NONE
+2026-01-13 07:56:31.559865+0200  localhost WindowServer[394]: (IOKit) [com.apple.iohid:default] Connection removed: IOHIDEventSystemConnection uuid:CD3179C9-ECE5-4620-BE23-FB3B34F7A231 pid:72842 process:iTerm2 type:Passive entitlements:0x0 caller:HIToolbox: _TISCopyAttachedKeyboardLanguages + 112 attributes:(null) state:0x1 events:0 mask:0x0 dropped:0 dropStatus:0 droppedMask:0x0 lastDroppedTime:NONE
+2026-01-13 07:56:37.141551+0200  localhost bluetoothd[386]: [com.apple.bluetooth:Server.Core] [MacUserClient][NotificationEventHandler] -- Received Heart Beat notification -- HIDShim
+
