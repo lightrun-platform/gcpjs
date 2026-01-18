@@ -1,0 +1,52 @@
+# Cloud Build configuration for deploying HTTP Cloud Functions
+# This file deploys helloLightrun function
+#
+# USAGE:
+#   cd LightrunAdapted/gcf-example-basic/helloLightrun
+#   gcloud builds submit --config=cloudbuild.yaml \
+#     --substitutions=_ENV_VARS="LIGHTRUN_SECRET=secret,DISPLAY_NAME=name"
+#
+# HOW TO OVERRIDE DEFAULTS:
+#   Add --substitutions flag with any variable override, e.g.:
+#   --substitutions=_FUNCTION_NAME="custom-name",_REGION="us-central1"
+
+steps:
+  # Deploy the Cloud Function
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'functions'
+      - 'deploy'
+      - '${_FUNCTION_NAME}'                    # Function name (e.g., helloNoLightrun)
+      - '--gen2'
+      - '--runtime=${_RUNTIME}'               # Node.js runtime (e.g., nodejs20)
+      - '--region=${_REGION}'                 # Region (e.g., europe-west3)
+      - '--source=.'                          # Source is current directory (function dir)
+      - '--entry-point=${_ENTRY_POINT}'       # Function entry point name
+      - '--trigger-http'                      # HTTP trigger (public endpoint)
+      - '--allow-unauthenticated'             # Allow unauthenticated HTTP requests
+      - '--set-env-vars=${_ENV_VARS}'         # Environment variables
+      - '--min-instances=${_MIN_INSTANCES}'   # Min instances (0 = scale to zero)
+      - '--max-instances=${_MAX_INSTANCES}'   # Max instances
+      - '--timeout=${_TIMEOUT}'              # Function timeout in seconds
+      - '--concurrency=${_CONCURRENCY}'       # Max concurrent requests per instance
+      - '--memory=${_MEMORY}'                 # Memory allocation (required when using --cpu)
+      - '--cpu=${_CPU}'                      # CPU allocation (required when concurrency > 1)
+
+# Default substitution variables - ALL can be overridden via --substitutions flag
+substitutions:
+  _FUNCTION_NAME: 'helloLightrun'         
+  _RUNTIME: 'nodejs20'
+  _REGION: 'europe-west3'
+  _ENTRY_POINT: 'helloLightrun'            # Function entry point (matches function name)
+  _ENV_VARS: ''                             # Required: Set LIGHTRUN_SECRET and DISPLAY_NAME (e.g., 'LIGHTRUN_SECRET=secret,DISPLAY_NAME=name')
+  _MIN_INSTANCES: '0'                        # Scale to zero when idle (cost savings)
+  _MAX_INSTANCES: '5'                       # Max 5 concurrent instances
+  _TIMEOUT: '540'                           # Function timeout: 540 seconds (9 minutes, max for Gen2)
+  _CONCURRENCY: '80'                        # Max concurrent requests per instance (default for Gen2)
+  _MEMORY: '512Mi'                          # Memory allocation: 512Mi (required when using --cpu)
+  _CPU: '2'                                 # CPU allocation: 2 CPUs (required when concurrency > 1)
+
+# Options - using default (cheapest) machine type
+options:
+  logging: CLOUD_LOGGING_ONLY
