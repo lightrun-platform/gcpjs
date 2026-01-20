@@ -407,9 +407,29 @@ class ReportGenerator:
                 report_lines.append(f"  F-Test (variance comparison):")
                 report_lines.append(f"    F-statistic: {f_test_result['f_statistic']:.4f}")
                 report_lines.append(f"    P-value: {f_test_result['p_value']:.4f}")
+                report_lines.append(f"    P-value: {f_test_result['p_value']:.4f}")
                 report_lines.append(f"    {f_test_result['interpretation']}")
-        
-        # Lightrun-specific metrics
+
+        # Lightrun Registration Overhead (Special Metric)
+        if 'functionInvocationOverhead' in with_metrics and 'functionInvocationOverhead' in without_metrics:
+            with_vals = with_metrics['functionInvocationOverhead']
+            without_vals = without_metrics['functionInvocationOverhead']
+            
+            if with_vals and without_vals:
+                with_stats = calculate_stats(with_vals)
+                without_stats = calculate_stats(without_vals)
+                
+                registration_overhead_mean = with_stats['mean'] - without_stats['mean']
+                # Standard deviation of the difference (assuming independence): sqrt(s1^2 + s2^2)
+                registration_overhead_stdev = np.sqrt(with_stats['stdev']**2 + without_stats['stdev']**2)
+                
+                report_lines.append("\n" + "-" * 80)
+                report_lines.append("LIGHTRUN REGISTRATION OVERHEAD")
+                report_lines.append("(Calculated as: functionInvocationOverhead[With] - functionInvocationOverhead[Without])")
+                report_lines.append("-" * 80)
+                report_lines.append(f"  Mean:   {format_duration(registration_overhead_mean)}")
+                report_lines.append(f"  StdDev: {format_duration(registration_overhead_stdev)}")
+
         if 'lightrunImportDuration' in with_metrics:
             report_lines.append("\n" + "-" * 80)
             report_lines.append("LIGHTRUN-SPECIFIC METRICS")

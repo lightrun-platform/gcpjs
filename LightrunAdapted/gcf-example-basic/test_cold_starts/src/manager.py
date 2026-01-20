@@ -16,6 +16,8 @@ from .deploy import DeployTask
 from .send_request import SendRequestTask
 from .delete import DeleteTask
 from .wait_for_cold import WaitForColdTask, ColdStartDetectionError
+from .models import GCPFunction
+from .region_allocator import RegionAllocator
 
 
 class ColdStartTestManager:
@@ -32,8 +34,9 @@ class ColdStartTestManager:
         self.config = config
         self.function_dir = function_dir
         self.executor: Optional[ThreadPoolExecutor] = None
-        self.deployed_functions: List[Dict[str, Any]] = []
+        self.deployed_functions: List[GCPFunction] = []
         self.cleanup_registered = False
+        self.region_allocator = RegionAllocator()
     
     def __enter__(self):
         """Context manager entry - create executor and register cleanup."""
@@ -65,7 +68,7 @@ class ColdStartTestManager:
         self.cleanup()
         os._exit(1)
     
-    def deploy_wait_and_test_function(self, function_index: int, deployment_start_time: float) -> tuple[Dict[str, Any], Optional[Dict[str, Any]], Optional[float]]:
+    def deploy_wait_and_test_function(self, function_index: int, deployment_start_time: float) -> tuple[GCPFunction, Optional[Dict[str, Any]], Optional[float]]:
         """
         Deploy, wait for cold, and test a single function.
         
@@ -74,33 +77,37 @@ class ColdStartTestManager:
             deployment_start_time: Timestamp when deployments started
             
         Returns:
-            Tuple of (deployment_result, test_result, time_to_cold_seconds)
+            Tuple of (GCPFunction, test_result, time_to_cold_seconds)
             test_result and time_to_cold will be None if deployment or wait fails
         """
+        # Step 0: Initialize Function Model and Allocate Region
+        function = GCPFunction(index=function_index)
+        self.region_allocator.allocate_region(function)
+        
         # Step 1: Deploy
-        deploy_task = DeployTask(function_index, self.config.lightrun_secret, self.config, self.function_dir)
-        deployment = deploy_task.execute()
+        deploy_task = DeployTask(function, self.config.lightrun_secret, self.config, self.function_dir)
+        function = deploy_task.execute()
         
-        if not deployment.get('deployed') or not deployment.get('url'):
+        if not function.deployed or not function.url:
             print(f"[{function_index:3d}] ✗ Deployment failed")
-            return deployment, None, None
+            return function, None, None
         
-        print(f"[{function_index:3d}] ✓ Deployed: {deployment['function_name']}")
+        print(f"[{function_index:3d}] ✓ Deployed: {function.name} in {function.region}")
         
         # Step 2: Wait for cold
         wait_task = WaitForColdTask(
-            deployment['function_name'],
-            deployment['function_index'],
+            function,
             self.config
         )
         
         try:
             time_to_cold = wait_task.execute(deployment_start_time, self.config.wait_minutes)
+            function.cold_start_time = time_to_cold
         except ColdStartDetectionError as e:
             print(f"[{function_index:3d}] ❌ Cold detection failed: {e}")
-            return deployment, {
+            return function, {
                 'function_index': function_index,
-                'function_name': deployment['function_name'],
+                'function_name': function.name,
                 'error': True,
                 'error_message': str(e)
             }, None
@@ -111,7 +118,7 @@ class ColdStartTestManager:
         print(f"[{function_index:3d}] Testing now...")
         
         # Step 4: Test
-        test_task = SendRequestTask(deployment['url'], deployment['function_index'])
+        test_task = SendRequestTask(function)
         test_result = test_task.execute()
         
         if test_result.get('error'):
@@ -120,8 +127,9 @@ class ColdStartTestManager:
             is_cold = test_result.get('isColdStart', False)
             total_duration = float(test_result.get('totalDuration', 0)) / 1_000_000_000
             print(f"[{function_index:3d}] ✓ Test complete: Cold={is_cold}, Duration={total_duration:.3f}s")
+            function.test_result = test_result
         
-        return deployment, test_result, time_to_cold
+        return function, test_result, time_to_cold
     
     def deploy_wait_and_test_all_functions(self) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, float]]:
         """
@@ -138,8 +146,8 @@ class ColdStartTestManager:
         print()
         
         deployment_start_time = time.time()
-        deployments = []
-        test_results = []
+        deployments: List[GCPFunction] = []
+        test_results: List[Dict[str, Any]] = []
         cold_times: Dict[str, float] = {}
         
         # Submit all functions in parallel
@@ -158,8 +166,8 @@ class ColdStartTestManager:
             completed += 1
             
             try:
-                deployment, test_result, time_to_cold = future.result()
-                deployments.append(deployment)
+                function, test_result, time_to_cold = future.result()
+                deployments.append(function)
                 
                 if test_result:
                     test_results.append(test_result)
@@ -168,6 +176,9 @@ class ColdStartTestManager:
                     cold_times[deployment['function_name']] = time_to_cold
                     deployment['time_to_cold_seconds'] = time_to_cold
                     deployment['time_to_cold_minutes'] = time_to_cold / 60
+                
+                # Track for cleanup immediately (even if failed)
+                self.deployed_functions.append(deployment)
                 
                 print(f"[{completed:3d}/{self.config.num_functions}] Function {function_index} complete")
                 
@@ -179,15 +190,34 @@ class ColdStartTestManager:
                     'error': True,
                     'error_message': str(e)
                 })
+                # Even if exception, we might have deployed something? 
+                # Ideally we'd have the deployment info, but if future raised Exception, we might not.
+                # But deploy_wait_and_test_function catches its own deployment errors and returns deployment obj.
+                # So the Exception here would typically be from the future mechanism or wrapper, not logic.
         
-        # Track deployed functions for cleanup
-        self.deployed_functions = [d for d in deployments if d.get('deployed')]
+        # Determine successful deployments for stats
+        successful_deployments = [f for f in deployments if f.deployed]
         
-        # Save deployment info
-        with open('deployments.json', 'w') as f:
-            json.dump(deployments, f, indent=2)
+        # Save deployment info (convert objects to dicts)
+        deployments_dict = [f.__dict__ for f in deployments]
         
-        successful_deployments = [d for d in deployments if d.get('deployed') and d.get('url')]
+        # Determine output directory - use config.output_dir if available, otherwise use results_file parent directory
+        if hasattr(self.config, 'output_dir') and self.config.output_dir:
+            output_dir = Path(self.config.output_dir)
+        elif hasattr(self.config, 'results_file') and self.config.results_file:
+            output_dir = Path(self.config.results_file).parent
+        else:
+            output_dir = Path('.')
+        
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Use variant-specific filename to avoid conflicts when running parallel tests
+        base_name = getattr(self.config, 'base_function_name', 'deployments')
+        deployments_file = output_dir / f'{base_name}_deployments.json'
+        with open(deployments_file, 'w') as f:
+            json.dump(deployments_dict, f, indent=2, default=str)
+        
+        successful_deployments = [f for f in deployments if f.deployed and f.url]
         print(f"\nSummary: {len(successful_deployments)}/{self.config.num_functions} functions deployed successfully")
         print(f"         {len(test_results)} test results collected")
         
@@ -195,17 +225,28 @@ class ColdStartTestManager:
     
     def save_results(self, deployments: List[Dict[str, Any]], test_results: List[Dict[str, Any]]):
         """Save test results to file."""
+        # Convert GCPFunction objects to dicts for serialization
+        deployments_dict = [f.__dict__ for f in deployments]
+        
+        # Ensure output directory exists
+        results_path = Path(self.config.results_file)
+        results_path.parent.mkdir(parents=True, exist_ok=True)
+        
         with open(self.config.results_file, 'w') as f:
             json.dump({
-                'deployments': deployments,
+                'deployments': deployments_dict,
                 'test_results': test_results,
                 'test_timestamp': datetime.now(timezone.utc).isoformat()
-            }, f, indent=2)
+            }, f, indent=2, default=str)
     
     def get_results(self) -> Dict[str, Any]:
         """Return test results as a dictionary."""
+        # Ensure deployments are serializable
+        deployments_list = getattr(self, 'deployments', [])
+        deployments_dict = [f.__dict__ if isinstance(f, GCPFunction) else f for f in deployments_list]
+        
         return {
-            'deployments': self.deployments if hasattr(self, 'deployments') else [],
+            'deployments': deployments_dict,
             'test_results': self.test_results if hasattr(self, 'test_results') else [],
             'config': {
                 'base_function_name': self.config.base_function_name,
@@ -233,8 +274,8 @@ class ColdStartTestManager:
         try:
             futures = {
                 self.executor.submit(
-                    lambda fn=func['function_name']: DeleteTask(fn, self.config).execute()
-                ): func['function_name']
+                    lambda fn=func: DeleteTask(fn, self.config).execute()
+                ): func.name
                 for func in self.deployed_functions
             }
             

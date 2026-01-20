@@ -221,15 +221,16 @@ Examples:
     return args
 
 
-def run_single_test(config: argparse.Namespace, function_dir: Path, base_name: str, entry_point: str) -> dict:
+def run_single_test(config: argparse.Namespace, function_dir: Path, base_name: str, entry_point: str, output_dir: Path) -> dict:
     """Run a single test variant (with or without Lightrun)."""
     # Create a copy of config with variant-specific settings
     import copy
     variant_config = copy.deepcopy(config)
     variant_config.base_function_name = base_name
     variant_config.entry_point = entry_point
-    variant_config.results_file = f'{base_name}_results.json'
+    variant_config.results_file = str(output_dir / f'{base_name}_results.json')
     variant_config.report_file = f'{base_name}_report.txt'
+    variant_config.output_dir = output_dir
     
     print(f"\n{'='*80}")
     print(f"Starting test for: {base_name}")
@@ -276,6 +277,18 @@ def main():
     print("Running both test variants in parallel...")
     print()
     
+    # Create test_results directory with timestamped subdirectory
+    test_results_base_dir = Path(__file__).parent / 'test_results'
+    test_results_base_dir.mkdir(exist_ok=True)
+    
+    # Create timestamped subdirectory
+    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+    test_results_dir = test_results_base_dir / timestamp
+    test_results_dir.mkdir(exist_ok=True)
+    
+    print(f"Results will be saved to: {test_results_dir}")
+    print()
+    
     with ThreadPoolExecutor(max_workers=2) as executor:
         # Submit both tests
         future_with = executor.submit(
@@ -283,14 +296,16 @@ def main():
             args,
             hello_lightrun_dir,
             'helloLightrun',
-            'helloLightrun'
+            'helloLightrun',
+            test_results_dir
         )
         future_without = executor.submit(
             run_single_test,
             args,
             hello_no_lightrun_dir,
             'helloNoLightrun',
-            'helloNoLightrun'
+            'helloNoLightrun',
+            test_results_dir
         )
         
         # Wait for both to complete
@@ -302,17 +317,12 @@ def main():
     print("Generating Comparative Analysis...")
     print("=" * 80)
     
-    # Create test_results directory
-    test_results_dir = Path(__file__).parent / 'test_results'
-    test_results_dir.mkdir(exist_ok=True)
-    
     report_generator = ReportGenerator(with_lightrun_results, without_lightrun_results)
     report_generator.set_output_dir(test_results_dir)
     report_generator.generate_all(args.report_file)
     
     # Save combined results
     import json
-    from datetime import datetime
     combined_results = {
         'with_lightrun': with_lightrun_results,
         'without_lightrun': without_lightrun_results,

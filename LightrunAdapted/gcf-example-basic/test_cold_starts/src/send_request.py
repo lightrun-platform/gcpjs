@@ -3,22 +3,23 @@
 import requests
 import time
 from datetime import datetime, timezone
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from .models import GCPFunction
 
 
 class SendRequestTask:
     """Task to send a request to a Cloud Function."""
     
-    def __init__(self, url: str, function_index: int):
+    def __init__(self, function: GCPFunction):
         """
         Initialize send request task.
         
         Args:
-            url: URL of the Cloud Function
-            function_index: Index of the function
+            function: GCPFunction object including URL and Index
         """
-        self.url = url
-        self.function_index = function_index
+        self.function = function
+        self.url = function.url
+        self.function_index = function.index
     
     def execute(self) -> Dict[str, Any]:
         """Execute the request task."""

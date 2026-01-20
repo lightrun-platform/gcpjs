@@ -16,6 +16,7 @@ if (!displayName || displayName.trim() === '') {
 
 lightrun.init({
     lightrunSecret: lightrunSecret,
+    lightrunInitWaitTimeMs: 0,
     agentLog: { agentLogTargetDir: '', agentLogLevel: 'warn' },
     internal: { gcpDebug: true },
     metadata: { registration: { displayName: 'Hacker-News-Lightrun-Report-' + displayName } }

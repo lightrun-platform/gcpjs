@@ -1,4 +1,5 @@
 let isColdStart = true;
+let initializationEndTime;
 const startTime = process.hrtime.bigint()
 
 const functions = require('@google-cloud/functions-framework');
@@ -36,31 +37,35 @@ functions.http('helloLightrun', lightrun.wrap(async (req, res) => {
   const totalImportsDuration = lightrunImportDuration + gcfImportDuration;
   const envCheckDuration = lightrunInitStart - lightrunImportEndTime;
   const lightrunInitDuration = lightrunInitEnd - lightrunInitStart;
-  const totalSetupDuration = lightrunInitEnd - startTime;
-  const functionInvocationOverhead = handlerStartTime - lightrunInitEnd;
+  const totalSetupDuration = initializationEndTime - startTime;
   const totalDuration = handlerStartTime - startTime;
+
+  // Note - functionInvocationOverhead contains both Lightrun and GCF initialization times.
+  // The Lightrun library postpones agent registration until first function invocation.
+  const functionInvocationOverhead = handlerStartTime - initializationEndTime;
+
 
   const formatDuration = (nanoseconds) => {
     // Use BigInt literals (n) to maintain absolute precision
     const ns = BigInt(nanoseconds);
-  
+
     const seconds = ns / 1_000_000_000n;
     const milliseconds = (ns % 1_000_000_000n) / 1_000_000n;
     const microseconds = (ns % 1_000_000n) / 1_000n;
     const remainingNs = ns % 1_000n;
-  
+
     const parts = [];
     if (seconds > 0n) parts.push(`${seconds}s`);
     if (milliseconds > 0n) parts.push(`${milliseconds}ms`);
     if (microseconds > 0n) parts.push(`${microseconds}µs`);
     if (remainingNs > 0n || parts.length === 0) parts.push(`${remainingNs}ns`);
-  
+
     return parts.join(', ');
   };
 
 
-  const message = 
-  `Hello from Lightrun!
+  const message =
+    `Hello from Lightrun!
       Total duration: ${formatDuration(totalDuration)}
       Total imports duration: ${formatDuration(totalImportsDuration)}
       Lightrun import duration: ${formatDuration(lightrunImportDuration)}
@@ -70,18 +75,19 @@ functions.http('helloLightrun', lightrun.wrap(async (req, res) => {
       Total setup duration: ${formatDuration(totalSetupDuration)}
       Function invocation overhead: ${formatDuration(functionInvocationOverhead)}`;
 
-    res.send({
-      isColdStart: isColdStart,
-      message: message,
-      totalDuration: totalDuration.toString(),
-      totalImportsDuration: totalImportsDuration.toString(),
-      lightrunImportDuration: lightrunImportDuration.toString(),
-      gcfImportDuration: gcfImportDuration.toString(),
-      envCheckDuration: envCheckDuration.toString(),
-      lightrunInitDuration: lightrunInitDuration.toString(),
-      totalSetupDuration: totalSetupDuration.toString(),
-      functionInvocationOverhead: functionInvocationOverhead.toString()
+  res.send({
+    isColdStart: isColdStart,
+    message: message,
+    totalDuration: totalDuration.toString(),
+    totalImportsDuration: totalImportsDuration.toString(),
+    lightrunImportDuration: lightrunImportDuration.toString(),
+    gcfImportDuration: gcfImportDuration.toString(),
+    envCheckDuration: envCheckDuration.toString(),
+    lightrunInitDuration: lightrunInitDuration.toString(),
+    totalSetupDuration: totalSetupDuration.toString(),
+    functionInvocationOverhead: functionInvocationOverhead.toString()
   });
   isColdStart = false;
 }
-)); 
+));
+initializationEndTime = process.hrtime.bigint(); 
