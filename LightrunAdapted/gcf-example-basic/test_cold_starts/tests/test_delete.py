@@ -22,14 +22,18 @@ class TestDeleteTask(unittest.TestCase):
             region='us-central1',
             project='test-project'
         )
-        # Function names are lowercase for Cloud Run compatibility
-        self.function_name = 'testfunction-001'
+
+        # Mock function object
+        self.function = Mock()
+        self.function.name = 'testfunction-001'
+        self.function.region = 'us-central1'
+        self.function_name = self.function.name
     
     def test_init(self):
         """Test DeleteTask initialization."""
-        task = DeleteTask(self.function_name, self.config)
+        task = DeleteTask(self.function, self.config)
         
-        self.assertEqual(task.function_name, self.function_name)
+        self.assertEqual(task.function, self.function)
         self.assertEqual(task.config, self.config)
     
     @patch('test_cold_starts.src.delete.subprocess.run')
@@ -41,7 +45,7 @@ class TestDeleteTask(unittest.TestCase):
         mock_result.stderr = ''
         mock_subprocess.return_value = mock_result
         
-        task = DeleteTask(self.function_name, self.config)
+        task = DeleteTask(self.function, self.config)
         result = task.execute()
         
         self.assertTrue(result['success'])
@@ -57,7 +61,7 @@ class TestDeleteTask(unittest.TestCase):
         mock_result.stderr = 'Function not found'
         mock_subprocess.return_value = mock_result
         
-        task = DeleteTask(self.function_name, self.config)
+        task = DeleteTask(self.function, self.config)
         result = task.execute()
         
         self.assertFalse(result['success'])
@@ -71,7 +75,7 @@ class TestDeleteTask(unittest.TestCase):
         # Mock exception
         mock_subprocess.side_effect = Exception('Network error')
         
-        task = DeleteTask(self.function_name, self.config)
+        task = DeleteTask(self.function, self.config)
         result = task.execute()
         
         self.assertFalse(result['success'])
@@ -86,7 +90,7 @@ class TestDeleteTask(unittest.TestCase):
         mock_result.returncode = 0
         mock_subprocess.return_value = mock_result
         
-        task = DeleteTask(self.function_name, self.config)
+        task = DeleteTask(self.function, self.config)
         task.execute()
         
         # Check delete command structure
@@ -112,7 +116,7 @@ class TestDeleteTask(unittest.TestCase):
         mock_result.stderr = long_error
         mock_subprocess.return_value = mock_result
         
-        task = DeleteTask(self.function_name, self.config)
+        task = DeleteTask(self.function, self.config)
         result = task.execute()
         
         self.assertLessEqual(len(result['error']), 200)
@@ -125,7 +129,7 @@ class TestDeleteTask(unittest.TestCase):
         
         mock_subprocess.side_effect = subprocess.TimeoutExpired('gcloud', 60)
         
-        task = DeleteTask(self.function_name, self.config)
+        task = DeleteTask(self.function, self.config)
         result = task.execute()
         
         self.assertFalse(result['success'])

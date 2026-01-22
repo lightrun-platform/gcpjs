@@ -28,10 +28,11 @@ class TestWaitForColdTask(unittest.TestCase):
     
     def test_init(self):
         """Test WaitForColdTask initialization."""
-        task = WaitForColdTask(self.function_name, self.function_index, self.config)
+        task = WaitForColdTask(self.function_name, 'us-central1', self.function_index, self.config)
         
         self.assertEqual(task.function_name, self.function_name)
-        self.assertEqual(task.function_index, self.function_index)
+        self.assertEqual(task.region, 'us-central1')
+        self.assertEqual(task.index, self.function_index)
         self.assertEqual(task.config, self.config)
     
     @patch('requests.get')
@@ -53,7 +54,7 @@ class TestWaitForColdTask(unittest.TestCase):
         mock_response.text = '{"unit": "1"}'
         mock_requests_get.return_value = mock_response
 
-        task = WaitForColdTask(self.function_name, self.function_index, self.config)
+        task = WaitForColdTask(self.function_name, 'us-central1', self.function_index, self.config)
         count = task.check_function_instances()
 
         # Should return 1 (uncertainty) when no timeSeries data
@@ -89,7 +90,7 @@ class TestWaitForColdTask(unittest.TestCase):
         mock_response.raise_for_status = Mock()
         mock_requests_get.return_value = mock_response
         
-        task = WaitForColdTask(self.function_name, self.function_index, self.config)
+        task = WaitForColdTask(self.function_name, 'us-central1', self.function_index, self.config)
         count = task.check_function_instances()
         
         self.assertEqual(count, 2)
@@ -103,7 +104,7 @@ class TestWaitForColdTask(unittest.TestCase):
         
         mock_subprocess.return_value = mock_describe
         
-        task = WaitForColdTask(self.function_name, self.function_index, self.config)
+        task = WaitForColdTask(self.function_name, 'us-central1', self.function_index, self.config)
         count = task.check_function_instances()
         
         # Should return 1 (uncertainty - might still be warm)
@@ -124,7 +125,7 @@ class TestWaitForColdTask(unittest.TestCase):
         import requests
         mock_requests_get.side_effect = requests.RequestException('API error')
         
-        task = WaitForColdTask(self.function_name, self.function_index, self.config)
+        task = WaitForColdTask(self.function_name, 'us-central1', self.function_index, self.config)
         count = task.check_function_instances()
 
         # Should return uncertainty (1) if monitoring fails - don't assume cold
@@ -135,7 +136,7 @@ class TestWaitForColdTask(unittest.TestCase):
         """Test exception handling."""
         mock_subprocess.side_effect = Exception('Network error')
         
-        task = WaitForColdTask(self.function_name, self.function_index, self.config)
+        task = WaitForColdTask(self.function_name, 'us-central1', self.function_index, self.config)
         count = task.check_function_instances()
         
         # Should return 1 (uncertainty) on exception
@@ -192,7 +193,7 @@ class TestWaitForColdTask(unittest.TestCase):
         # Need 16 consecutive checks returning 1 to confirm cold
         mock_check.return_value = 1
 
-        task = WaitForColdTask(self.function_name, self.function_index, self.config)
+        task = WaitForColdTask(self.function_name, 'us-central1', self.function_index, self.config)
 
         # Use very short wait times for testing (0 initial wait, 10 minutes max poll to allow 4 min confirmation)
         # Need enough time for 16 checks at 15s intervals = 240s = 4 minutes
@@ -220,7 +221,7 @@ class TestWaitForColdTask(unittest.TestCase):
         # Mock always warm
         mock_check.return_value = 1
         
-        task = WaitForColdTask(self.function_name, self.function_index, self.config)
+        task = WaitForColdTask(self.function_name, 'us-central1', self.function_index, self.config)
         
         # Use very short timeout for testing
         with self.assertRaises(ColdStartDetectionError) as context:
@@ -253,7 +254,7 @@ class TestWaitForColdTask(unittest.TestCase):
         mock_response.text = 'invalid'
         mock_requests_get.return_value = mock_response
 
-        task = WaitForColdTask(self.function_name, self.function_index, self.config)
+        task = WaitForColdTask(self.function_name, 'us-central1', self.function_index, self.config)
         count = task.check_function_instances()
 
         # Should return uncertainty (1) if can't parse - don't assume cold
@@ -277,7 +278,7 @@ class TestWaitForColdTask(unittest.TestCase):
         mock_response.text = '{"unit": "1"}'
         mock_requests_get.return_value = mock_response
 
-        task = WaitForColdTask(self.function_name, self.function_index, self.config)
+        task = WaitForColdTask(self.function_name, 'us-central1', self.function_index, self.config)
         count = task.check_function_instances()
 
         # Should return uncertainty (1) if no timeSeries data - don't assume cold

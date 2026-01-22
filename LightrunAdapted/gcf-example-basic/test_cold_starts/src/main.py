@@ -196,8 +196,8 @@ Examples:
     parser.add_argument(
         '--results-file',
         type=str,
-        default='comparative_cold_start_results.json',
-        help='Output file for test results (default: comparative_cold_start_results.json)'
+        default='cold_start_test_results.json',
+        help='Output file for test results (default: cold_start_test_results.json)'
     )
     parser.add_argument(
         '--report-file',
@@ -210,6 +210,48 @@ Examples:
         type=int,
         default=None,
         help='Number of worker threads per test variant (default: number of functions to deploy)'
+    )
+    parser.add_argument(
+        '--delay-between-requests',
+        type=int,
+        default=10,
+        help='Seconds to wait between requests to each function (default: 10)'
+    )
+    parser.add_argument(
+        '--num-requests-per-function',
+        type=int,
+        default=10,
+        help='Number of requests to send to each function (default: 10)'
+    )
+    parser.add_argument(
+        '--lightrun-api-key',
+        type=str,
+        default=os.environ.get('LIGHTRUN_API_KEY', ''),
+        help='Lightrun API key for adding snapshots (default: from LIGHTRUN_API_KEY env var)'
+    )
+    parser.add_argument(
+        '--lightrun-company-id',
+        type=str,
+        default=os.environ.get('LIGHTRUN_COMPANY_ID', ''),
+        help='Lightrun Company ID (default: from LIGHTRUN_COMPANY_ID env var)'
+    )
+    parser.add_argument(
+        '--max-allocations-per-region',
+        type=int,
+        default=20,
+        help='Maximum number of functions to allocate per region (default: 20)'
+    )
+    parser.add_argument(
+        '--consecutive-cold-checks',
+        type=int,
+        default=3,
+        help='Number of consecutive checks showing 0 instances required to confirm cold state (default: 3)'
+    )
+    parser.add_argument(
+        '--cold-check-delay',
+        type=int,
+        default=30,
+        help='Seconds to wait between cold state checks (default: 30)'
     )
     
     args = parser.parse_args()

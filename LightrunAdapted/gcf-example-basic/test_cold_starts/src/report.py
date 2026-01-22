@@ -282,7 +282,7 @@ class ReportGenerator:
         # Extract time_to_cold from deployments (in seconds, convert to nanoseconds for consistency)
         time_to_cold_values = []
         for deployment in deployments:
-            if deployment.get('deployed') and deployment.get('time_to_cold_seconds') is not None:
+            if deployment.get('is_deployed') and deployment.get('time_to_cold_seconds') is not None:
                 # Convert seconds to nanoseconds for consistency with other duration metrics
                 time_to_cold_values.append(deployment['time_to_cold_seconds'] * 1_000_000_000)
         if time_to_cold_values:
@@ -292,7 +292,7 @@ class ReportGenerator:
         # This measures only the time the successful attempt took, excluding retry wait times
         deployment_duration_values = []
         for deployment in deployments:
-            if deployment.get('deployed') and deployment.get('deployment_duration_nanoseconds') is not None:
+            if deployment.get('is_deployed') and deployment.get('deployment_duration_nanoseconds') is not None:
                 deployment_duration_values.append(float(deployment['deployment_duration_nanoseconds']))
         if deployment_duration_values:
             metrics['deploymentDuration'] = deployment_duration_values
@@ -301,6 +301,15 @@ class ReportGenerator:
         if any('lightrunImportDuration' in r for r in successful_results):
             metrics['lightrunImportDuration'] = [float(r.get('lightrunImportDuration', 0)) for r in successful_results]
             metrics['lightrunInitDuration'] = [float(r.get('lightrunInitDuration', 0)) for r in successful_results]
+        
+        # Add new cold/warm request duration metrics
+        cold_start_durations = [float(r.get('totalDurationForColdStarts', 0)) for r in successful_results]
+        warm_request_durations = [float(r.get('totalDurationForWarmRequests', 0)) for r in successful_results]
+        
+        if any(v > 0 for v in cold_start_durations):
+            metrics['totalDurationForColdStarts'] = cold_start_durations
+        if any(v > 0 for v in warm_request_durations):
+            metrics['totalDurationForWarmRequests'] = warm_request_durations
         
         return metrics
     
@@ -319,8 +328,8 @@ class ReportGenerator:
         # Summary statistics
         with_deployments = self.with_lightrun.get('deployments', [])
         without_deployments = self.without_lightrun.get('deployments', [])
-        with_successful = sum(1 for d in with_deployments if d.get('deployed'))
-        without_successful = sum(1 for d in without_deployments if d.get('deployed'))
+        with_successful = sum(1 for d in with_deployments if d.get('is_deployed'))
+        without_successful = sum(1 for d in without_deployments if d.get('is_deployed'))
         
         report_lines.append("TEST SUMMARY")
         report_lines.append("-" * 80)
@@ -338,6 +347,8 @@ class ReportGenerator:
             'deploymentDuration',
             'timeToCold',
             'totalDuration',
+            'totalDurationForColdStarts',
+            'totalDurationForWarmRequests',
             'totalImportsDuration',
             'gcfImportDuration',
             'envCheckDuration',
@@ -478,6 +489,8 @@ class ReportGenerator:
         # Common metrics to visualize
         metrics_to_plot = [
             'totalDuration',
+            'totalDurationForColdStarts',
+            'totalDurationForWarmRequests',
             'totalImportsDuration',
             'gcfImportDuration',
             'envCheckDuration',

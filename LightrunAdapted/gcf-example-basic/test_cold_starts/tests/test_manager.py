@@ -8,12 +8,12 @@ import sys
 import threading
 
 # Add parent directory to path so we can import as a package
-parent_dir = Path(__file__).parent.parent.parent
+parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 
-from test_cold_starts.src.manager import ColdStartTestManager
-from test_cold_starts.src.wait_for_cold import ColdStartDetectionError
-
+from src.manager import ColdStartTestManager
+from src.wait_for_cold import ColdStartDetectionError
+from src.models import GCPFunction
 
 class TestColdStartTestManager(unittest.TestCase):
     """Test ColdStartTestManager class."""
@@ -29,7 +29,8 @@ class TestColdStartTestManager(unittest.TestCase):
             region='us-central1',
             project='test-project',
             entry_point='testFunction',
-            num_workers=2
+            num_workers=2,
+            max_allocations_per_region=5
         )
         self.function_dir = Path('/tmp/test_function')
     
@@ -61,28 +62,16 @@ class TestColdStartTestManager(unittest.TestCase):
         # Executor should be cleaned up
         # Note: In real scenario, cleanup() would be called
     
-    @patch('test_cold_starts.src.manager.DeployTask')
-    @patch('test_cold_starts.src.manager.WaitForColdTask')
-    @patch('test_cold_starts.src.manager.SendRequestTask')
-    @patch('test_cold_starts.src.manager.time.sleep')
-    @patch('test_cold_starts.src.manager.time.time')
-    def test_deploy_wait_and_test_function_success(self, mock_time, mock_sleep, 
-                                                     mock_send_request, mock_wait, 
-                                                     mock_deploy):
-        """Test successful deploy, wait, and test workflow."""
+    @patch('src.wait_for_cold.WaitForColdTask')
+    @patch('src.manager.SendRequestTask')
+    @patch('src.manager.time.sleep')
+    @patch('src.manager.time.time')
+    def test_wait_and_test_function_success(self, mock_time, mock_sleep,
+                                                     mock_send_request, mock_wait):
+        """Test successful wait and test workflow."""
         deployment_start = 1000.0
         mock_time.return_value = deployment_start
-        
-        # Mock successful deployment
-        mock_deploy_instance = Mock()
-        mock_deploy_instance.execute.return_value = {
-            'deployed': True,
-            'function_name': 'testfunction-001',
-            'function_index': 1,
-            'url': 'https://test.run.app'
-        }
-        mock_deploy.return_value = mock_deploy_instance
-        
+
         # Mock successful wait
         mock_wait_instance = Mock()
         mock_wait_instance.execute.return_value = 120.0  # 2 minutes to cold
@@ -92,68 +81,39 @@ class TestColdStartTestManager(unittest.TestCase):
         mock_send_instance = Mock()
         mock_send_instance.execute.return_value = {
             'isColdStart': True,
-            'totalDuration': '1000000000'
+            'totalDuration': 1000000000.0
         }
         mock_send_request.return_value = mock_send_instance
         
         manager = ColdStartTestManager(self.config, self.function_dir)
         manager.executor = Mock()  # Mock executor
-        
-        deployment, test_result, time_to_cold = manager.deploy_wait_and_test_function(
-            1, deployment_start
+
+        # Create function object for testing (already deployed)
+        from src.models import GCPFunction
+        function = GCPFunction(index=1, region='us-central1', base_name='test')
+        function.is_deployed = True
+        function.url = 'https://test.run.app'
+
+        function_result, test_result, time_to_cold = manager.wait_and_test_function(
+            function, deployment_start
         )
         
-        self.assertTrue(deployment['deployed'])
+        self.assertTrue(function_result.is_deployed)
         self.assertIsNotNone(test_result)
         self.assertIsNotNone(time_to_cold)
         self.assertEqual(time_to_cold, 120.0)
     
-    @patch('test_cold_starts.src.manager.DeployTask')
-    def test_deploy_wait_and_test_function_deployment_failure(self, mock_deploy):
-        """Test when deployment fails."""
-        deployment_start = 1000.0
-        
-        # Mock failed deployment
-        mock_deploy_instance = Mock()
-        mock_deploy_instance.execute.return_value = {
-            'deployed': False,
-            'function_name': 'testfunction-001',
-            'error': 'Deployment failed'
-        }
-        mock_deploy.return_value = mock_deploy_instance
-        
-        manager = ColdStartTestManager(self.config, self.function_dir)
-        manager.executor = Mock()
-        
-        deployment, test_result, time_to_cold = manager.deploy_wait_and_test_function(
-            1, deployment_start
-        )
-        
-        self.assertFalse(deployment['deployed'])
-        self.assertIsNone(test_result)
-        self.assertIsNone(time_to_cold)
+
     
-    @patch('test_cold_starts.src.manager.DeployTask')
-    @patch('test_cold_starts.src.manager.WaitForColdTask')
-    @patch('test_cold_starts.src.manager.time.sleep')
-    @patch('test_cold_starts.src.manager.time.time')
-    def test_deploy_wait_and_test_function_cold_detection_failure(self, mock_time, 
-                                                                   mock_sleep, mock_wait, 
-                                                                   mock_deploy):
+    @patch('src.wait_for_cold.WaitForColdTask')
+    @patch('src.manager.time.sleep')
+    @patch('src.manager.time.time')
+    def test_wait_and_test_function_cold_detection_failure(self, mock_time,
+                                                                   mock_sleep, mock_wait):
         """Test when cold detection fails."""
         deployment_start = 1000.0
         mock_time.return_value = deployment_start
-        
-        # Mock successful deployment
-        mock_deploy_instance = Mock()
-        mock_deploy_instance.execute.return_value = {
-            'deployed': True,
-            'function_name': 'testfunction-001',
-            'function_index': 1,
-            'url': 'https://test.run.app'
-        }
-        mock_deploy.return_value = mock_deploy_instance
-        
+
         # Mock cold detection failure
         mock_wait_instance = Mock()
         mock_wait_instance.execute.side_effect = ColdStartDetectionError('Timeout')
@@ -161,16 +121,23 @@ class TestColdStartTestManager(unittest.TestCase):
         
         manager = ColdStartTestManager(self.config, self.function_dir)
         manager.executor = Mock()
-        
-        deployment, test_result, time_to_cold = manager.deploy_wait_and_test_function(
-            1, deployment_start
+
+        # Create function object for testing
+        from src.models import GCPFunction
+        function = GCPFunction(index=1, region='us-central1', base_name='test')
+        function.is_deployed = True
+        function.url = 'https://test.run.app'
+
+        function_result, test_result, time_to_cold = manager.wait_and_test_function(
+            function, deployment_start
         )
         
-        self.assertTrue(deployment['deployed'])
+        self.assertTrue(function_result.is_deployed)
         self.assertIsNotNone(test_result)
         self.assertTrue(test_result['error'])
         self.assertIsNone(time_to_cold)
     
+    @unittest.skip("Obsolete: manager uses parallel phases now, not per-function flow")
     def test_deploy_wait_and_test_all_functions(self):
         """Test deploying and testing all functions."""
         manager = ColdStartTestManager(self.config, self.function_dir)
@@ -248,21 +215,25 @@ class TestColdStartTestManager(unittest.TestCase):
             # Return the futures that are keys in the dict
             return iter(futures_dict.keys())
         
-        with patch('test_cold_starts.src.manager.as_completed', side_effect=mock_as_completed):
+        with patch('src.manager.as_completed', side_effect=mock_as_completed):
             deployments, test_results, cold_times = manager.deploy_wait_and_test_all_functions()
         
         self.assertEqual(len(deployments), 2)
         self.assertEqual(len(test_results), 2)
         self.assertEqual(len(cold_times), 2)
     
-    @patch('test_cold_starts.src.manager.DeleteTask')
+    @patch('src.delete.DeleteTask')
     def test_cleanup(self, mock_delete):
         """Test cleanup function."""
         manager = ColdStartTestManager(self.config, self.function_dir)
         manager.deployed_functions = [
-            {'function_name': 'testfunction-001'},
-            {'function_name': 'testfunction-002'}
+            Mock(name='testfunction-001', region='us-central1'),
+            Mock(name='testfunction-002', region='us-central1')
         ]
+        manager.deployed_functions[0].name = 'testfunction-001'
+        manager.deployed_functions[0].region = 'us-central1'
+        manager.deployed_functions[1].name = 'testfunction-002'
+        manager.deployed_functions[1].region = 'us-central1'
         
         # Mock executor
         mock_executor = Mock()
@@ -300,7 +271,7 @@ class TestColdStartTestManager(unittest.TestCase):
             # Return futures that are keys in the dict
             return iter(futures_dict.keys())
         
-        with patch('test_cold_starts.src.manager.as_completed', side_effect=mock_as_completed):
+        with patch('src.manager.as_completed', side_effect=mock_as_completed):
             manager.cleanup()
         
         # Check that executor was shut down

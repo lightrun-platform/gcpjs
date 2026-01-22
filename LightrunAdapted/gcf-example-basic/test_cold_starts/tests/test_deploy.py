@@ -12,6 +12,7 @@ parent_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(parent_dir))
 
 from test_cold_starts.src.deploy import DeployTask
+from test_cold_starts.src.models.gcp_function import GCPFunction
 
 
 class TestDeployTask(unittest.TestCase):
@@ -29,12 +30,25 @@ class TestDeployTask(unittest.TestCase):
         self.function_dir = Path('/tmp/test_function')
         self.lightrun_secret = 'test-secret-123'
         self.function_index = 1
+        self.function = GCPFunction(
+            index=1,
+            region='us-central1',
+            base_name='testFunction'
+        )
     
     def test_init(self):
         """Test DeployTask initialization."""
-        task = DeployTask(self.function_index, self.lightrun_secret, self.config, self.function_dir)
+        task = DeployTask(
+            function_name=self.function.name,
+            display_name=self.function.display_name,
+            region=self.function.region,
+            index=self.function.index,
+            lightrun_secret=self.lightrun_secret,
+            config=self.config,
+            function_dir=self.function_dir
+        )
         
-        self.assertEqual(task.function_index, 1)
+        self.assertEqual(task.index, 1)
         self.assertEqual(task.lightrun_secret, 'test-secret-123')
         # Function names are converted to lowercase for Cloud Run compatibility
         self.assertEqual(task.function_name, 'testfunction-001')
@@ -43,7 +57,16 @@ class TestDeployTask(unittest.TestCase):
     
     def test_init_function_name_formatting(self):
         """Test function name formatting with different indices."""
-        task = DeployTask(42, self.lightrun_secret, self.config, self.function_dir)
+        function = GCPFunction(index=42, region='us-central1', base_name='testFunction')
+        task = DeployTask(
+            function_name=function.name,
+            display_name=function.display_name,
+            region=function.region,
+            index=function.index,
+            lightrun_secret=self.lightrun_secret,
+            config=self.config,
+            function_dir=self.function_dir
+        )
         # Function names are converted to lowercase for Cloud Run compatibility
         self.assertEqual(task.function_name, 'testfunction-042')
         self.assertEqual(task.display_name, 'testFunction-gcf-performance-test-042')
@@ -64,16 +87,24 @@ class TestDeployTask(unittest.TestCase):
         
         mock_subprocess.side_effect = [mock_deploy_result, mock_url_result]
         
-        task = DeployTask(self.function_index, self.lightrun_secret, self.config, self.function_dir)
+        task = DeployTask(
+            function_name=self.function.name,
+            display_name=self.function.display_name,
+            region=self.function.region,
+            index=self.function.index,
+            lightrun_secret=self.lightrun_secret,
+            config=self.config,
+            function_dir=self.function_dir
+        )
         result = task.execute()
         
-        self.assertTrue(result['deployed'])
+        self.assertTrue(result.success)
         # Function names are converted to lowercase for Cloud Run compatibility
-        self.assertEqual(result['function_name'], 'testfunction-001')
-        self.assertEqual(result['display_name'], 'testFunction-gcf-performance-test-001')
-        self.assertEqual(result['url'], 'https://test-function-001-abc123.run.app')
-        self.assertIn('deploy_time', result)
-        self.assertIsNone(result.get('error'))
+        self.assertEqual(task.function_name, 'testfunction-001')
+        self.assertEqual(task.display_name, 'testFunction-gcf-performance-test-001')
+        self.assertEqual(result.url, 'https://test-function-001-abc123.run.app')
+        self.assertIsNotNone(result.deploy_time)
+        self.assertIsNone(result.error)
     
     @patch('test_cold_starts.src.deploy.subprocess.run')
     def test_execute_deployment_failure(self, mock_subprocess):
@@ -85,15 +116,23 @@ class TestDeployTask(unittest.TestCase):
         
         mock_subprocess.return_value = mock_deploy_result
         
-        task = DeployTask(self.function_index, self.lightrun_secret, self.config, self.function_dir)
+        task = DeployTask(
+            function_name=self.function.name,
+            display_name=self.function.display_name,
+            region=self.function.region,
+            index=self.function.index,
+            lightrun_secret=self.lightrun_secret,
+            config=self.config,
+            function_dir=self.function_dir
+        )
         result = task.execute()
         
-        self.assertFalse(result['deployed'])
+        self.assertFalse(result.success)
         # Function names are converted to lowercase for Cloud Run compatibility
-        self.assertEqual(result['function_name'], 'testfunction-001')
-        self.assertIsNone(result['url'])
-        self.assertIn('error', result)
-        self.assertIn('Permission denied', result['error'])
+        self.assertEqual(task.function_name, 'testfunction-001')
+        self.assertIsNone(result.url)
+        self.assertIsNotNone(result.error)
+        self.assertIn('Permission denied', result.error)
     
     @patch('test_cold_starts.src.deploy.time.sleep')
     @patch('test_cold_starts.src.deploy.subprocess.run')
@@ -121,7 +160,15 @@ class TestDeployTask(unittest.TestCase):
         # Make subprocess.run raise TimeoutExpired immediately
         mock_subprocess.side_effect = subprocess.TimeoutExpired('gcloud', 300)
         
-        task = DeployTask(self.function_index, self.lightrun_secret, self.config, self.function_dir)
+        task = DeployTask(
+            function_name=self.function.name,
+            display_name=self.function.display_name,
+            region=self.function.region,
+            index=self.function.index,
+            lightrun_secret=self.lightrun_secret,
+            config=self.config,
+            function_dir=self.function_dir
+        )
         
         start = time.time()
         result = task.execute()
@@ -131,9 +178,9 @@ class TestDeployTask(unittest.TestCase):
         self.assertGreaterEqual(elapsed, 0.9)
         self.assertLess(elapsed, 2.0)
         
-        self.assertFalse(result['deployed'])
-        self.assertEqual(result['error'], 'Deployment timed out after 5 minutes')
-        self.assertIsNone(result['url'])
+        self.assertFalse(result.success)
+        self.assertEqual(result.error, 'Deployment timed out after 5 minutes')
+        self.assertIsNone(result.url)
     
     @patch('test_cold_starts.src.deploy.subprocess.run')
     def test_execute_url_retrieval_failure(self, mock_subprocess):
@@ -149,11 +196,19 @@ class TestDeployTask(unittest.TestCase):
         
         mock_subprocess.side_effect = [mock_deploy_result, mock_url_result]
         
-        task = DeployTask(self.function_index, self.lightrun_secret, self.config, self.function_dir)
+        task = DeployTask(
+            function_name=self.function.name,
+            display_name=self.function.display_name,
+            region=self.function.region,
+            index=self.function.index,
+            lightrun_secret=self.lightrun_secret,
+            config=self.config,
+            function_dir=self.function_dir
+        )
         result = task.execute()
         
-        self.assertTrue(result['deployed'])
-        self.assertIsNone(result['url'])
+        self.assertTrue(result.success)
+        self.assertIsNone(result.url)
     
     @patch('test_cold_starts.src.deploy.subprocess.run')
     def test_execute_env_vars_formatting(self, mock_subprocess):
@@ -165,7 +220,15 @@ class TestDeployTask(unittest.TestCase):
         mock_url_result.stdout = 'https://test.run.app'
         mock_subprocess.side_effect = [mock_deploy_result, mock_url_result]
         
-        task = DeployTask(self.function_index, self.lightrun_secret, self.config, self.function_dir)
+        task = DeployTask(
+            function_name=self.function.name,
+            display_name=self.function.display_name,
+            region=self.function.region,
+            index=self.function.index,
+            lightrun_secret=self.lightrun_secret,
+            config=self.config,
+            function_dir=self.function_dir
+        )
         task.execute()
         
         # Check that env vars are included in deploy command
@@ -200,7 +263,15 @@ class TestDeployTask(unittest.TestCase):
         mock_url_result.stdout = 'https://test.run.app'
         mock_subprocess.side_effect = [mock_deploy_result, mock_url_result]
         
-        task = DeployTask(self.function_index, self.lightrun_secret, self.config, self.function_dir)
+        task = DeployTask(
+            function_name=self.function.name,
+            display_name=self.function.display_name,
+            region=self.function.region,
+            index=self.function.index,
+            lightrun_secret=self.lightrun_secret,
+            config=self.config,
+            function_dir=self.function_dir
+        )
         task.execute()
         
         # Check deploy command structure

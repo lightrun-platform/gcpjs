@@ -2,10 +2,12 @@
 
 import subprocess
 import time
-import time
 from typing import Optional
 import argparse
-from .models import GCPFunction
+import json
+import requests
+from datetime import datetime, timezone, timedelta
+from urllib.parse import quote
 
 
 class ColdStartDetectionError(Exception):
@@ -16,15 +18,19 @@ class ColdStartDetectionError(Exception):
 class WaitForColdTask:
     """Task to wait for a single Cloud Function to become cold."""
     
-    def __init__(self, function: GCPFunction, config: argparse.Namespace):
+    def __init__(self, function_name: str, region: str, index: int, config: argparse.Namespace):
         """
         Initialize wait for cold task for a single function.
         
         Args:
-            function: GCPFunction object to wait for
+            function_name: Name of the function in GCP format
+            region: Region where function is deployed
+            index: Function index for logging purposes
             config: Configuration namespace with project settings.
         """
-        self.function = function
+        self.function_name = function_name
+        self.region = region
+        self.index = index
         self.config = config
     
     def check_function_instances(self) -> int:
@@ -40,8 +46,8 @@ class WaitForColdTask:
             # Function names are already lowercase (set in DeployTask)
             result = subprocess.run(
                 [
-                    'gcloud', 'run', 'services', 'describe', self.function.name,
-                    f'--region={self.function.region}',
+                    'gcloud', 'run', 'services', 'describe', self.function_name,
+                    f'--region={self.region}',
                     f'--project={self.config.project}',
                     '--format=value(status.observedGeneration,status.conditions[0].status)',
                     '--platform=managed'
@@ -57,10 +63,6 @@ class WaitForColdTask:
                 return 1
             
             # Try to get instance count from Cloud Monitoring using REST API
-            import json
-            import requests
-            from datetime import datetime, timezone, timedelta
-            from urllib.parse import quote
             
             # Query Cloud Monitoring API for CURRENT instance count
             # Use a 6-minute time window to get recent data
@@ -75,8 +77,8 @@ class WaitForColdTask:
             # Build filter - function name is already lowercase
             filter_str = (
                 f'metric.type="run.googleapis.com/container/instance_count" '
-                    f'AND resource.labels.service_name="{self.function.name}" '
-                f'AND resource.labels.location="{self.function.region}"'
+                    f'AND resource.labels.service_name="{self.function_name}" '
+                f'AND resource.labels.location="{self.region}"'
             )
             
             # Get access token
@@ -162,7 +164,7 @@ class WaitForColdTask:
                                         if state not in ('active', 'idle'):
                                             import logging
                                             logging.warning(
-                                                f"Unexpected instance state '{state}' for function {self.function.name}. "
+                                                f"Unexpected instance state '{state}' for function {self.function_name}. "
                                                 f"Expected 'active' or 'idle'."
                                             )
                             except (ValueError, KeyError):
@@ -214,20 +216,25 @@ class WaitForColdTask:
         wait_seconds = initial_wait_minutes * 60
         for remaining in range(wait_seconds, 0, -60):
             minutes = remaining // 60
-            print(f"[{self.function.index:3d}] Initial wait... {minutes} minutes remaining", end='\r')
+            print(f"[{self.index:3d}] Initial wait... {minutes} minutes remaining", end='\r')
             time.sleep(60)
         
         # Poll to confirm function is actually cold
         # The Monitoring API NEVER reports 0 - it just omits timeSeries when cold.
         # We need multiple consecutive "no data" checks over 4 minutes, polling every 15 seconds.
         # This ensures metrics would have appeared if instances existed (accounting for 60-120s delay).
-        print(f"[{self.function.index:3d}] Verifying {self.function.name} is cold...")
+        print(f"[{self.index:3d}] Verifying {self.function_name} is cold...")
         
         start_time = time.time()
         max_wait_seconds = max_poll_minutes * 60
-        poll_interval = 15  # Check every 15 seconds
-        required_cold_duration_seconds = 4 * 60  # Require 4 minutes (240 seconds) of consecutive "no data"
-        required_cold_confirmations = required_cold_duration_seconds // poll_interval  # 16 checks
+        
+        # Use configurable polling parameters
+        poll_interval = getattr(self.config, 'cold_check_delay', 30)
+        required_cold_confirmations = getattr(self.config, 'consecutive_cold_checks', 3)
+        
+        # Calculate total duration for display
+        required_cold_duration_seconds = required_cold_confirmations * poll_interval
+        
         cold_confirmation_count = 0
         
         while time.time() - start_time < max_wait_seconds:
@@ -245,33 +252,32 @@ class WaitForColdTask:
                 elapsed_seconds = int(time.time() - start_time)
                 
                 if cold_confirmation_count >= required_cold_confirmations:
-                    # 4 minutes of consecutive "no data" checks
-                    # If instances existed, metrics would have appeared by now (60-120s delay)
-                    # So this likely means cold
-                current_time = time.time()
-                time_to_cold = current_time - deployment_start_time
-                print(f"[{self.function.index:3d}] ✓ {self.function.name} confirmed cold after {time_to_cold/60:.1f} minutes ({cold_confirmation_count} consecutive 'no data' checks over 4 minutes)")
-                
-                return time_to_cold
-            else:
+                    # Satisfied required number of consecutive "no data" checks
+                    current_time = time.time()
+                    time_to_cold = current_time - deployment_start_time
+                    duration_mins = required_cold_duration_seconds / 60
+                    print(f"[{self.index:3d}] ✓ {self.function_name} confirmed cold after {time_to_cold/60:.1f} minutes ({cold_confirmation_count} consecutive 'no data' checks over {duration_mins:.1f} minutes)")
+                    
+                    return time_to_cold
+                else:
                     consecutive_duration = cold_confirmation_count * poll_interval
-                    print(f"[{self.function.index:3d}] [{elapsed_minutes}m] No instance data: {consecutive_duration}s/{required_cold_duration_seconds}s ({cold_confirmation_count}/{required_cold_confirmations} checks)...", end='\r')
+                    print(f"[{self.index:3d}] [{elapsed_minutes}m] No instance data: {consecutive_duration}s/{required_cold_duration_seconds}s ({cold_confirmation_count}/{required_cold_confirmations} checks)...", end='\r')
             elif count > 1:
                 # We have explicit data showing instances exist - definitely warm
                 cold_confirmation_count = 0
                 elapsed_minutes = int((time.time() - start_time) / 60)
-                print(f"[{self.function.index:3d}] [{elapsed_minutes}m] Still warm (instances: {count})", end='\r')
+                print(f"[{self.index:3d}] [{elapsed_minutes}m] Still warm (instances: {count})", end='\r')
             else:
                 # count == 0 shouldn't happen, but handle it
                 cold_confirmation_count = 0
                 elapsed_minutes = int((time.time() - start_time) / 60)
-                print(f"[{self.function.index:3d}] [{elapsed_minutes}m] Unexpected count={count}, continuing...", end='\r')
+                print(f"[{self.index:3d}] [{elapsed_minutes}m] Unexpected count={count}, continuing...", end='\r')
             
             time.sleep(poll_interval)
         
         # Timeout - raise error
         elapsed_minutes = int((time.time() - start_time) / 60)
         raise ColdStartDetectionError(
-            f"Could not confirm cold state for {self.function.name} after {elapsed_minutes} minutes. "
+            f"Could not confirm cold state for {self.function_name} after {elapsed_minutes} minutes. "
             f"Monitoring API may be unreliable. Cannot proceed with testing without cold start confirmation."
         )

@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import argparse
+from dataclasses import asdict
 
-from .deploy import DeployTask
 from .send_request import SendRequestTask
 from .delete import DeleteTask
-from .wait_for_cold import WaitForColdTask, ColdStartDetectionError
-from .models import GCPFunction
+from .wait_for_cold import ColdStartDetectionError
+from .models.gcp_function import GCPFunction
 from .region_allocator import RegionAllocator
 
 
@@ -36,7 +36,6 @@ class ColdStartTestManager:
         self.executor: Optional[ThreadPoolExecutor] = None
         self.deployed_functions: List[GCPFunction] = []
         self.cleanup_registered = False
-        self.region_allocator = RegionAllocator()
     
     def __enter__(self):
         """Context manager entry - create executor and register cleanup."""
@@ -68,135 +67,184 @@ class ColdStartTestManager:
         self.cleanup()
         os._exit(1)
     
-    def deploy_wait_and_test_function(self, function_index: int, deployment_start_time: float) -> tuple[GCPFunction, Optional[Dict[str, Any]], Optional[float]]:
+
+    def wait_and_test_function(self, function: GCPFunction, deployment_start_time: float) -> tuple[GCPFunction, Optional[Dict[str, Any]], Optional[float]]:
         """
-        Deploy, wait for cold, and test a single function.
-        
+        Wait for cold and test a single function.
+
         Args:
-            function_index: Index of the function (1-based)
+            function: GCPFunction object that has already been deployed
             deployment_start_time: Timestamp when deployments started
-            
+
         Returns:
             Tuple of (GCPFunction, test_result, time_to_cold_seconds)
-            test_result and time_to_cold will be None if deployment or wait fails
+            test_result and time_to_cold will be None if wait or test fails
         """
-        # Step 0: Initialize Function Model and Allocate Region
-        function = GCPFunction(index=function_index)
-        self.region_allocator.allocate_region(function)
-        
-        # Step 1: Deploy
-        deploy_task = DeployTask(function, self.config.lightrun_secret, self.config, self.function_dir)
-        function = deploy_task.execute()
-        
-        if not function.deployed or not function.url:
-            print(f"[{function_index:3d}] ✗ Deployment failed")
-            return function, None, None
-        
-        print(f"[{function_index:3d}] ✓ Deployed: {function.name} in {function.region}")
-        
-        # Step 2: Wait for cold
-        wait_task = WaitForColdTask(
-            function,
-            self.config
-        )
-        
+
+
         try:
-            time_to_cold = wait_task.execute(deployment_start_time, self.config.wait_minutes)
-            function.cold_start_time = time_to_cold
+            time_to_cold = function.wait_for_cold(self.config, deployment_start_time)
         except ColdStartDetectionError as e:
-            print(f"[{function_index:3d}] ❌ Cold detection failed: {e}")
+            print(f"[{function.index:3d}] ❌ Cold detection failed: {e}")
             return function, {
-                'function_index': function_index,
+                'function_index': function.index,
                 'function_name': function.name,
                 'error': True,
                 'error_message': str(e)
             }, None
-        
-        # Step 3: Grace period (1 minute) after cold confirmation
-        print(f"[{function_index:3d}] Waiting 1 minute grace period before testing...")
+
+
+        # Step 2: Grace period (1 minute) after cold confirmation
+        print(f"[{function.index:3d}] Waiting 1 minute grace period before testing...")
         time.sleep(60)
-        print(f"[{function_index:3d}] Testing now...")
-        
-        # Step 4: Test
-        test_task = SendRequestTask(function)
+        print(f"[{function.index:3d}] Testing now...")
+
+        # Step 3: Test (multiple requests based on config)
+        test_task = SendRequestTask(function, self.config)
         test_result = test_task.execute()
-        
+
         if test_result.get('error'):
-            print(f"[{function_index:3d}] ✗ Test failed")
+            print(f"[{function.index:3d}] ✗ Test failed")
         else:
-            is_cold = test_result.get('isColdStart', False)
-            total_duration = float(test_result.get('totalDuration', 0)) / 1_000_000_000
-            print(f"[{function_index:3d}] ✓ Test complete: Cold={is_cold}, Duration={total_duration:.3f}s")
+            cold_duration = float(test_result.get('totalDurationForColdStarts', 0)) / 1_000_000_000
+            warm_duration = float(test_result.get('totalDurationForWarmRequests', 0)) / 1_000_000_000
+            num_requests = test_result.get('_num_requests', 1)
+            print(f"[{function.index:3d}] ✓ Test complete: ColdDur={cold_duration:.3f}s, WarmDur={warm_duration:.3f}s, Requests={num_requests}")
             function.test_result = test_result
-        
+
+        # Save individual function results to file
+        self._save_function_results(function, test_result)
+
         return function, test_result, time_to_cold
-    
+
+    def create_functions(self) -> List[GCPFunction]:
+        """
+        Create all GCPFunction objects with region allocation.
+
+        Returns:
+            List[GCPFunction]: List of created function objects with regions allocated
+        """
+        functions = []
+
+        region_allocator = iter(RegionAllocator(self.config.max_allocations_per_region))
+
+        # Create all functions with region allocation
+        for i in range(1, self.config.num_functions + 1):
+            region = next(region_allocator)
+            function = GCPFunction(index=i, region=region, base_name=self.config.base_function_name)
+            functions.append(function)
+            print(f"[{function.index:3d}] Created function {function.index} for region {region}")
+
+        return functions
+
     def deploy_wait_and_test_all_functions(self) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, float]]:
         """
-        Deploy, wait for cold, and test all functions in parallel.
-        Each function goes through: deploy -> wait -> grace period -> test
-        
+        Deploy, wait for cold, and test all functions in phases.
+        Phase 1: Create functions with region allocation
+        Phase 2: Deploy all functions in parallel
+        Phase 3: Wait for cold and test each function in parallel
+
         Returns:
             Tuple of (deployments list, test_results list, cold_times dict)
         """
         print("=" * 80)
-        print("Deploying, Waiting for Cold, and Testing Functions in Parallel")
+        print("Creating, Deploying and Testing Functions in Phases")
         print("=" * 80)
-        print(f"Each function will: Deploy → Wait {self.config.wait_minutes}min → Poll until cold → Wait 1min grace → Test")
+        print(f"Phase 1: Create {self.config.num_functions} functions with region allocation")
+        print(f"Phase 2: Deploy all functions in parallel")
+        print(f"Phase 3: Each function will: Wait {self.config.wait_minutes}min → Poll until cold → Wait 1min grace → Test")
         print()
-        
+
+        # Phase 1: Create all functions with region allocation
+        functions = self.create_functions()
+        print(f"Created {len(functions)} functions")
+        print()
+
+        # Phase 2: Deploy all functions in parallel
+        print("Phase 2: Deploying all functions in parallel...")
         deployment_start_time = time.time()
-        deployments: List[GCPFunction] = []
-        test_results: List[Dict[str, Any]] = []
-        cold_times: Dict[str, float] = {}
-        
-        # Submit all functions in parallel
-        futures = {
+        deployment_futures = {
             self.executor.submit(
-                self.deploy_wait_and_test_function,
-                i,
-                deployment_start_time
-            ): i
-            for i in range(1, self.config.num_functions + 1)
+                function.deploy,
+                self.config.lightrun_secret,
+                self.config,
+                self.function_dir
+            ): function
+            for function in functions
         }
-        
-        completed = 0
-        for future in as_completed(futures):
-            function_index = futures[future]
-            completed += 1
-            
+
+        deployments: List[GCPFunction] = []
+        for future in as_completed(deployment_futures):
+            function = deployment_futures[future]
             try:
-                function, test_result, time_to_cold = future.result()
+                result = future.result()  # This is now DeploymentResult
+                
+                # Track function for cleanup (even if failed)
+                self.deployed_functions.append(function)
                 deployments.append(function)
                 
-                if test_result:
-                    test_results.append(test_result)
-                
-                if time_to_cold is not None:
-                    cold_times[deployment['function_name']] = time_to_cold
-                    deployment['time_to_cold_seconds'] = time_to_cold
-                    deployment['time_to_cold_minutes'] = time_to_cold / 60
-                
-                # Track for cleanup immediately (even if failed)
-                self.deployed_functions.append(deployment)
-                
-                print(f"[{completed:3d}/{self.config.num_functions}] Function {function_index} complete")
-                
+                # Print success/failure status
+                if result.success:
+                    print(f"[{function.index:3d}] ✓ Deployed: {function.name} in {function.region}")
+                else:
+                    print(f"[{function.index:3d}] ✗ Deployment failed: {result.error[:50] if result.error else 'Unknown error'}...")
             except Exception as e:
-                print(f"[{completed:3d}/{self.config.num_functions}] Function {function_index} failed with exception: {e}")
-                # Add error result
-                test_results.append({
-                    'function_index': function_index,
-                    'error': True,
-                    'error_message': str(e)
-                })
-                # Even if exception, we might have deployed something? 
-                # Ideally we'd have the deployment info, but if future raised Exception, we might not.
-                # But deploy_wait_and_test_function catches its own deployment errors and returns deployment obj.
-                # So the Exception here would typically be from the future mechanism or wrapper, not logic.
+                print(f"[{function.index:3d}] Deployment task failed with exception: {e}")
+
+        successful_deployments = [f for f in deployments if f.is_deployed and f.url]
+        print(f"Deployed {len(successful_deployments)}/{len(deployments)} functions successfully")
+        print()
+
+        # Phase 3: Wait for cold and test all successfully deployed functions in parallel
+        print("Phase 3: Waiting for cold and testing functions in parallel...")
+        test_results: List[Dict[str, Any]] = []
+        cold_times: Dict[str, float] = {}
+
+        # Only test functions that were successfully deployed
+        testable_functions = [f for f in deployments if f.is_deployed and f.url]
+        wait_test_futures = {}
+
+        # Phase 3: Wait for cold and test successfully deployed functions
+        if testable_functions:
+            wait_test_futures = {
+                self.executor.submit(
+                    self.wait_and_test_function,
+                    function,
+                    deployment_start_time
+                ): function.index
+                for function in testable_functions
+            }
+            completed = 0
+            for future in as_completed(wait_test_futures):
+                function_index = wait_test_futures[future]
+                completed += 1
+
+                try:
+                    function, test_result, time_to_cold = future.result()
+
+                    if test_result:
+                        test_results.append(test_result)
+
+                    if time_to_cold is not None:
+                        cold_times[function.name] = time_to_cold
+                        function.time_to_cold_seconds = time_to_cold
+                        function.time_to_cold_minutes = time_to_cold / 60
+
+                    print(f"[{completed:3d}/{len(testable_functions)}] Function {function_index} test complete")
+
+                except Exception as e:
+                    print(f"[{completed:3d}/{len(testable_functions)}] Function {function_index} test failed with exception: {e}")
+                    # Add error result
+                    test_results.append({
+                        'function_index': function_index,
+                        'error': True,
+                        'error_message': str(e)
+                    })
+        else:
+            print("No functions were successfully deployed, skipping testing phase")
         
         # Determine successful deployments for stats
-        successful_deployments = [f for f in deployments if f.deployed]
+        successful_deployments = [f for f in deployments if f.is_deployed]
         
         # Save deployment info (convert objects to dicts)
         deployments_dict = [f.__dict__ for f in deployments]
@@ -216,17 +264,40 @@ class ColdStartTestManager:
         deployments_file = output_dir / f'{base_name}_deployments.json'
         with open(deployments_file, 'w') as f:
             json.dump(deployments_dict, f, indent=2, default=str)
-        
-        successful_deployments = [f for f in deployments if f.deployed and f.url]
+
         print(f"\nSummary: {len(successful_deployments)}/{self.config.num_functions} functions deployed successfully")
         print(f"         {len(test_results)} test results collected")
         
         return deployments, test_results, cold_times
     
-    def save_results(self, deployments: List[Dict[str, Any]], test_results: List[Dict[str, Any]]):
+    def _save_function_results(self, function: GCPFunction, test_result: Dict[str, Any]):
+        """Save individual function results to a file named by display_name."""
+        # Determine output directory
+        if hasattr(self.config, 'output_dir') and self.config.output_dir:
+            output_dir = Path(self.config.output_dir)
+        elif hasattr(self.config, 'results_file') and self.config.results_file:
+            output_dir = Path(self.config.results_file).parent
+        else:
+            output_dir = Path('.')
+        
+        function_results_dir = output_dir / 'function_results'
+        function_results_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Use display_name for filename (sanitize for filesystem)
+        safe_name = function.display_name.replace('/', '_').replace('\\', '_')
+        result_file = function_results_dir / f'{safe_name}.json'
+        
+        with open(result_file, 'w') as f:
+            json.dump({
+                'function': asdict(function),
+                'test_result': test_result,
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            }, f, indent=2, default=str)
+    
+    def save_results(self, deployments: List[GCPFunction], test_results: List[Dict[str, Any]]):
         """Save test results to file."""
         # Convert GCPFunction objects to dicts for serialization
-        deployments_dict = [f.__dict__ for f in deployments]
+        deployments_dict = [asdict(f) if isinstance(f, GCPFunction) else f for f in deployments]
         
         # Ensure output directory exists
         results_path = Path(self.config.results_file)
@@ -243,7 +314,7 @@ class ColdStartTestManager:
         """Return test results as a dictionary."""
         # Ensure deployments are serializable
         deployments_list = getattr(self, 'deployments', [])
-        deployments_dict = [f.__dict__ if isinstance(f, GCPFunction) else f for f in deployments_list]
+        deployments_dict = [asdict(f) if isinstance(f, GCPFunction) else f for f in deployments_list]
         
         return {
             'deployments': deployments_dict,
@@ -307,6 +378,7 @@ class ColdStartTestManager:
         print(f"Project: {self.config.project}")
         print(f"Base Function Name: {self.config.base_function_name}")
         print(f"Number of Worker Threads: {self.config.num_workers}")
+        print(f"Max Allocations per Region: {self.config.max_allocations_per_region}")
         print("Note: Functions will be automatically cleaned up on exit")
         print()
         

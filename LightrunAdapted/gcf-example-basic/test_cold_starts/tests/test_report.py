@@ -204,7 +204,7 @@ class TestReportGenerator(unittest.TestCase):
         """Set up test fixtures."""
         self.with_lightrun = {
             'deployments': [
-                {'deployed': True, 'function_name': 'test-001', 'time_to_cold_seconds': 1200}
+                {'is_deployed': True, 'function_name': 'test-001', 'time_to_cold_seconds': 1200}
             ],
             'test_results': [
                 {
@@ -223,7 +223,7 @@ class TestReportGenerator(unittest.TestCase):
         }
         self.without_lightrun = {
             'deployments': [
-                {'deployed': True, 'function_name': 'test-002', 'time_to_cold_seconds': 1100}
+                {'is_deployed': True, 'function_name': 'test-002', 'time_to_cold_seconds': 1100}
             ],
             'test_results': [
                 {

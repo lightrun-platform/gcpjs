@@ -8,29 +8,42 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional
 import argparse
-from .models import GCPFunction
+
+from .models.deployment_result import DeploymentResult
 
 
 class DeployTask:
     """Task to deploy a single Cloud Function."""
     
-    def __init__(self, function: GCPFunction, lightrun_secret: str, config: argparse.Namespace, function_dir: Path):
+    def __init__(
+        self,
+        function_name: str,
+        display_name: str,
+        region: str,
+        index: int,
+        lightrun_secret: str,
+        config: argparse.Namespace,
+        function_dir: Path
+    ):
         """
         Initialize deploy task.
         
         Args:
-            function: GCPFunction object containing deployment details
+            function_name: The name of the function in GCP format
+            display_name: Display name for the function
+            region: GCP region to deploy to
+            index: Function index for logging purposes
             lightrun_secret: Lightrun secret for environment variable
             config: Configuration namespace with deployment settings
             function_dir: Directory containing the function source code
         """
-        self.function = function
+        self.function_name = function_name
+        self.display_name = display_name
+        self.region = region
+        self.index = index
         self.lightrun_secret = lightrun_secret
         self.config = config
         self.function_dir = function_dir
-        # Ensure names are set
-        if not self.function.name:
-             self.function.set_names(config.base_function_name)
     
     def wait_before_retry(self, attempt: int) -> int:
         """
@@ -60,78 +73,87 @@ class DeployTask:
         
         return wait_time
     
-    def execute(self) -> GCPFunction:
-        """Execute the deployment task with retry logic for rate limiting."""
-        env_vars = f"LIGHTRUN_SECRET={self.lightrun_secret},DISPLAY_NAME={self.function.display_name}"
+    def execute(self) -> DeploymentResult:
+        """Execute the deployment task with retry logic for rate limiting.
         
-        print(f"[{self.function.index:3d}] Deploying {self.function.name} to {self.function.region}...", end=" ", flush=True)
+        Returns:
+            DeploymentResult: Immutable result of the deployment
+        """
+        env_vars = f"LIGHTRUN_SECRET={self.lightrun_secret},DISPLAY_NAME={self.display_name}"
+        
+        print(f"[{self.index:3d}] Deploying {self.function_name} to {self.region}...", end=" ", flush=True)
         
         # Add small delay to avoid hitting rate limits (stagger deployments)
         # Delay based on function index to spread out requests
-        time.sleep(self.function.index * 0.5)  # 0.5s delay per function index
+        time.sleep(self.index * 0.5)  # 0.5s delay per function index
         
         max_retries = 3
+        deployment_duration_seconds = None
+        deployment_duration_nanoseconds = None
+        deploy_time = None
         
         for attempt in range(max_retries):
             # Track start time for this specific attempt
             attempt_start_time = time.time()
         
-        try:
-            # Deploy using gcloud
-            result = subprocess.run(
-                [
-                    'gcloud', 'functions', 'deploy', self.function.name,
-                    '--gen2',
-                    f'--runtime={self.config.runtime}',
-                    f'--region={self.function.region}',
-                    f'--source={self.function_dir}',
-                    f'--entry-point={self.config.entry_point}',
-                    '--trigger-http',
-                    '--allow-unauthenticated',
-                    f'--set-env-vars={env_vars}',
-                    '--min-instances=0',
-                    '--max-instances=5',
-                    '--timeout=540',
-                    '--concurrency=80',
-                    '--memory=512Mi',
-                    '--cpu=2',
-                    f'--project={self.config.project}',
-                    '--quiet'
-                ],
-                capture_output=True,
-                text=True,
-                timeout=300  # 5 minute timeout per deployment
-            )
-            
-            if result.returncode != 0:
-                # Check for rate limits and transient server errors
-                error_msg = result.stderr
-                retry_triggers = [
-                    '429', 'Quota exceeded', 'Too Many Requests',
-                    '500', '502', '503', '504', 
-                    'OperationError', 'Internal', 'server error', 'unavailable'
-                ]
+            try:
+                # Deploy using gcloud
+                result = subprocess.run(
+                    [
+                        'gcloud', 'functions', 'deploy', self.function_name,
+                        '--gen2',
+                        f'--runtime={self.config.runtime}',
+                        f'--region={self.region}',
+                        f'--source={self.function_dir}',
+                        f'--entry-point={self.config.entry_point}',
+                        '--trigger-http',
+                        '--allow-unauthenticated',
+                        f'--set-env-vars={env_vars}',
+                        '--min-instances=0',
+                        '--max-instances=5',
+                        '--timeout=540',
+                        '--concurrency=80',
+                        '--memory=512Mi',
+                        '--cpu=2',
+                        f'--project={self.config.project}',
+                        '--quiet'
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout per deployment
+                )
                 
-                if any(trigger in error_msg for trigger in retry_triggers):
-                    if attempt < max_retries - 1:
-                        retry_means = [30, 90, 120]
-                        print(f"TRANSIENT ERROR ({error_msg[:50]}...), retrying in ...", end=" ", flush=True)
-                        wait_time = self.wait_before_retry(attempt)
-                        print(f"{wait_time}s (mean={retry_means[attempt]}s)...", end=" ", flush=True)
-                        continue
+                if result.returncode != 0:
+                    # Check for rate limits and transient server errors
+                    error_msg = result.stderr
+                    retry_triggers = [
+                        '429', 'Quota exceeded', 'Too Many Requests',
+                        '500', '502', '503', '504', 
+                        'OperationError', 'Internal', 'server error', 'unavailable'
+                    ]
+                    
+                    if any(trigger in error_msg for trigger in retry_triggers):
+                        if attempt < max_retries - 1:
+                            retry_means = [30, 90, 120]
+                            print(f"TRANSIENT ERROR ({error_msg[:50]}...), retrying in ...", end=" ", flush=True)
+                            wait_time = self.wait_before_retry(attempt)
+                            print(f"{wait_time}s (mean={retry_means[attempt]}s)...", end=" ", flush=True)
+                            continue
+                    
+                    print(f"FAILED: {result.stderr[:100]}")
+                    return DeploymentResult(
+                        success=False,
+                        error=result.stderr[:500],
+                        used_region=self.region
+                    )
                 
-                print(f"FAILED: {result.stderr[:100]}")
-                self.function.deployed = False
-                self.function.error = result.stderr[:500]
-                return self.function
-            
                 # Success - record duration of this successful attempt only
                 attempt_end_time = time.time()
-                deployment_duration = attempt_end_time - attempt_start_time
-                self.function.details['deployment_duration_seconds'] = deployment_duration
-                self.function.details['deployment_duration_nanoseconds'] = int(deployment_duration * 1_000_000_000)
+                deployment_duration_seconds = attempt_end_time - attempt_start_time
+                deployment_duration_nanoseconds = int(deployment_duration_seconds * 1_000_000_000)
+                deploy_time = datetime.now(timezone.utc).isoformat()
                 break
-                
+                    
             except subprocess.TimeoutExpired:
                 if attempt < max_retries - 1:
                     retry_means = [30, 90, 120]
@@ -140,9 +162,11 @@ class DeployTask:
                     print(f"{wait_time}s (mean={retry_means[attempt]}s)...", end=" ", flush=True)
                     continue
                 print("TIMEOUT")
-                self.function.deployed = False
-                self.function.error = 'Deployment timed out after 5 minutes'
-                return self.function
+                return DeploymentResult(
+                    success=False,
+                    error='Deployment timed out after 5 minutes',
+                    used_region=self.region
+                )
             except Exception as e:
                 if attempt < max_retries - 1:
                     retry_means = [30, 90, 120]
@@ -151,16 +175,18 @@ class DeployTask:
                     print(f"{wait_time}s (mean={retry_means[attempt]}s)...", end=" ", flush=True)
                     continue
                 print(f"EXCEPTION: {str(e)}")
-                self.function.deployed = False
-                self.function.error = str(e)
-                return self.function
+                return DeploymentResult(
+                    success=False,
+                    error=str(e),
+                    used_region=self.region
+                )
         
         # Get the function URL (only if deployment succeeded)
         try:
             url_result = subprocess.run(
                 [
-                    'gcloud', 'functions', 'describe', self.function.name,
-                    f'--region={self.function.region}',
+                    'gcloud', 'functions', 'describe', self.function_name,
+                    f'--region={self.region}',
                     f'--gen2',
                     f'--project={self.config.project}',
                     '--format=value(serviceConfig.uri)'
@@ -174,14 +200,19 @@ class DeployTask:
             
             print(f"OK - URL: {url[:50]}..." if url else "OK (no URL)")
             
-            self.function.deployed = True
-            self.function.url = url
-            self.function.details['deploy_time'] = datetime.now(timezone.utc).isoformat()
-            
-            return self.function
+            return DeploymentResult(
+                success=True,
+                url=url,
+                used_region=self.region,
+                deployment_duration_seconds=deployment_duration_seconds,
+                deployment_duration_nanoseconds=deployment_duration_nanoseconds,
+                deploy_time=deploy_time
+            )
             
         except Exception as e:
             print(f"ERROR getting URL: {str(e)[:50]}")
-            self.function.deployed = False
-            self.function.error = f'Failed to get URL: {str(e)}'
-            return self.function
+            return DeploymentResult(
+                success=False,
+                error=f'Failed to get URL: {str(e)}',
+                used_region=self.region
+            )
