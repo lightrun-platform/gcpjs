@@ -158,7 +158,7 @@ class BenchmarkManager:
         print("=" * 80)
         print(f"Phase 1: Create {self.config.num_functions} functions with region allocation")
         print(f"Phase 2: Deploy all functions in parallel")
-        print(f"Phase 3: Each function will: Wait {self.config.wait_minutes}min → Poll until cold → Wait 1min grace → Test")
+        print(f"Phase 3: Each function will: Wait 10s grace → Poll until cold → Wait 1min grace → Test")
         print()
 
         # Phase 1: Create all functions with region allocation
@@ -379,8 +379,6 @@ class BenchmarkManager:
         print("Cloud Function Parallel Cold Start Performance Test")
         print("=" * 80)
         print(f"Number of Functions: {self.config.num_functions}")
-        print(f"Cold Start Wait Time: {self.config.wait_minutes} minutes")
-        print(f"Region: {self.config.region}")
         print(f"Project: {self.config.project}")
         print(f"Base Function Name: {self.config.base_function_name}")
         print(f"Number of Worker Threads: {self.config.num_workers}")

@@ -197,13 +197,12 @@ class WaitForColdTask:
             # Return 1 to continue polling
             return 1
     
-    def execute(self, deployment_start_time: float, initial_wait_minutes: int, max_poll_minutes: int = 30) -> float:
+    def execute(self, deployment_start_time: float, max_poll_minutes: int = 30) -> float:
         """
         Execute the wait for cold task for this single function.
         
         Args:
             deployment_start_time: Timestamp when deployments started
-            initial_wait_minutes: Initial wait period before polling
             max_poll_minutes: Maximum minutes to poll after initial wait
             
         Returns:
@@ -212,12 +211,9 @@ class WaitForColdTask:
         Raises:
             ColdStartDetectionError: If function cannot be confirmed cold within timeout
         """
-        # Initial wait period
-        wait_seconds = initial_wait_minutes * 60
-        for remaining in range(wait_seconds, 0, -60):
-            minutes = remaining // 60
-            print(f"[{self.index:3d}] Initial wait... {minutes} minutes remaining", end='\r')
-            time.sleep(60)
+        # Initial wait period (10 seconds grace)
+        print(f"[{self.index:3d}] Waiting 10s grace period...", end='\r')
+        time.sleep(10)
         
         # Poll to confirm function is actually cold
         # The Monitoring API NEVER reports 0 - it just omits timeSeries when cold.

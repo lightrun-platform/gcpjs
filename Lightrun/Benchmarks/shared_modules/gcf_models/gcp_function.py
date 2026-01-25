@@ -87,4 +87,4 @@ class GCPFunction:
             region=self.region,
             index=self.index,
             config=config
-        ).execute(deployment_start_time, config.wait_minutes)
+        ).execute(deployment_start_time)

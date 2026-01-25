@@ -17,8 +17,8 @@ Examples:
   # Use defaults (100 functions each, 20 minute wait)
   %(prog)s --lightrun-secret YOUR_SECRET
 
-  # Test with 50 functions each, wait 10 minutes
-  %(prog)s --lightrun-secret YOUR_SECRET --num-functions 50 --wait-minutes 10
+  # Test with 50 functions each
+  %(prog)s --lightrun-secret YOUR_SECRET --num-functions 50
 
   # Custom region and project
   %(prog)s --lightrun-secret YOUR_SECRET --region us-central1 --project my-project
@@ -37,12 +37,7 @@ Examples:
             default=100,
             help='Number of functions to deploy and test per variant (default: 100)'
         )
-        parser.add_argument(
-            '--wait-minutes',
-            type=int,
-            default=20,
-            help='Minutes to wait for functions to become cold (default: 20)'
-        )
+
         parser.add_argument(
             '--region',
             type=str,

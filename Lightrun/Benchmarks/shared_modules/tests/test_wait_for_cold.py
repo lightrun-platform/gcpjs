@@ -198,7 +198,7 @@ class TestWaitForColdTask(unittest.TestCase):
         # Use very short wait times for testing (0 initial wait, 10 minutes max poll to allow 4 min confirmation)
         # Need enough time for 16 checks at 15s intervals = 240s = 4 minutes
         # Plus buffer for multiple time.time() calls per iteration
-        time_to_cold = task.execute(deployment_start, initial_wait_minutes=0, max_poll_minutes=10)
+        time_to_cold = task.execute(deployment_start, max_poll_minutes=10)
         
         self.assertIsNotNone(time_to_cold)
         self.assertGreaterEqual(time_to_cold, 0)
@@ -225,7 +225,7 @@ class TestWaitForColdTask(unittest.TestCase):
         
         # Use very short timeout for testing
         with self.assertRaises(ColdStartDetectionError) as context:
-            task.execute(deployment_start, initial_wait_minutes=0, max_poll_minutes=1)
+            task.execute(deployment_start, max_poll_minutes=1)
         
         self.assertIn('Could not confirm cold state', str(context.exception))
         self.assertIn(self.function_name, str(context.exception))
