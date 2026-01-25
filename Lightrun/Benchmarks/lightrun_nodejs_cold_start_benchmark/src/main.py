@@ -7,7 +7,7 @@ import argparse
 import subprocess
 import webbrowser
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
@@ -299,7 +299,7 @@ def main():
     
     # Get base directory (gcf-example-basic)
     # __file__ is test_cold_starts/src/main.py, so parent.parent is test_cold_starts, need one more parent
-    base_dir = Path(__file__).parent.parent.parent
+    base_dir = Path(__file__).parent.parent
     hello_lightrun_dir = base_dir / 'helloLightrun'
     hello_no_lightrun_dir = base_dir / 'helloNoLightrun'
     
@@ -326,8 +326,10 @@ def main():
     print("Running both test variants in parallel...")
     print()
     
-    # Create test_results directory with timestamped subdirectory
-    test_results_base_dir = Path(__file__).parent.parent / 'benchmark_results'
+    # Create test_results directory in centralized location
+    # Path is: <RepoRoot>/Lightrun/Benchmarks/benchmark_results/<BenchmarkName>
+    benchmark_name = Path(__file__).resolve().parents[1].name
+    test_results_base_dir = Path(__file__).resolve().parents[2] / 'benchmark_results' / benchmark_name
     test_results_base_dir.mkdir(exist_ok=True)
     
     # Create timestamped subdirectory

@@ -1,7 +1,18 @@
 const Module = require('module');
 const originalRequire = Module.prototype.require;
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
+
+// Centralized results directory: ../../benchmark_results/<BenchmarkName>/<TIMESTAMP>
+const BENCHMARK_NAME = path.basename(__dirname);
+const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+const resultsDir = path.resolve(__dirname, '../../benchmark_results', BENCHMARK_NAME, timestamp);
+
+if (!fs.existsSync(resultsDir)) {
+    fs.mkdirSync(resultsDir, { recursive: true });
+}
+
+console.log(`Results will be saved to: ${resultsDir}`);
 
 // Tree node structure
 class Node {

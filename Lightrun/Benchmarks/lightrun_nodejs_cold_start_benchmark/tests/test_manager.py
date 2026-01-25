@@ -10,7 +10,7 @@ import threading
 # Add parent directory to path so we can import as a package
 parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
-sys.path.insert(0, str(parent_dir.parent.parent)) # Add Benchmarks dir
+sys.path.insert(0, str(parent_dir.parent)) # Add Benchmarks dir
 
 from src.manager import BenchmarkManager
 from shared_modules.wait_for_cold import ColdStartDetectionError
@@ -138,91 +138,7 @@ class TestBenchmarkManager(unittest.TestCase):
         self.assertTrue(test_result['error'])
         self.assertIsNone(time_to_cold)
     
-    @unittest.skip("Obsolete: manager uses parallel phases now, not per-function flow")
-    def test_deploy_wait_and_test_all_functions(self):
-        """Test deploying and testing all functions."""
-        manager = BenchmarkManager(self.config, self.function_dir)
-        
-        # Mock the deploy_wait_and_test_function method
-        def mock_deploy_wait_test(function_index, deployment_start_time):
-            return (
-                {
-                    'deployed': True,
-                    'function_name': f'testfunction-{function_index:03d}',
-                    'function_index': function_index,
-                    'url': f'https://test{function_index}.run.app',
-                    'time_to_cold_seconds': 120.0 + function_index
-                },
-                {
-                    'isColdStart': True,
-                    'totalDuration': '1000000000'
-                },
-                120.0 + function_index
-            )
-        
-        manager.deploy_wait_and_test_function = mock_deploy_wait_test
-        
-        # Mock successful results
-        results = [
-            ({
-                'deployed': True,
-                'function_name': 'testfunction-001',
-                'function_index': 1,
-                'url': 'https://test1.run.app',
-                'time_to_cold_seconds': 120.0
-            }, {
-                'isColdStart': True,
-                'totalDuration': '1000000000'
-            }, 120.0),
-            ({
-                'deployed': True,
-                'function_name': 'testFunction-002',
-                'function_index': 2,
-                'url': 'https://test2.run.app',
-                'time_to_cold_seconds': 130.0
-            }, {
-                'isColdStart': True,
-                'totalDuration': '1100000000'
-            }, 130.0),
-        ]
-        
-        # Mock executor
-        mock_executor = Mock()
-        
-        # Create mock futures that return the results
-        result1 = mock_deploy_wait_test(1, 1000.0)
-        result2 = mock_deploy_wait_test(2, 1000.0)
-        
-        mock_future1 = Mock()
-        mock_future1.result.return_value = result1
-        mock_future2 = Mock()
-        mock_future2.result.return_value = result2
-        
-        # Track which future corresponds to which index
-        call_order = []
-        def mock_submit(func, *args):
-            call_order.append(len(call_order) + 1)
-            if len(call_order) == 1:
-                return mock_future1
-            else:
-                return mock_future2
-        
-        mock_executor.submit = mock_submit
-        manager.executor = mock_executor
-        
-        # Mock as_completed - it receives a dict mapping future to index
-        from concurrent.futures import as_completed
-        def mock_as_completed(futures_dict):
-            # Return the futures that are keys in the dict
-            return iter(futures_dict.keys())
-        
-        with patch('src.manager.as_completed', side_effect=mock_as_completed):
-            deployments, test_results, cold_times = manager.deploy_wait_and_test_all_functions()
-        
-        self.assertEqual(len(deployments), 2)
-        self.assertEqual(len(test_results), 2)
-        self.assertEqual(len(cold_times), 2)
-    
+
     @patch('shared_modules.delete.DeleteTask')
     def test_cleanup(self, mock_delete):
         """Test cleanup function."""

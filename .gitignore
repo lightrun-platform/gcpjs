@@ -33,3 +33,4 @@ build/
 
 # Test results
 **/other_benchmarks/benchmark_results/
+Lightrun/Benchmarks/benchmark_results/
