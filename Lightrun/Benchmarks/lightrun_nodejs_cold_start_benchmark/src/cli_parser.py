@@ -1,0 +1,137 @@
+
+import argparse
+import os
+
+class CLIParser:
+    """Parses command-line arguments for the benchmark."""
+
+    def parse(self):
+        """Parse command-line arguments."""
+        parser = argparse.ArgumentParser(
+            description='Test Cloud Functions with guaranteed cold starts. '
+                        'Deploys multiple functions for both with/without Lightrun, '
+                        'waits for them to become cold, then tests them all in parallel.',
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog="""
+Examples:
+  # Use defaults (100 functions each, 20 minute wait)
+  %(prog)s --lightrun-secret YOUR_SECRET
+
+  # Test with 50 functions each, wait 10 minutes
+  %(prog)s --lightrun-secret YOUR_SECRET --num-functions 50 --wait-minutes 10
+
+  # Custom region and project
+  %(prog)s --lightrun-secret YOUR_SECRET --region us-central1 --project my-project
+            """
+        )
+        
+        parser.add_argument(
+            '--lightrun-secret',
+            type=str,
+            default=os.environ.get('LIGHTRUN_SECRET', ''),
+            help='Lightrun secret (default: from LIGHTRUN_SECRET env var)'
+        )
+        parser.add_argument(
+            '--num-functions',
+            type=int,
+            default=100,
+            help='Number of functions to deploy and test per variant (default: 100)'
+        )
+        parser.add_argument(
+            '--wait-minutes',
+            type=int,
+            default=20,
+            help='Minutes to wait for functions to become cold (default: 20)'
+        )
+        parser.add_argument(
+            '--region',
+            type=str,
+            default='europe-west3',
+            help='GCP region (default: europe-west3)'
+        )
+        parser.add_argument(
+            '--project',
+            type=str,
+            default='lightrun-temp',
+            help='GCP project ID (default: lightrun-temp)'
+        )
+        parser.add_argument(
+            '--runtime',
+            type=str,
+            default='nodejs20',
+            help='Function runtime (default: nodejs20)'
+        )
+        parser.add_argument(
+            '--results-file',
+            type=str,
+            default='benchmark_results.json',
+            help='Output file for test results (default: benchmark_results.json)'
+        )
+        parser.add_argument(
+            '--report-file',
+            type=str,
+            default='comparative_benchmark_report.txt',
+            help='Output file for test report (default: comparative_benchmark_report.txt)'
+        )
+        parser.add_argument(
+            '--num-workers',
+            type=int,
+            default=None,
+            help='Number of worker threads per test variant (default: number of functions to deploy)'
+        )
+        parser.add_argument(
+            '--delay-between-requests',
+            type=int,
+            default=10,
+            help='Seconds to wait between requests to each function (default: 10)'
+        )
+        parser.add_argument(
+            '--num-requests-per-function',
+            type=int,
+            default=10,
+            help='Number of requests to send to each function (default: 10)'
+        )
+        parser.add_argument(
+            '--lightrun-api-key',
+            type=str,
+            default=os.environ.get('LIGHTRUN_API_KEY', ''),
+            help='Lightrun API key for adding snapshots (default: from LIGHTRUN_API_KEY env var)'
+        )
+        parser.add_argument(
+            '--lightrun-company-id',
+            type=str,
+            default=os.environ.get('LIGHTRUN_COMPANY_ID', ''),
+            help='Lightrun Company ID (default: from LIGHTRUN_COMPANY_ID env var)'
+        )
+        parser.add_argument(
+            '--max-allocations-per-region',
+            type=int,
+            default=20,
+            help='Maximum number of functions to allocate per region (default: 20)'
+        )
+        parser.add_argument(
+            '--consecutive-cold-checks',
+            type=int,
+            default=3,
+            help='Number of consecutive checks showing 0 instances required to confirm cold state (default: 3)'
+        )
+        parser.add_argument(
+            '--cold-check-delay',
+            type=int,
+            default=30,
+            help='Seconds to wait between cold state checks (default: 30)'
+        )
+        
+        parser.add_argument(
+            '--skip-wait-for-cold',
+            action='store_true',
+            help='Skip waiting for functions to become cold (default: False)'
+        )
+        
+        args = parser.parse_args()
+        
+        # Set default num_workers to num_functions if not specified
+        if args.num_workers is None:
+            args.num_workers = args.num_functions
+        
+        return args
