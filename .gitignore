@@ -32,5 +32,4 @@ build/
 *.png
 
 # Test results
-**/test_cold_starts/test_results/
-**/test_cold_starts/src/test_results/
+**/other_benchmarks/benchmark_results/

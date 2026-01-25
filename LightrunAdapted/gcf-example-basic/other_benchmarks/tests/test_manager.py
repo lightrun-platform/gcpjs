@@ -1,4 +1,4 @@
-"""Unit tests for ColdStartTestManager class."""
+"""Unit tests for BenchmarkManager class."""
 
 import unittest
 from unittest.mock import Mock, patch, MagicMock
@@ -11,12 +11,12 @@ import threading
 parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 
-from src.manager import ColdStartTestManager
+from src.manager import BenchmarkManager
 from src.wait_for_cold import ColdStartDetectionError
 from src.models import GCPFunction
 
-class TestColdStartTestManager(unittest.TestCase):
-    """Test ColdStartTestManager class."""
+class TestBenchmarkManager(unittest.TestCase):
+    """Test BenchmarkManager class."""
     
     def setUp(self):
         """Set up test fixtures."""
@@ -35,8 +35,8 @@ class TestColdStartTestManager(unittest.TestCase):
         self.function_dir = Path('/tmp/test_function')
     
     def test_init(self):
-        """Test ColdStartTestManager initialization."""
-        manager = ColdStartTestManager(self.config, self.function_dir)
+        """Test BenchmarkManager initialization."""
+        manager = BenchmarkManager(self.config, self.function_dir)
         
         self.assertEqual(manager.config, self.config)
         self.assertEqual(manager.function_dir, self.function_dir)
@@ -46,7 +46,7 @@ class TestColdStartTestManager(unittest.TestCase):
     
     def test_context_manager_entry(self):
         """Test context manager entry."""
-        manager = ColdStartTestManager(self.config, self.function_dir)
+        manager = BenchmarkManager(self.config, self.function_dir)
         
         with manager:
             self.assertIsNotNone(manager.executor)
@@ -54,7 +54,7 @@ class TestColdStartTestManager(unittest.TestCase):
     
     def test_context_manager_exit(self):
         """Test context manager exit."""
-        manager = ColdStartTestManager(self.config, self.function_dir)
+        manager = BenchmarkManager(self.config, self.function_dir)
         
         with manager:
             executor = manager.executor
@@ -85,7 +85,7 @@ class TestColdStartTestManager(unittest.TestCase):
         }
         mock_send_request.return_value = mock_send_instance
         
-        manager = ColdStartTestManager(self.config, self.function_dir)
+        manager = BenchmarkManager(self.config, self.function_dir)
         manager.executor = Mock()  # Mock executor
 
         # Create function object for testing (already deployed)
@@ -119,7 +119,7 @@ class TestColdStartTestManager(unittest.TestCase):
         mock_wait_instance.execute.side_effect = ColdStartDetectionError('Timeout')
         mock_wait.return_value = mock_wait_instance
         
-        manager = ColdStartTestManager(self.config, self.function_dir)
+        manager = BenchmarkManager(self.config, self.function_dir)
         manager.executor = Mock()
 
         # Create function object for testing
@@ -140,7 +140,7 @@ class TestColdStartTestManager(unittest.TestCase):
     @unittest.skip("Obsolete: manager uses parallel phases now, not per-function flow")
     def test_deploy_wait_and_test_all_functions(self):
         """Test deploying and testing all functions."""
-        manager = ColdStartTestManager(self.config, self.function_dir)
+        manager = BenchmarkManager(self.config, self.function_dir)
         
         # Mock the deploy_wait_and_test_function method
         def mock_deploy_wait_test(function_index, deployment_start_time):
@@ -225,7 +225,7 @@ class TestColdStartTestManager(unittest.TestCase):
     @patch('src.delete.DeleteTask')
     def test_cleanup(self, mock_delete):
         """Test cleanup function."""
-        manager = ColdStartTestManager(self.config, self.function_dir)
+        manager = BenchmarkManager(self.config, self.function_dir)
         manager.deployed_functions = [
             Mock(name='testfunction-001', region='us-central1'),
             Mock(name='testfunction-002', region='us-central1')
@@ -283,7 +283,7 @@ class TestColdStartTestManager(unittest.TestCase):
         import tempfile
         import os
         
-        manager = ColdStartTestManager(self.config, self.function_dir)
+        manager = BenchmarkManager(self.config, self.function_dir)
         manager.config.results_file = 'test_results.json'
         
         deployments = [{'function_name': 'test-001'}]
@@ -304,7 +304,7 @@ class TestColdStartTestManager(unittest.TestCase):
     
     def test_get_results(self):
         """Test getting results dictionary."""
-        manager = ColdStartTestManager(self.config, self.function_dir)
+        manager = BenchmarkManager(self.config, self.function_dir)
         manager.deployments = [{'function_name': 'test-001'}]
         manager.test_results = [{'totalDuration': '1000000000'}]
         

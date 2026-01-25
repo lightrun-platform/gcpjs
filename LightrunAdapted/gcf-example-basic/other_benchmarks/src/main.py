@@ -10,7 +10,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
-from .manager import ColdStartTestManager
+from .manager import BenchmarkManager
 from .report import ReportGenerator
 
 
@@ -196,14 +196,14 @@ Examples:
     parser.add_argument(
         '--results-file',
         type=str,
-        default='cold_start_test_results.json',
-        help='Output file for test results (default: cold_start_test_results.json)'
+        default='benchmark_results.json',
+        help='Output file for test results (default: benchmark_results.json)'
     )
     parser.add_argument(
         '--report-file',
         type=str,
-        default='comparative_cold_start_report.txt',
-        help='Output file for test report (default: comparative_cold_start_report.txt)'
+        default='comparative_benchmark_report.txt',
+        help='Output file for test report (default: comparative_benchmark_report.txt)'
     )
     parser.add_argument(
         '--num-workers',
@@ -254,6 +254,12 @@ Examples:
         help='Seconds to wait between cold state checks (default: 30)'
     )
     
+    parser.add_argument(
+        '--skip-wait-for-cold',
+        action='store_true',
+        help='Skip waiting for functions to become cold (default: False)'
+    )
+    
     args = parser.parse_args()
     
     # Set default num_workers to num_functions if not specified
@@ -278,7 +284,7 @@ def run_single_test(config: argparse.Namespace, function_dir: Path, base_name: s
     print(f"Starting test for: {base_name}")
     print(f"{'='*80}")
     
-    with ColdStartTestManager(variant_config, function_dir) as manager:
+    with BenchmarkManager(variant_config, function_dir) as manager:
         return manager.run()
 
 def main():
@@ -320,7 +326,7 @@ def main():
     print()
     
     # Create test_results directory with timestamped subdirectory
-    test_results_base_dir = Path(__file__).parent / 'test_results'
+    test_results_base_dir = Path(__file__).parent.parent / 'benchmark_results'
     test_results_base_dir.mkdir(exist_ok=True)
     
     # Create timestamped subdirectory

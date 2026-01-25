@@ -5,7 +5,6 @@ import time
 import os
 import atexit
 import signal
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -20,12 +19,12 @@ from .models.gcp_function import GCPFunction
 from .region_allocator import RegionAllocator
 
 
-class ColdStartTestManager:
-    """Manages the lifecycle of cold start testing."""
+class BenchmarkManager:
+    """Manages the lifecycle of a benchmark run."""
     
     def __init__(self, config: argparse.Namespace, function_dir: Path):
         """
-        Initialize the test manager.
+        Initialize the manager.
         
         Args:
             config: Configuration namespace with all test parameters
@@ -82,21 +81,28 @@ class ColdStartTestManager:
         """
 
 
-        try:
-            time_to_cold = function.wait_for_cold(self.config, deployment_start_time)
-        except ColdStartDetectionError as e:
-            print(f"[{function.index:3d}] ❌ Cold detection failed: {e}")
-            return function, {
-                'function_index': function.index,
-                'function_name': function.name,
-                'error': True,
-                'error_message': str(e)
-            }, None
+
+        time_to_cold = None
+        
+        if getattr(self.config, 'skip_wait_for_cold', False):
+            print(f"[{function.index:3d}] Skipping wait for cold...")
+        else:
+            try:
+                time_to_cold = function.wait_for_cold(self.config, deployment_start_time)
+            except ColdStartDetectionError as e:
+                print(f"[{function.index:3d}] ❌ Cold detection failed: {e}")
+                return function, {
+                    'function_index': function.index,
+                    'function_name': function.name,
+                    'error': True,
+                    'error_message': str(e)
+                }, None
 
 
-        # Step 2: Grace period (1 minute) after cold confirmation
-        print(f"[{function.index:3d}] Waiting 1 minute grace period before testing...")
-        time.sleep(60)
+            # Step 2: Grace period (1 minute) after cold confirmation
+            print(f"[{function.index:3d}] Waiting 1 minute grace period before testing...")
+            time.sleep(60)
+            
         print(f"[{function.index:3d}] Testing now...")
 
         # Step 3: Test (multiple requests based on config)
