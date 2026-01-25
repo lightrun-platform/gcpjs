@@ -35,6 +35,7 @@ class BenchmarkManager:
         self.executor: Optional[ThreadPoolExecutor] = None
         self.deployed_functions: List[GCPFunction] = []
         self.cleanup_registered = False
+        self.cleanup_stats = {'deleted': 0, 'failed': 0}
     
     def __enter__(self):
         """Context manager entry - create executor and register cleanup."""
@@ -325,6 +326,7 @@ class BenchmarkManager:
         return {
             'deployments': deployments_dict,
             'test_results': self.test_results if hasattr(self, 'test_results') else [],
+            'cleanup_stats': self.cleanup_stats,
             'config': {
                 'base_function_name': self.config.base_function_name,
                 'num_functions': self.config.num_functions,
@@ -371,6 +373,7 @@ class BenchmarkManager:
             self.executor = None
         
         print(f"\nCleanup Summary: {deleted_count} deleted, {failed_count} failed")
+        self.cleanup_stats = {'deleted': deleted_count, 'failed': failed_count}
         self.deployed_functions = []
     
     def run(self) -> Dict[str, Any]:

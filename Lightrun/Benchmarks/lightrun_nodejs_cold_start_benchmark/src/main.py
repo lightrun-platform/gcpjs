@@ -15,12 +15,6 @@ from .cli_parser import CLIParser
 from .results_viewer import ResultsViewer
 
 
-
-
-
-
-
-
 def run_single_test(config: argparse.Namespace, function_dir: Path, base_name: str, entry_point: str, output_dir: Path) -> dict:
     """Run a single test variant (with or without Lightrun)."""
     # Create a copy of config with variant-specific settings
@@ -36,8 +30,11 @@ def run_single_test(config: argparse.Namespace, function_dir: Path, base_name: s
     print(f"Starting test for: {base_name}")
     print(f"{'='*80}")
     
-    with BenchmarkManager(variant_config, function_dir) as manager:
-        return manager.run()
+    manager = BenchmarkManager(variant_config, function_dir)
+    with manager:
+        manager.run()
+    
+    return manager.get_results()
 
 def main():
     """Main entry point."""

@@ -336,10 +336,14 @@ class ReportGenerator:
         report_lines.append(f"With Lightrun:")
         report_lines.append(f"  Functions Deployed: {with_successful}/{len(with_deployments)}")
         report_lines.append(f"  Successful Requests: {len([r for r in self.with_lightrun.get('test_results', []) if not r.get('error', False)])}")
+        cleanup_stats = self.with_lightrun.get('cleanup_stats', {'deleted': 0, 'failed': 0})
+        report_lines.append(f"  Functions Deleted:   {cleanup_stats.get('deleted', 0)}/{with_successful} (Failed: {cleanup_stats.get('failed', 0)})")
         report_lines.append(f"")
         report_lines.append(f"Without Lightrun:")
         report_lines.append(f"  Functions Deployed: {without_successful}/{len(without_deployments)}")
         report_lines.append(f"  Successful Requests: {len([r for r in self.without_lightrun.get('test_results', []) if not r.get('error', False)])}")
+        cleanup_stats = self.without_lightrun.get('cleanup_stats', {'deleted': 0, 'failed': 0})
+        report_lines.append(f"  Functions Deleted:   {cleanup_stats.get('deleted', 0)}/{without_successful} (Failed: {cleanup_stats.get('failed', 0)})")
         report_lines.append("")
         
         # Common metrics to compare

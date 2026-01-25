@@ -193,6 +193,9 @@ class TestBenchmarkManager(unittest.TestCase):
         
         # Check that executor was shut down
         mock_executor.shutdown.assert_called_once()
+        
+        # Verify cleanup stats
+        self.assertEqual(manager.cleanup_stats, {'deleted': 2, 'failed': 0})
     
     def test_save_results(self):
         """Test saving results to file."""
@@ -229,6 +232,7 @@ class TestBenchmarkManager(unittest.TestCase):
         
         self.assertIn('deployments', results)
         self.assertIn('test_results', results)
+        self.assertIn('cleanup_stats', results)
         self.assertIn('config', results)
         self.assertIn('test_timestamp', results)
 
