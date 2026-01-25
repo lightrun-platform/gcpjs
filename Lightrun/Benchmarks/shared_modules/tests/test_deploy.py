@@ -11,8 +11,8 @@ import time
 parent_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(parent_dir))
 
-from test_cold_starts.src.deploy import DeployTask
-from test_cold_starts.src.models.gcp_function import GCPFunction
+from shared_modules.deploy import DeployTask
+from shared_modules.gcf_models.gcp_function import GCPFunction
 
 
 class TestDeployTask(unittest.TestCase):
@@ -71,7 +71,7 @@ class TestDeployTask(unittest.TestCase):
         self.assertEqual(task.function_name, 'testfunction-042')
         self.assertEqual(task.display_name, 'testFunction-gcf-performance-test-042')
     
-    @patch('test_cold_starts.src.deploy.subprocess.run')
+    @patch('shared_modules.deploy.subprocess.run')
     def test_execute_successful_deployment(self, mock_subprocess):
         """Test successful deployment."""
         # Mock successful deployment
@@ -106,7 +106,7 @@ class TestDeployTask(unittest.TestCase):
         self.assertIsNotNone(result.deploy_time)
         self.assertIsNone(result.error)
     
-    @patch('test_cold_starts.src.deploy.subprocess.run')
+    @patch('shared_modules.deploy.subprocess.run')
     def test_execute_deployment_failure(self, mock_subprocess):
         """Test deployment failure."""
         # Mock failed deployment
@@ -134,8 +134,8 @@ class TestDeployTask(unittest.TestCase):
         self.assertIsNotNone(result.error)
         self.assertIn('Permission denied', result.error)
     
-    @patch('test_cold_starts.src.deploy.time.sleep')
-    @patch('test_cold_starts.src.deploy.subprocess.run')
+    @patch('shared_modules.deploy.time.sleep')
+    @patch('shared_modules.deploy.subprocess.run')
     def test_execute_timeout(self, mock_subprocess, mock_sleep):
         """Test deployment timeout."""
         import subprocess
@@ -182,7 +182,7 @@ class TestDeployTask(unittest.TestCase):
         self.assertEqual(result.error, 'Deployment timed out after 5 minutes')
         self.assertIsNone(result.url)
     
-    @patch('test_cold_starts.src.deploy.subprocess.run')
+    @patch('shared_modules.deploy.subprocess.run')
     def test_execute_url_retrieval_failure(self, mock_subprocess):
         """Test when deployment succeeds but URL retrieval fails."""
         # Mock successful deployment
@@ -210,7 +210,7 @@ class TestDeployTask(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertIsNone(result.url)
     
-    @patch('test_cold_starts.src.deploy.subprocess.run')
+    @patch('shared_modules.deploy.subprocess.run')
     def test_execute_env_vars_formatting(self, mock_subprocess):
         """Test that environment variables are correctly formatted."""
         mock_deploy_result = Mock()
@@ -253,7 +253,7 @@ class TestDeployTask(unittest.TestCase):
             self.assertIn('LIGHTRUN_SECRET=test-secret-123', env_vars)
             self.assertIn('DISPLAY_NAME=testFunction-gcf-performance-test-001', env_vars)
     
-    @patch('test_cold_starts.src.deploy.subprocess.run')
+    @patch('shared_modules.deploy.subprocess.run')
     def test_execute_gcloud_command_structure(self, mock_subprocess):
         """Test that gcloud command has correct structure."""
         mock_deploy_result = Mock()

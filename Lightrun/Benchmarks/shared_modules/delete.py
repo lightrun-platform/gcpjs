@@ -3,7 +3,7 @@
 import subprocess
 from typing import Dict, Any, Optional
 import argparse
-from .models import GCPFunction
+from .gcf_models import GCPFunction
 
 
 class DeleteTask:

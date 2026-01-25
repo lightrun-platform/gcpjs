@@ -7,6 +7,7 @@ import argparse
 import subprocess
 import webbrowser
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 

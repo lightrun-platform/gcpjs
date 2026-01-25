@@ -12,11 +12,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import argparse
 from dataclasses import asdict
 
-from .send_request import SendRequestTask
-from .delete import DeleteTask
-from .wait_for_cold import ColdStartDetectionError
-from .models.gcp_function import GCPFunction
-from .region_allocator import RegionAllocator
+from shared_modules.send_request import SendRequestTask
+from shared_modules.delete import DeleteTask
+from shared_modules.wait_for_cold import ColdStartDetectionError
+from shared_modules.gcf_models.gcp_function import GCPFunction
+from shared_modules.region_allocator import RegionAllocator
 
 
 class BenchmarkManager:

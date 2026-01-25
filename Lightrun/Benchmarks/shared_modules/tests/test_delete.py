@@ -10,7 +10,7 @@ from pathlib import Path
 parent_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(parent_dir))
 
-from test_cold_starts.src.delete import DeleteTask
+from shared_modules.delete import DeleteTask
 
 
 class TestDeleteTask(unittest.TestCase):
@@ -36,7 +36,7 @@ class TestDeleteTask(unittest.TestCase):
         self.assertEqual(task.function, self.function)
         self.assertEqual(task.config, self.config)
     
-    @patch('test_cold_starts.src.delete.subprocess.run')
+    @patch('shared_modules.delete.subprocess.run')
     def test_execute_successful_deletion(self, mock_subprocess):
         """Test successful function deletion."""
         # Mock successful deletion
@@ -52,7 +52,7 @@ class TestDeleteTask(unittest.TestCase):
         self.assertEqual(result['function_name'], self.function_name)
         self.assertIsNone(result.get('error'))
     
-    @patch('test_cold_starts.src.delete.subprocess.run')
+    @patch('shared_modules.delete.subprocess.run')
     def test_execute_deletion_failure(self, mock_subprocess):
         """Test deletion failure."""
         # Mock failed deletion
@@ -69,7 +69,7 @@ class TestDeleteTask(unittest.TestCase):
         self.assertIn('error', result)
         self.assertIn('Function not found', result['error'])
     
-    @patch('test_cold_starts.src.delete.subprocess.run')
+    @patch('shared_modules.delete.subprocess.run')
     def test_execute_exception_handling(self, mock_subprocess):
         """Test exception handling during deletion."""
         # Mock exception
@@ -83,7 +83,7 @@ class TestDeleteTask(unittest.TestCase):
         self.assertIn('error', result)
         self.assertEqual(result['error'], 'Network error')
     
-    @patch('test_cold_starts.src.delete.subprocess.run')
+    @patch('shared_modules.delete.subprocess.run')
     def test_execute_gcloud_command_structure(self, mock_subprocess):
         """Test that gcloud command has correct structure."""
         mock_result = Mock()
@@ -106,7 +106,7 @@ class TestDeleteTask(unittest.TestCase):
         self.assertIn(f'--region={self.config.region}', delete_args)
         self.assertIn(f'--project={self.config.project}', delete_args)
     
-    @patch('test_cold_starts.src.delete.subprocess.run')
+    @patch('shared_modules.delete.subprocess.run')
     def test_execute_error_message_truncation(self, mock_subprocess):
         """Test that error messages are truncated to 200 characters."""
         # Mock failed deletion with long error message
@@ -122,7 +122,7 @@ class TestDeleteTask(unittest.TestCase):
         self.assertLessEqual(len(result['error']), 200)
         self.assertEqual(result['error'], 'A' * 200)
     
-    @patch('test_cold_starts.src.delete.subprocess.run')
+    @patch('shared_modules.delete.subprocess.run')
     def test_execute_timeout_handling(self, mock_subprocess):
         """Test timeout handling."""
         import subprocess

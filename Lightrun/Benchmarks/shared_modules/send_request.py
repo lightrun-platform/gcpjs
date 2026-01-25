@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 import argparse
-from .models import GCPFunction
+from .gcf_models import GCPFunction
 from .lightrun_api import LightrunAPI
 
 

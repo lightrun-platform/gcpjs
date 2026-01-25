@@ -10,7 +10,7 @@ from pathlib import Path
 parent_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(parent_dir))
 
-from test_cold_starts.src.wait_for_cold import WaitForColdTask, ColdStartDetectionError
+from shared_modules.wait_for_cold import WaitForColdTask, ColdStartDetectionError
 
 
 class TestWaitForColdTask(unittest.TestCase):
@@ -36,7 +36,7 @@ class TestWaitForColdTask(unittest.TestCase):
         self.assertEqual(task.config, self.config)
     
     @patch('requests.get')
-    @patch('test_cold_starts.src.wait_for_cold.subprocess.run')
+    @patch('shared_modules.wait_for_cold.subprocess.run')
     def test_check_function_instances_cold(self, mock_subprocess, mock_requests_get):
         """Test checking function instances when cold (no timeSeries data)."""
         # Mock Cloud Run describe succeeds
@@ -61,7 +61,7 @@ class TestWaitForColdTask(unittest.TestCase):
         self.assertEqual(count, 1)
     
     @patch('requests.get')
-    @patch('test_cold_starts.src.wait_for_cold.subprocess.run')
+    @patch('shared_modules.wait_for_cold.subprocess.run')
     def test_check_function_instances_warm(self, mock_subprocess, mock_requests_get):
         """Test checking function instances when warm (2 instances)."""
         # Mock Cloud Run describe succeeds
@@ -95,7 +95,7 @@ class TestWaitForColdTask(unittest.TestCase):
         
         self.assertEqual(count, 2)
     
-    @patch('test_cold_starts.src.wait_for_cold.subprocess.run')
+    @patch('shared_modules.wait_for_cold.subprocess.run')
     def test_check_function_instances_service_not_found(self, mock_subprocess):
         """Test when Cloud Run service doesn't exist yet."""
         # Mock Cloud Run describe failure
@@ -111,7 +111,7 @@ class TestWaitForColdTask(unittest.TestCase):
         self.assertEqual(count, 1)
     
     @patch('requests.get')
-    @patch('test_cold_starts.src.wait_for_cold.subprocess.run')
+    @patch('shared_modules.wait_for_cold.subprocess.run')
     def test_check_function_instances_monitoring_failure(self, mock_subprocess, mock_requests_get):
         """Test when monitoring API fails."""
         # Mock Cloud Run describe succeeds
@@ -131,7 +131,7 @@ class TestWaitForColdTask(unittest.TestCase):
         # Should return uncertainty (1) if monitoring fails - don't assume cold
         self.assertEqual(count, 1)
     
-    @patch('test_cold_starts.src.wait_for_cold.subprocess.run')
+    @patch('shared_modules.wait_for_cold.subprocess.run')
     def test_check_function_instances_exception(self, mock_subprocess):
         """Test exception handling."""
         mock_subprocess.side_effect = Exception('Network error')
@@ -142,8 +142,8 @@ class TestWaitForColdTask(unittest.TestCase):
         # Should return 1 (uncertainty) on exception
         self.assertEqual(count, 1)
     
-    @patch('test_cold_starts.src.wait_for_cold.time.sleep')
-    @patch('test_cold_starts.src.wait_for_cold.time.time')
+    @patch('shared_modules.wait_for_cold.time.sleep')
+    @patch('shared_modules.wait_for_cold.time.time')
     @patch.object(WaitForColdTask, 'check_function_instances')
     def test_execute_successful_cold_detection(self, mock_check, mock_time, mock_sleep):
         """Test successful cold start detection."""
@@ -203,8 +203,8 @@ class TestWaitForColdTask(unittest.TestCase):
         self.assertIsNotNone(time_to_cold)
         self.assertGreaterEqual(time_to_cold, 0)
     
-    @patch('test_cold_starts.src.wait_for_cold.time.sleep')
-    @patch('test_cold_starts.src.wait_for_cold.time.time')
+    @patch('shared_modules.wait_for_cold.time.sleep')
+    @patch('shared_modules.wait_for_cold.time.time')
     @patch.object(WaitForColdTask, 'check_function_instances')
     def test_execute_timeout(self, mock_check, mock_time, mock_sleep):
         """Test timeout when function never becomes cold."""
@@ -237,7 +237,7 @@ class TestWaitForColdTask(unittest.TestCase):
         self.assertEqual(str(error), 'Test error message')
     
     @patch('requests.get')
-    @patch('test_cold_starts.src.wait_for_cold.subprocess.run')
+    @patch('shared_modules.wait_for_cold.subprocess.run')
     def test_check_function_instances_invalid_monitoring_output(self, mock_subprocess, mock_requests_get):
         """Test handling of invalid monitoring output."""
         # Mock Cloud Run describe succeeds
@@ -261,7 +261,7 @@ class TestWaitForColdTask(unittest.TestCase):
         self.assertEqual(count, 1)
     
     @patch('requests.get')
-    @patch('test_cold_starts.src.wait_for_cold.subprocess.run')
+    @patch('shared_modules.wait_for_cold.subprocess.run')
     def test_check_function_instances_empty_monitoring_output(self, mock_subprocess, mock_requests_get):
         """Test handling of empty monitoring output."""
         # Mock Cloud Run describe succeeds

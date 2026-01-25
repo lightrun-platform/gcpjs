@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import argparse
 
-from .models.deployment_result import DeploymentResult
+from .gcf_models.deployment_result import DeploymentResult
 
 
 class DeployTask:

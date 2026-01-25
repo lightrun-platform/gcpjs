@@ -1,8 +1,14 @@
 import unittest
 from unittest.mock import patch, MagicMock
 import io
-from src.models import GCPFunction
-from src.region_allocator import RegionAllocator
+from pathlib import Path
+import sys
+
+# Add parent directory to path so we can import as a package
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from shared_modules.gcf_models import GCPFunction
+from shared_modules.region_allocator import RegionAllocator
 
 class TestRegionAllocator(unittest.TestCase):
     

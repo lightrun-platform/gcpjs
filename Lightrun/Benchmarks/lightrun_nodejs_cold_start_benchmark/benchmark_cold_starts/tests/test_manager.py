@@ -10,10 +10,11 @@ import threading
 # Add parent directory to path so we can import as a package
 parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
+sys.path.insert(0, str(parent_dir.parent.parent)) # Add Benchmarks dir
 
 from src.manager import BenchmarkManager
-from src.wait_for_cold import ColdStartDetectionError
-from src.models import GCPFunction
+from shared_modules.wait_for_cold import ColdStartDetectionError
+from shared_modules.gcf_models import GCPFunction
 
 class TestBenchmarkManager(unittest.TestCase):
     """Test BenchmarkManager class."""
@@ -62,7 +63,7 @@ class TestBenchmarkManager(unittest.TestCase):
         # Executor should be cleaned up
         # Note: In real scenario, cleanup() would be called
     
-    @patch('src.wait_for_cold.WaitForColdTask')
+    @patch('shared_modules.wait_for_cold.WaitForColdTask')
     @patch('src.manager.SendRequestTask')
     @patch('src.manager.time.sleep')
     @patch('src.manager.time.time')
@@ -89,7 +90,7 @@ class TestBenchmarkManager(unittest.TestCase):
         manager.executor = Mock()  # Mock executor
 
         # Create function object for testing (already deployed)
-        from src.models import GCPFunction
+        from shared_modules.gcf_models import GCPFunction
         function = GCPFunction(index=1, region='us-central1', base_name='test')
         function.is_deployed = True
         function.url = 'https://test.run.app'
@@ -105,7 +106,7 @@ class TestBenchmarkManager(unittest.TestCase):
     
 
     
-    @patch('src.wait_for_cold.WaitForColdTask')
+    @patch('shared_modules.wait_for_cold.WaitForColdTask')
     @patch('src.manager.time.sleep')
     @patch('src.manager.time.time')
     def test_wait_and_test_function_cold_detection_failure(self, mock_time,
@@ -123,7 +124,7 @@ class TestBenchmarkManager(unittest.TestCase):
         manager.executor = Mock()
 
         # Create function object for testing
-        from src.models import GCPFunction
+        from shared_modules.gcf_models import GCPFunction
         function = GCPFunction(index=1, region='us-central1', base_name='test')
         function.is_deployed = True
         function.url = 'https://test.run.app'
@@ -222,7 +223,7 @@ class TestBenchmarkManager(unittest.TestCase):
         self.assertEqual(len(test_results), 2)
         self.assertEqual(len(cold_times), 2)
     
-    @patch('src.delete.DeleteTask')
+    @patch('shared_modules.delete.DeleteTask')
     def test_cleanup(self, mock_delete):
         """Test cleanup function."""
         manager = BenchmarkManager(self.config, self.function_dir)

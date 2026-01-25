@@ -11,7 +11,7 @@ from pathlib import Path
 parent_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(parent_dir))
 
-from test_cold_starts.src.send_request import SendRequestTask
+from shared_modules.send_request import SendRequestTask
 
 
 class TestSendRequestTask(unittest.TestCase):
@@ -39,8 +39,8 @@ class TestSendRequestTask(unittest.TestCase):
         self.assertEqual(task.url, self.function.url)
         self.assertEqual(task.function_index, self.function.index)
     
-    @patch('test_cold_starts.src.send_request.requests.get')
-    @patch('test_cold_starts.src.send_request.time.time')
+    @patch('shared_modules.send_request.requests.get')
+    @patch('shared_modules.send_request.time.time')
     def test_execute_successful_request(self, mock_time, mock_get):
         """Test successful HTTP request."""
         # Mock time for latency calculation
@@ -70,8 +70,8 @@ class TestSendRequestTask(unittest.TestCase):
         # Check latency is in nanoseconds (0.5 seconds = 500000000 nanoseconds)
         self.assertEqual(result['_request_latency'], 500_000_000)
     
-    @patch('test_cold_starts.src.send_request.requests.get')
-    @patch('test_cold_starts.src.send_request.time.time')
+    @patch('shared_modules.send_request.requests.get')
+    @patch('shared_modules.send_request.time.time')
     def test_execute_http_error(self, mock_time, mock_get):
         """Test HTTP error response."""
         mock_time.side_effect = [1000.0, 1000.1]
@@ -92,8 +92,8 @@ class TestSendRequestTask(unittest.TestCase):
         self.assertIn('_timestamp', result)
         self.assertEqual(result['_url'], self.function.url)
     
-    @patch('test_cold_starts.src.send_request.requests.get')
-    @patch('test_cold_starts.src.send_request.time.time')
+    @patch('shared_modules.send_request.requests.get')
+    @patch('shared_modules.send_request.time.time')
     def test_execute_request_exception(self, mock_time, mock_get):
         """Test request exception handling."""
         mock_time.side_effect = [1000.0, 1000.1]
@@ -111,8 +111,8 @@ class TestSendRequestTask(unittest.TestCase):
         self.assertIn('_timestamp', result)
         self.assertEqual(result['_url'], self.function.url)
     
-    @patch('test_cold_starts.src.send_request.requests.get')
-    @patch('test_cold_starts.src.send_request.time.time')
+    @patch('shared_modules.send_request.requests.get')
+    @patch('shared_modules.send_request.time.time')
     def test_execute_latency_calculation(self, mock_time, mock_get):
         """Test request latency calculation."""
         # Test with different latencies
@@ -135,8 +135,8 @@ class TestSendRequestTask(unittest.TestCase):
             # Allow small floating point differences
             self.assertAlmostEqual(result['_request_latency'], expected_ns, delta=1000)
     
-    @patch('test_cold_starts.src.send_request.requests.get')
-    @patch('test_cold_starts.src.send_request.time.time')
+    @patch('shared_modules.send_request.requests.get')
+    @patch('shared_modules.send_request.time.time')
     def test_execute_response_data_preserved(self, mock_time, mock_get):
         """Test that all response data is preserved."""
         # Set explicitly to 1 request
@@ -175,8 +175,8 @@ class TestSendRequestTask(unittest.TestCase):
         self.assertIn('_timestamp', result)
         self.assertEqual(result['_url'], self.function.url)
     
-    @patch('test_cold_starts.src.send_request.requests.get')
-    @patch('test_cold_starts.src.send_request.time.time')
+    @patch('shared_modules.send_request.requests.get')
+    @patch('shared_modules.send_request.time.time')
     def test_execute_timeout_handling(self, mock_time, mock_get):
         """Test timeout exception handling."""
         import requests
