@@ -110,3 +110,53 @@ class LightrunAPI:
             print(f"    Warning: Error creating snapshot: {e}")
 
         return None
+
+    def add_log_action(
+        self,
+        agent_id: str,
+        filename: str,
+        line_number: int,
+        message: str,
+        max_hit_count: int,
+        expire_seconds: int = 3600,
+    ) -> Optional[str]:
+        """
+        Add a log action to an agent.
+
+        Args:
+            agent_id: The ID of the agent to add the log to.
+            filename: The source filename (e.g., 'helloLightrun.js').
+            line_number: The line number for the log.
+            message: The message to log (format string).
+            max_hit_count: Maximum number of times the log should be hit.
+            expire_seconds: How long the log should live (default: 3600 seconds / 1 hour).
+
+        Returns:
+            The action ID if created successfully, otherwise None.
+        """
+        if not self.api_key or not self.company_id:
+            print("    Warning: Lightrun API credentials not configured, skipping log creation.")
+            return None
+
+        try:
+            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs"
+            log_data = {
+                "agentId": agent_id,
+                "filename": filename,
+                "lineNumber": line_number,
+                "maxHitCount": max_hit_count,
+                "expireSec": expire_seconds,
+                "logMessage": message,
+            }
+            response = requests.post(url, json=log_data, headers=self._get_headers(), timeout=30)
+
+            if response.status_code in [200, 201]:
+                action_id = response.json().get("id")
+                print(f"    ✓ Log created: {action_id} at {filename}:{line_number} (maxHits={max_hit_count})")
+                return action_id
+            else:
+                print(f"    Warning: Failed to create log: {response.status_code} - {response.text[:100]}")
+        except Exception as e:
+            print(f"    Warning: Error creating log: {e}")
+
+        return None

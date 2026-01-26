@@ -37,6 +37,25 @@ Examples:
             default=100,
             help='Number of functions to deploy and test per variant (default: 100)'
         )
+        parser.add_argument(
+            '--test-file-length',
+            type=int,
+            default=10,
+            help='Length of generated test file (number of dummy functions) (default: 10)'
+        )
+        parser.add_argument(
+            '--number-of-lightrun-actions',
+            type=int,
+            default=0,
+            help='Number of Lightrun actions to insert (default: 0)'
+        )
+        parser.add_argument(
+            '--lightrun-action-type',
+            type=str,
+            default='snapshot',
+            choices=['snapshot', 'log'],
+            help='Type of Lightrun action to insert (default: snapshot)'
+        )
 
         parser.add_argument(
             '--region',

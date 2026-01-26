@@ -1,0 +1,1 @@
+"Benchmark for lightrun nodejs agent overhead running inside GCP Functions"

@@ -84,8 +84,7 @@ class SendRequestTask:
                     is_cold = result.get('isColdStart', False)
                     print(f"[{self.function_index:3d}] Request 1/{self.num_requests}: Cold={is_cold}, Duration={duration/1e9:.3f}s")
 
-                    # Add Lightrun snapshot after first successful request (Lightrun functions only)
-                    if self.is_lightrun:
+                    if self.is_lightrun and not getattr(self.config, 'skip_lightrun_action_setup', False):
                         self._add_lightrun_snapshot()
                 else:
                     warm_request_durations += duration
