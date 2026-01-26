@@ -12,7 +12,7 @@ parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 sys.path.insert(0, str(parent_dir.parent)) # Add Benchmarks dir
 
-from src.manager import BenchmarkManager
+from src.manager import ColdStartBenchmarkManager
 from shared_modules.wait_for_cold import ColdStartDetectionError
 from shared_modules.gcf_models import GCPFunction
 
@@ -37,7 +37,7 @@ class TestBenchmarkManager(unittest.TestCase):
     
     def test_init(self):
         """Test BenchmarkManager initialization."""
-        manager = BenchmarkManager(self.config, self.function_dir)
+        manager = ColdStartBenchmarkManager(self.config, self.function_dir)
         
         self.assertEqual(manager.config, self.config)
         self.assertEqual(manager.function_dir, self.function_dir)
@@ -47,7 +47,7 @@ class TestBenchmarkManager(unittest.TestCase):
     
     def test_context_manager_entry(self):
         """Test context manager entry."""
-        manager = BenchmarkManager(self.config, self.function_dir)
+        manager = ColdStartBenchmarkManager(self.config, self.function_dir)
         
         with manager:
             self.assertIsNotNone(manager.executor)
@@ -55,7 +55,7 @@ class TestBenchmarkManager(unittest.TestCase):
     
     def test_context_manager_exit(self):
         """Test context manager exit."""
-        manager = BenchmarkManager(self.config, self.function_dir)
+        manager = ColdStartBenchmarkManager(self.config, self.function_dir)
         
         with manager:
             executor = manager.executor
@@ -67,7 +67,7 @@ class TestBenchmarkManager(unittest.TestCase):
     @patch('src.manager.SendRequestTask')
     @patch('src.manager.time.sleep')
     @patch('src.manager.time.time')
-    def test_wait_and_test_function_success(self, mock_time, mock_sleep,
+    def test_prepare_and_test_function_success(self, mock_time, mock_sleep,
                                                      mock_send_request, mock_wait):
         """Test successful wait and test workflow."""
         deployment_start = 1000.0
@@ -86,7 +86,7 @@ class TestBenchmarkManager(unittest.TestCase):
         }
         mock_send_request.return_value = mock_send_instance
         
-        manager = BenchmarkManager(self.config, self.function_dir)
+        manager = ColdStartBenchmarkManager(self.config, self.function_dir)
         manager.executor = Mock()  # Mock executor
 
         # Create function object for testing (already deployed)
@@ -95,7 +95,7 @@ class TestBenchmarkManager(unittest.TestCase):
         function.is_deployed = True
         function.url = 'https://test.run.app'
 
-        function_result, test_result, time_to_cold = manager.wait_and_test_function(
+        function_result, test_result, time_to_cold = manager.prepare_and_test_function(
             function, deployment_start
         )
         
@@ -109,7 +109,7 @@ class TestBenchmarkManager(unittest.TestCase):
     @patch('shared_modules.wait_for_cold.WaitForColdTask')
     @patch('src.manager.time.sleep')
     @patch('src.manager.time.time')
-    def test_wait_and_test_function_cold_detection_failure(self, mock_time,
+    def test_prepare_and_test_function_cold_detection_failure(self, mock_time,
                                                                    mock_sleep, mock_wait):
         """Test when cold detection fails."""
         deployment_start = 1000.0
@@ -120,7 +120,7 @@ class TestBenchmarkManager(unittest.TestCase):
         mock_wait_instance.execute.side_effect = ColdStartDetectionError('Timeout')
         mock_wait.return_value = mock_wait_instance
         
-        manager = BenchmarkManager(self.config, self.function_dir)
+        manager = ColdStartBenchmarkManager(self.config, self.function_dir)
         manager.executor = Mock()
 
         # Create function object for testing
@@ -129,7 +129,7 @@ class TestBenchmarkManager(unittest.TestCase):
         function.is_deployed = True
         function.url = 'https://test.run.app'
 
-        function_result, test_result, time_to_cold = manager.wait_and_test_function(
+        function_result, test_result, time_to_cold = manager.prepare_and_test_function(
             function, deployment_start
         )
         
@@ -142,7 +142,7 @@ class TestBenchmarkManager(unittest.TestCase):
     @patch('shared_modules.delete.DeleteTask')
     def test_cleanup(self, mock_delete):
         """Test cleanup function."""
-        manager = BenchmarkManager(self.config, self.function_dir)
+        manager = ColdStartBenchmarkManager(self.config, self.function_dir)
         manager.deployed_functions = [
             Mock(name='testfunction-001', region='us-central1'),
             Mock(name='testfunction-002', region='us-central1')
@@ -203,7 +203,7 @@ class TestBenchmarkManager(unittest.TestCase):
         import tempfile
         import os
         
-        manager = BenchmarkManager(self.config, self.function_dir)
+        manager = ColdStartBenchmarkManager(self.config, self.function_dir)
         manager.config.results_file = 'test_results.json'
         
         deployments = [{'function_name': 'test-001'}]
@@ -224,7 +224,7 @@ class TestBenchmarkManager(unittest.TestCase):
     
     def test_get_results(self):
         """Test getting results dictionary."""
-        manager = BenchmarkManager(self.config, self.function_dir)
+        manager = ColdStartBenchmarkManager(self.config, self.function_dir)
         manager.deployments = [{'function_name': 'test-001'}]
         manager.test_results = [{'totalDuration': '1000000000'}]
         

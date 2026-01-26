@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import webbrowser
 import subprocess
 
-class ResultsViewer:
+class ColdStartResultsViewer:
     """Displays benchmark results and visualizations."""
 
     def display(self, results_dir: Path, report_file: str):

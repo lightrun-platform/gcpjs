@@ -9,10 +9,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
-from .manager import BenchmarkManager
-from .report import ReportGenerator
-from .cli_parser import CLIParser
-from .results_viewer import ResultsViewer
+from .cold_start_benchmark_manager import ColdStartBenchmarkManager
+from .cold_start_benchmark_report import ColdStartReportGenerator
+from .cold_start_results_viewer import ColdStartResultsViewer
+from shared_modules.cli_parser import CLIParser
 
 
 def run_single_test(config: argparse.Namespace, function_dir: Path, base_name: str, entry_point: str, output_dir: Path) -> dict:
@@ -30,11 +30,8 @@ def run_single_test(config: argparse.Namespace, function_dir: Path, base_name: s
     print(f"Starting test for: {base_name}")
     print(f"{'='*80}")
     
-    manager = BenchmarkManager(variant_config, function_dir)
-    with manager:
-        manager.run()
-    
-    return manager.get_results()
+    with ColdStartBenchmarkManager(variant_config, function_dir) as manager:
+        return manager.run()
 
 def main():
     """Main entry point."""
@@ -140,7 +137,7 @@ def main():
     print("Displaying Results and Visualizations...")
     print("=" * 80)
     
-    results_viewer = ResultsViewer()
+    results_viewer = ColdStartResultsViewer()
     results_viewer.display(test_results_dir, args.report_file)
     
     print("\n" + "=" * 80)

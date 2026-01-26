@@ -1,4 +1,4 @@
-"""Manager class for coordinating Cloud Function cold start tests."""
+"""Base Manager class for coordinating Cloud Function benchmark tests."""
 
 import json
 import time
@@ -11,27 +11,29 @@ from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import argparse
 from dataclasses import asdict
+from abc import ABC, abstractmethod
 
 from shared_modules.send_request import SendRequestTask
 from shared_modules.delete import DeleteTask
-from shared_modules.wait_for_cold import ColdStartDetectionError
 from shared_modules.gcf_models.gcp_function import GCPFunction
 from shared_modules.region_allocator import RegionAllocator
 
 
-class BenchmarkManager:
-    """Manages the lifecycle of a benchmark run."""
+class BaseBenchmarkManager(ABC):
+    """Abstract base class for managing the lifecycle of a benchmark run."""
     
-    def __init__(self, config: argparse.Namespace, function_dir: Path):
+    def __init__(self, config: argparse.Namespace, function_dir: Path, test_name: str):
         """
         Initialize the manager.
         
         Args:
             config: Configuration namespace with all test parameters
             function_dir: Directory containing the function source code
+            test_name: Name of the test for display purposes
         """
         self.config = config
         self.function_dir = function_dir
+        self.test_name = test_name
         self.executor: Optional[ThreadPoolExecutor] = None
         self.deployed_functions: List[GCPFunction] = []
         self.cleanup_registered = False
@@ -66,44 +68,48 @@ class BenchmarkManager:
         print("\n\nInterrupted! Cleaning up...")
         self.cleanup()
         os._exit(1)
-    
 
-    def wait_and_test_function(self, function: GCPFunction, deployment_start_time: float) -> tuple[GCPFunction, Optional[Dict[str, Any]], Optional[float]]:
+    @abstractmethod
+    def prepare_function(self, function: GCPFunction, deployment_start_time: float) -> Optional[float]:
         """
-        Wait for cold and test a single function.
+        Prepare a deployed function for testing (e.g., wait for cold start).
+        
+        Args:
+            function: Deployed function object
+            deployment_start_time: Timestamp when deployments started
+            
+        Returns:
+            Preparation metric (e.g. time to cold in seconds), or None/raise error
+        """
+        pass
+
+    def prepare_and_test_function(self, function: GCPFunction, deployment_start_time: float) -> tuple[GCPFunction, Optional[Dict[str, Any]], Optional[float]]:
+        """
+        Prepare (e.g. wait for cold) and test a single function.
 
         Args:
             function: GCPFunction object that has already been deployed
             deployment_start_time: Timestamp when deployments started
 
         Returns:
-            Tuple of (GCPFunction, test_result, time_to_cold_seconds)
-            test_result and time_to_cold will be None if wait or test fails
+            Tuple of (GCPFunction, test_result, preparation_metric)
+            test_result and preparation_metric will be None if preparation or test fails
         """
-
-
-
-        time_to_cold = None
+        preparation_metric = None
         
-        if getattr(self.config, 'skip_wait_for_cold', False):
-            print(f"[{function.index:3d}] Skipping wait for cold...")
-        else:
-            try:
-                time_to_cold = function.wait_for_cold(self.config, deployment_start_time)
-            except ColdStartDetectionError as e:
-                print(f"[{function.index:3d}] ❌ Cold detection failed: {e}")
-                return function, {
-                    'function_index': function.index,
-                    'function_name': function.name,
-                    'error': True,
-                    'error_message': str(e)
-                }, None
+        try:
+            preparation_metric = self.prepare_function(function, deployment_start_time)
+        except Exception as e:
+            # Subclasses should handle specific exceptions in prepare_function if they want specific logging matches
+            # or we can catch generic here.
+            print(f"[{function.index:3d}] ❌ Preparation failed: {e}")
+            return function, {
+                'function_index': function.index,
+                'function_name': function.name,
+                'error': True,
+                'error_message': str(e)
+            }, None
 
-
-            # Step 2: Grace period (1 minute) after cold confirmation
-            print(f"[{function.index:3d}] Waiting 1 minute grace period before testing...")
-            time.sleep(60)
-            
         print(f"[{function.index:3d}] Testing now...")
 
         # Step 3: Test (multiple requests based on config)
@@ -122,7 +128,7 @@ class BenchmarkManager:
         # Save individual function results to file
         self._save_function_results(function, test_result)
 
-        return function, test_result, time_to_cold
+        return function, test_result, preparation_metric
 
     def create_functions(self) -> List[GCPFunction]:
         """
@@ -144,22 +150,19 @@ class BenchmarkManager:
 
         return functions
 
-    def deploy_wait_and_test_all_functions(self) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, float]]:
+    def deploy_and_test_all_functions(self) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, float]]:
         """
-        Deploy, wait for cold, and test all functions in phases.
-        Phase 1: Create functions with region allocation
-        Phase 2: Deploy all functions in parallel
-        Phase 3: Wait for cold and test each function in parallel
-
+        Deploy, prepare, and test all functions in phases.
+        
         Returns:
-            Tuple of (deployments list, test_results list, cold_times dict)
+            Tuple of (deployments list, test_results list, preparation_metrics dict)
         """
         print("=" * 80)
         print("Creating, Deploying and Testing Functions in Phases")
         print("=" * 80)
         print(f"Phase 1: Create {self.config.num_functions} functions with region allocation")
         print(f"Phase 2: Deploy all functions in parallel")
-        print(f"Phase 3: Each function will: Wait 10s grace → Poll until cold → Wait 1min grace → Test")
+        print(f"Phase 3: Prepare and Test each function in parallel")
         print()
 
         # Phase 1: Create all functions with region allocation
@@ -202,20 +205,19 @@ class BenchmarkManager:
         print(f"Deployed {len(successful_deployments)}/{len(deployments)} functions successfully")
         print()
 
-        # Phase 3: Wait for cold and test all successfully deployed functions in parallel
-        print("Phase 3: Waiting for cold and testing functions in parallel...")
+        # Phase 3: Prepare and test all successfully deployed functions
+        print("Phase 3: Preparing and testing functions in parallel...")
         test_results: List[Dict[str, Any]] = []
-        cold_times: Dict[str, float] = {}
+        preparation_metrics: Dict[str, float] = {}
 
         # Only test functions that were successfully deployed
         testable_functions = [f for f in deployments if f.is_deployed and f.url]
         wait_test_futures = {}
 
-        # Phase 3: Wait for cold and test successfully deployed functions
         if testable_functions:
             wait_test_futures = {
                 self.executor.submit(
-                    self.wait_and_test_function,
+                    self.prepare_and_test_function,
                     function,
                     deployment_start_time
                 ): function.index
@@ -227,21 +229,25 @@ class BenchmarkManager:
                 completed += 1
 
                 try:
-                    function, test_result, time_to_cold = future.result()
+                    function, test_result, prep_metric = future.result()
 
                     if test_result:
                         test_results.append(test_result)
 
-                    if time_to_cold is not None:
-                        cold_times[function.name] = time_to_cold
-                        function.time_to_cold_seconds = time_to_cold
-                        function.time_to_cold_minutes = time_to_cold / 60
-
+                    if prep_metric is not None:
+                        preparation_metrics[function.name] = prep_metric
+                        # We might need to make this generic if used by other benchmarks,
+                        # but keeping time_to_cold_seconds here implies knowledge of cold starts.
+                        # For generic base class, we should perhaps store it generically or 
+                        # let the subclass handle the assignment to specific fields?
+                        # For now, let's keep it simple as preparation_metric is returned.
+                        if hasattr(function, 'time_to_cold_seconds'):
+                             function.time_to_cold_seconds = prep_metric
+                        
                     print(f"[{completed:3d}/{len(testable_functions)}] Function {function_index} test complete")
 
                 except Exception as e:
                     print(f"[{completed:3d}/{len(testable_functions)}] Function {function_index} test failed with exception: {e}")
-                    # Add error result
                     test_results.append({
                         'function_index': function_index,
                         'error': True,
@@ -250,13 +256,10 @@ class BenchmarkManager:
         else:
             print("No functions were successfully deployed, skipping testing phase")
         
-        # Determine successful deployments for stats
+        # Save deployment info
         successful_deployments = [f for f in deployments if f.is_deployed]
-        
-        # Save deployment info (convert objects to dicts)
         deployments_dict = [f.__dict__ for f in deployments]
         
-        # Determine output directory - use config.output_dir if available, otherwise use results_file parent directory
         if hasattr(self.config, 'output_dir') and self.config.output_dir:
             output_dir = Path(self.config.output_dir)
         elif hasattr(self.config, 'results_file') and self.config.results_file:
@@ -266,7 +269,6 @@ class BenchmarkManager:
         
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Use variant-specific filename to avoid conflicts when running parallel tests
         base_name = getattr(self.config, 'base_function_name', 'deployments')
         deployments_file = output_dir / f'{base_name}_deployments.json'
         with open(deployments_file, 'w') as f:
@@ -275,11 +277,10 @@ class BenchmarkManager:
         print(f"\nSummary: {len(successful_deployments)}/{self.config.num_functions} functions deployed successfully")
         print(f"         {len(test_results)} test results collected")
         
-        return deployments, test_results, cold_times
+        return deployments, test_results, preparation_metrics
     
     def _save_function_results(self, function: GCPFunction, test_result: Dict[str, Any]):
         """Save individual function results to a file named by display_name."""
-        # Determine output directory
         if hasattr(self.config, 'output_dir') and self.config.output_dir:
             output_dir = Path(self.config.output_dir)
         elif hasattr(self.config, 'results_file') and self.config.results_file:
@@ -290,7 +291,6 @@ class BenchmarkManager:
         function_results_dir = output_dir / 'function_results'
         function_results_dir.mkdir(parents=True, exist_ok=True)
         
-        # Use display_name for filename (sanitize for filesystem)
         safe_name = function.display_name.replace('/', '_').replace('\\', '_')
         result_file = function_results_dir / f'{safe_name}.json'
         
@@ -303,10 +303,8 @@ class BenchmarkManager:
     
     def save_results(self, deployments: List[GCPFunction], test_results: List[Dict[str, Any]]):
         """Save test results to file."""
-        # Convert GCPFunction objects to dicts for serialization
         deployments_dict = [asdict(f) if isinstance(f, GCPFunction) else f for f in deployments]
         
-        # Ensure output directory exists
         results_path = Path(self.config.results_file)
         results_path.parent.mkdir(parents=True, exist_ok=True)
         
@@ -319,22 +317,25 @@ class BenchmarkManager:
     
     def get_results(self) -> Dict[str, Any]:
         """Return test results as a dictionary."""
-        # Ensure deployments are serializable
         deployments_list = getattr(self, 'deployments', [])
         deployments_dict = [asdict(f) if isinstance(f, GCPFunction) else f for f in deployments_list]
         
+        config_dict = {}
+        if self.config:
+             config_dict = vars(self.config)
+
+        # Simplify config dict to serializable types if needed or just use what we have
+        # Original code cherry-picked fields, we can do the same if we want to be safe
+        safe_config = {
+             k: v for k, v in config_dict.items() 
+             if isinstance(v, (str, int, float, bool, list, dict))
+        }
+
         return {
             'deployments': deployments_dict,
             'test_results': self.test_results if hasattr(self, 'test_results') else [],
             'cleanup_stats': self.cleanup_stats,
-            'config': {
-                'base_function_name': self.config.base_function_name,
-                'num_functions': self.config.num_functions,
-                'region': self.config.region,
-                'project': self.config.project,
-                'runtime': self.config.runtime,
-                'entry_point': self.config.entry_point,
-            },
+            'config': safe_config,
             'test_timestamp': datetime.now(timezone.utc).isoformat()
         }
     
@@ -368,7 +369,6 @@ class BenchmarkManager:
                     failed_count += 1
                     print(f"  ✗ Failed to delete: {function_name}")
         finally:
-            # Shutdown executor after all deletions are complete
             self.executor.shutdown(wait=True)
             self.executor = None
         
@@ -379,24 +379,22 @@ class BenchmarkManager:
     def run(self) -> Dict[str, Any]:
         """Run the complete test workflow and return results."""
         print("=" * 80)
-        print("Cloud Function Parallel Cold Start Performance Test")
+        print(self.test_name)
         print("=" * 80)
-        print(f"Number of Functions: {self.config.num_functions}")
-        print(f"Project: {self.config.project}")
-        print(f"Base Function Name: {self.config.base_function_name}")
-        print(f"Number of Worker Threads: {self.config.num_workers}")
-        print(f"Max Allocations per Region: {self.config.max_allocations_per_region}")
+        # We can print generic config info here if we want, or rely on subclass to print specific params?
+        # Use generic printing of config params?
+        print(f"Number of Functions: {getattr(self.config, 'num_functions', 'N/A')}")
+        print(f"Project: {getattr(self.config, 'project', 'N/A')}")
+        print(f"Base Function Name: {getattr(self.config, 'base_function_name', 'N/A')}")
         print("Note: Functions will be automatically cleaned up on exit")
         print()
         
-        # Deploy, wait for cold, and test all functions in parallel
-        deployments, test_results, cold_times = self.deploy_wait_and_test_all_functions()
+        # Deploy, prepare, and test all functions in parallel
+        deployments, test_results, preparation_metrics = self.deploy_and_test_all_functions()
         
-        # Store results for later retrieval
         self.deployments = deployments
         self.test_results = test_results
         
-        # Save results
         self.save_results(deployments, test_results)
         
         print("\n" + "=" * 80)

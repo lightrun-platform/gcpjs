@@ -239,7 +239,7 @@ def calculate_f_test(with_values: List[float], without_values: List[float]) -> D
     }
 
 
-class ReportGenerator:
+class ColdStartReportGenerator:
     """Generates comparative reports and visualizations for cold start tests."""
     
     def __init__(self, with_lightrun_results: Dict[str, Any], without_lightrun_results: Dict[str, Any]):
