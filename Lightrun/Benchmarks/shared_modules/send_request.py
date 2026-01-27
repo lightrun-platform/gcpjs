@@ -26,7 +26,7 @@ class SendRequestTask:
         self.display_name = function.display_name
         self.config = config
         self.delay_between_requests = getattr(config, 'delay_between_requests', 10)
-        self.num_requests = getattr(config, 'num_requests_per_function', 10)
+        self.num_requests = getattr(config, 'test_size', 10)
 
         # Determine if this is a "With Lightrun" function
         self.is_lightrun = 'lightrun' in getattr(config, 'base_function_name', '').lower()
@@ -76,7 +76,9 @@ class SendRequestTask:
             all_results.append(result)
 
             if not result.get('error'):
-                duration = float(result.get('totalDuration', 0))
+                # Handle both Python (totalDuration) and Node.js (handlerRunTime) metric names
+                duration_str = result.get('totalDuration') or result.get('handlerRunTime')
+                duration = float(duration_str) if duration_str is not None else 0.0
                 total_duration += duration
 
                 if i == 1:
@@ -88,7 +90,8 @@ class SendRequestTask:
                         self._add_lightrun_snapshot()
                 else:
                     warm_request_durations += duration
-                    print(f"[{self.function_index:3d}] Request {i}/{self.num_requests}: Duration={duration/1e9:.3f}s")
+                    if self.num_requests <= 5 or i % 5 == 0 or i == self.num_requests: # Reduce log noise for many requests
+                        print(f"[{self.function_index:3d}] Request {i}/{self.num_requests}: Duration={duration/1e9:.3f}s")
             else:
                 print(f"[{self.function_index:3d}] Request {i}/{self.num_requests}: FAILED")
 
@@ -106,6 +109,7 @@ class SendRequestTask:
             'totalDurationForColdStarts': cold_start_duration,
             'totalDurationForWarmRequests': warm_request_durations,
             'totalDuration': total_duration,
+            'handlerRunTime': first_result.get('handlerRunTime'), # Perpetuate the metric name
             '_num_requests': self.num_requests,
             '_num_successful_requests': sum(1 for r in all_results if not r.get('error')),
         }

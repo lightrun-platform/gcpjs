@@ -28,84 +28,75 @@ class TestRequestOverheadBenchmarkManager(unittest.TestCase):
             entry_point='testFunction',
             num_workers=1,
             max_allocations_per_region=5,
-            number_of_lightrun_actions=1,
+            test_size=5,
             lightrun_action_type='snapshot',
             lightrun_api_key='key',
-            lightrun_company_id='cid',
-            num_requests_per_function=5
+            lightrun_company_id='cid'
         )
         self.function_dir = Path('/tmp/test_function')
 
-    @patch('lightrun_nodejs_request_overhead_benchmark.src.request_overhead_benchmark_manager.time.sleep')
+    @patch('lightrun_nodejs_request_overhead_benchmark.src.request_overhead_benchmark_manager.time')
     @patch('lightrun_nodejs_request_overhead_benchmark.src.request_overhead_benchmark_manager.requests.get')
-    @patch('lightrun_nodejs_request_overhead_benchmark.src.request_overhead_benchmark_manager.LightrunAPI')
-    def test_prepare_function_lightrun(self, MockLightrunAPI, mock_get, mock_sleep):
-        """Test prepare_function logic with Lightrun enabled."""
+    def test_prepare_function_lightrun(self, mock_get, mock_time):
+        """Test prepare_function logic (warmup only)."""
         manager = RequestOverheadBenchmarkManager(self.config, self.function_dir)
         
+        # Create function correctly
         function = GCPFunction(index=1, region='us-central1', base_name='test-lightrun')
         function.is_deployed = True
         function.url = 'https://test.run.app'
-        function.name = 'test-lightrun-1'
-        function.display_name = 'test-lightrun-1'
         
         # Mock requests.get (warmup)
         mock_response = Mock()
         mock_response.status_code = 200
         mock_get.return_value = mock_response
         
-        # Mock Lightrun API
-        mock_api_instance = Mock()
-        MockLightrunAPI.return_value = mock_api_instance
-        mock_api_instance.get_agent_id.return_value = 'agent-123'
+        # Mock time to verify loop logic
+        # Sequence: start_time=0, warmup_end_calc=0, loop_check1=0(<40), loop_check2=20(<40), loop_check3=41(>40), return_calc=42
+        mock_time.time.side_effect = [0, 0, 0, 20, 41, 42]
+        mock_time.sleep.return_value = None
         
-        # Mock reading file for line number (open)
-        with patch('builtins.open', unittest.mock.mock_open(read_data='line1\nhandlerRunTime:\nline3')):
-            setup_time = manager.prepare_function(function, 1000.0)
+        setup_time = manager.prepare_function(function, 1000.0)
             
-        # Verify warmup request
-        mock_get.assert_called_with('https://test.run.app', timeout=30)
-        
-        # Verify API called
-        mock_api_instance.get_agent_id.assert_called_with('test-lightrun-1')
-        mock_api_instance.add_snapshot.assert_called_with(
-            agent_id='agent-123',
-            filename='helloLightrun.js',
-            line_number=2, # Line 2 because handlerRunTime is on line 2 (0-indexed 1 + 1)
-            max_hit_count=15 # 5 requests + 10
-        )
-        
-        # Verify sleep called (grace period)
-        mock_sleep.assert_called_with(15)
+        # Verify warmup requests: 2 from loop + 10 burst = 12 total
+        self.assertEqual(mock_get.call_count, 12)
+        mock_get.assert_called_with('https://test.run.app', timeout=5)
         
         self.assertIsNotNone(setup_time)
 
-    def test_prepare_function_no_lightrun(self):
-        """Test prepare_function logic without Lightrun."""
+    @patch('lightrun_nodejs_request_overhead_benchmark.src.request_overhead_benchmark_manager.time')
+    @patch('lightrun_nodejs_request_overhead_benchmark.src.request_overhead_benchmark_manager.requests.get')
+    @patch('lightrun_nodejs_request_overhead_benchmark.src.request_overhead_benchmark_manager.LightrunAPI')
+    def test_prepare_function_no_lightrun(self, MockAPI, mock_get, mock_time):
+        """Test prepare_function logic without Lightrun (warmup only)."""
         manager = RequestOverheadBenchmarkManager(self.config, self.function_dir)
         
         function = GCPFunction(index=1, region='us-central1', base_name='test-nolightrun')
         function.url = 'https://test.run.app'
-        function.name = 'test-nolightrun-1' # No 'lightrun' in name (case insensitive check in manager)
-        # Actually the manager checks 'lightrun' in name. 'test-nolightrun' has 'lightrun'.
-        # Let's use a name without 'lightrun' string to be sure, or just test logic.
-        function.name = 'hello-no-lr-1'
         
-        with patch('lightrun_nodejs_request_overhead_benchmark.src.request_overhead_benchmark_manager.requests.get') as mock_get, \
-             patch('lightrun_nodejs_request_overhead_benchmark.src.request_overhead_benchmark_manager.time.sleep') as mock_sleep, \
-             patch('lightrun_nodejs_request_overhead_benchmark.src.request_overhead_benchmark_manager.LightrunAPI') as MockAPI:
-            
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_get.return_value = mock_response
-            
-            manager.prepare_function(function, 1000.0)
-            
-            # Verify no API calls
-            MockAPI.assert_not_called()
-            
-            # Verify grace period still happens (to be fair comparison? Manager logic does it always)
-            mock_sleep.assert_called_with(15)
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_get.return_value = mock_response
+        
+        # Mock time same as above
+        mock_time.time.side_effect = [0, 0, 0, 20, 41, 42]
+        mock_time.sleep.return_value = None
+        
+        manager.prepare_function(function, 1000.0)
+        
+        # Verify no API calls
+        MockAPI.assert_not_called()
+        # Verify requests count (warmup logic is same)
+        self.assertEqual(mock_get.call_count, 12)
+
+    def test_get_test_task(self):
+        """Test task factory."""
+        manager = RequestOverheadBenchmarkManager(self.config, self.function_dir)
+        function = GCPFunction(index=1, region='us-central1', base_name='test')
+        
+        task = manager.get_test_task(function, 1000.0)
+        from lightrun_nodejs_request_overhead_benchmark.src.iterative_test_task import IterativeOverheadTestTask
+        self.assertIsInstance(task, IterativeOverheadTestTask)
 
 if __name__ == '__main__':
     unittest.main()

@@ -15,37 +15,33 @@ class TestRequestOverheadReportGenerator(unittest.TestCase):
 
     def test_extract_metrics(self):
         """Test metric extraction."""
-        # Mock results structure
+        # Mock results structure (Iterative)
         with_results = {
             'test_results': [
                 {
-                    '_all_request_results': [
-                        {'_request_latency': 100, 'handlerRunTime': '50', 'error': False},
-                        {'_request_latency': 200, 'handlerRunTime': '60', 'error': False}
+                    'is_iterative': True,
+                    'iterations': [
+                        {
+                            'iteration': 1,
+                            '_all_request_results': [
+                                {'_request_latency': 100, 'handlerRunTime': '50', 'error': False},
+                                {'_request_latency': 200, 'handlerRunTime': '60', 'error': False}
+                            ]
+                        }
                     ]
                 }
             ]
         }
-        without_results = {
-            'test_results': [
-                {
-                    '_all_request_results': [
-                        {'_request_latency': 50, 'handlerRunTime': '25', 'error': False}
-                    ]
-                }
-            ]
-        }
+        # Without results (Baseline / non-iterative fallback simulation)
+        without_results = { 'test_results': [] }
         
         generator = RequestOverheadReportGenerator(with_results, without_results)
         
         # Test extraction
-        w_metrics = generator._extract_metrics(with_results)
-        self.assertEqual(w_metrics['requestLatency'], [100, 200])
-        self.assertEqual(w_metrics['handlerRunTime'], [50.0, 60.0])
-        
-        wo_metrics = generator._extract_metrics(without_results)
-        self.assertEqual(wo_metrics['requestLatency'], [50])
-        self.assertEqual(wo_metrics['handlerRunTime'], [25.0])
+        w_metrics = generator._extract_iterative_metrics(with_results)
+        # Should have key 1 (iteration 1)
+        self.assertIn(1, w_metrics)
+        self.assertEqual(w_metrics[1], [50.0, 60.0])
 
 if __name__ == '__main__':
     unittest.main()

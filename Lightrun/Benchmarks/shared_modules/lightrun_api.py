@@ -160,3 +160,31 @@ class LightrunAPI:
             print(f"    Warning: Error creating log: {e}")
 
         return None
+
+    def get_snapshot(self, snapshot_id: str) -> Optional[dict]:
+        """Get snapshot details."""
+        if not self.api_key or not self.company_id:
+            return None
+            
+        try:
+            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots/{snapshot_id}"
+            response = requests.get(url, headers=self._get_headers(), timeout=10)
+            if response.status_code == 200:
+                return response.json()
+        except Exception as e:
+            print(f"Error fetching snapshot: {e}")
+        return None
+
+    def get_log(self, log_id: str) -> Optional[dict]:
+        """Get log details."""
+        if not self.api_key or not self.company_id:
+            return None
+            
+        try:
+            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs/{log_id}"
+            response = requests.get(url, headers=self._get_headers(), timeout=10)
+            if response.status_code == 200:
+                return response.json()
+        except Exception as e:
+            print(f"Error fetching log: {e}")
+        return None

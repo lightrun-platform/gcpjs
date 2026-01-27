@@ -13,6 +13,7 @@ import argparse
 from dataclasses import asdict
 from abc import ABC, abstractmethod
 
+from shared_modules.thread_logger import ThreadLogger, thread_task_wrapper
 from shared_modules.send_request import SendRequestTask
 from shared_modules.delete import DeleteTask
 from shared_modules.gcf_models.gcp_function import GCPFunction
@@ -113,7 +114,7 @@ class BaseBenchmarkManager(ABC):
         print(f"[{function.index:3d}] Testing now...")
 
         # Step 3: Test (multiple requests based on config)
-        test_task = SendRequestTask(function, self.config)
+        test_task = self.get_test_task(function, deployment_start_time)
         test_result = test_task.execute()
 
         if test_result.get('error'):
@@ -129,6 +130,19 @@ class BaseBenchmarkManager(ABC):
         self._save_function_results(function, test_result)
 
         return function, test_result, preparation_metric
+
+    def get_test_task(self, function: GCPFunction, deployment_start_time: float):
+        """
+        Factory method to create the test task.
+        
+        Args:
+            function: Deployed function object
+            deployment_start_time: Timestamp when deployments started
+            
+        Returns:
+            Task object with execute() method
+        """
+        return SendRequestTask(function, self.config)
 
     def create_functions(self) -> List[GCPFunction]:
         """
@@ -170,18 +184,32 @@ class BaseBenchmarkManager(ABC):
         print(f"Created {len(functions)} functions")
         print()
 
+        # Register all worker thread names for alignment
+        variant = getattr(self.config, 'base_function_name', 'Default')
+        worker_names = []
+        for f in functions:
+            worker_names.append(f"{variant}-Deploy-{f.region}-{f.index}")
+            worker_names.append(f"{variant}-Test-{f.region}-{f.index}")
+            worker_names.append(f"{variant}-Cleanup-{f.region}-{f.index}")
+        ThreadLogger.create(None, worker_names)
+
         # Phase 2: Deploy all functions in parallel
         print("Phase 2: Deploying all functions in parallel...")
         deployment_start_time = time.time()
-        deployment_futures = {
-            self.executor.submit(
-                function.deploy,
-                self.config.lightrun_secret,
-                self.config,
-                self.function_dir
-            ): function
-            for function in functions
-        }
+        variant = getattr(self.config, 'base_function_name', 'Default')
+        deployment_futures = {}
+        for function in functions:
+            name = f"{variant}-Deploy-{function.region}-{function.index}"
+            future = self.executor.submit(
+                thread_task_wrapper(
+                    name, 
+                    function.deploy,
+                    self.config.lightrun_secret,
+                    self.config,
+                    self.function_dir
+                )
+            )
+            deployment_futures[future] = function
 
         deployments: List[GCPFunction] = []
         for future in as_completed(deployment_futures):
@@ -215,14 +243,19 @@ class BaseBenchmarkManager(ABC):
         wait_test_futures = {}
 
         if testable_functions:
-            wait_test_futures = {
-                self.executor.submit(
-                    self.prepare_and_test_function,
-                    function,
-                    deployment_start_time
-                ): function.index
-                for function in testable_functions
-            }
+            variant = getattr(self.config, 'base_function_name', 'Default')
+            wait_test_futures = {}
+            for function in testable_functions:
+                name = f"{variant}-Test-{function.region}-{function.index}"
+                future = self.executor.submit(
+                    thread_task_wrapper(
+                        name,
+                        self.prepare_and_test_function,
+                        function,
+                        deployment_start_time
+                    )
+                )
+                wait_test_futures[future] = function.index
             completed = 0
             for future in as_completed(wait_test_futures):
                 function_index = wait_test_futures[future]
@@ -341,7 +374,7 @@ class BaseBenchmarkManager(ABC):
     
     def cleanup(self):
         """Delete all deployed Cloud Functions and shutdown executor."""
-        if not self.deployed_functions or self.executor is None:
+        if self.executor is None:
             return
         
         print("\n" + "=" * 80)
@@ -352,22 +385,28 @@ class BaseBenchmarkManager(ABC):
         failed_count = 0
         
         try:
-            futures = {
-                self.executor.submit(
-                    lambda fn=func: DeleteTask(fn, self.config).execute()
-                ): func.name
-                for func in self.deployed_functions
-            }
-            
-            for future in as_completed(futures):
-                function_name = futures[future]
-                result = future.result()
-                if result['success']:
-                    deleted_count += 1
-                    print(f"  ✓ Deleted: {function_name}")
-                else:
-                    failed_count += 1
-                    print(f"  ✗ Failed to delete: {function_name}")
+            if self.deployed_functions:
+                variant = getattr(self.config, 'base_function_name', 'Default')
+                futures = {}
+                for func in self.deployed_functions:
+                    name = f"{variant}-Cleanup-{func.region}-{func.index}"
+                    future = self.executor.submit(
+                        thread_task_wrapper(
+                            name,
+                            lambda fn=func: DeleteTask(fn, self.config).execute()
+                        )
+                    )
+                    futures[future] = func.name
+                
+                for future in as_completed(futures):
+                    function_name = futures[future]
+                    result = future.result()
+                    if result['success']:
+                        deleted_count += 1
+                        print(f"  ✓ Deleted: {function_name}")
+                    else:
+                        failed_count += 1
+                        print(f"  ✗ Failed to delete: {function_name}")
         finally:
             self.executor.shutdown(wait=True)
             self.executor = None
@@ -378,27 +417,31 @@ class BaseBenchmarkManager(ABC):
     
     def run(self) -> Dict[str, Any]:
         """Run the complete test workflow and return results."""
-        print("=" * 80)
-        print(self.test_name)
-        print("=" * 80)
-        # We can print generic config info here if we want, or rely on subclass to print specific params?
-        # Use generic printing of config params?
-        print(f"Number of Functions: {getattr(self.config, 'num_functions', 'N/A')}")
-        print(f"Project: {getattr(self.config, 'project', 'N/A')}")
-        print(f"Base Function Name: {getattr(self.config, 'base_function_name', 'N/A')}")
-        print("Note: Functions will be automatically cleaned up on exit")
-        print()
+        log_dir = Path(getattr(self.config, 'output_dir', '.')) / 'logs'
         
-        # Deploy, prepare, and test all functions in parallel
-        deployments, test_results, preparation_metrics = self.deploy_and_test_all_functions()
+        # Pre-register variant name
+        variant = getattr(self.config, 'base_function_name', 'Default')
         
-        self.deployments = deployments
-        self.test_results = test_results
-        
-        self.save_results(deployments, test_results)
-        
-        print("\n" + "=" * 80)
-        print("Test completed! Functions will be cleaned up automatically on exit.")
-        print("=" * 80)
-        
-        return self.get_results()
+        with ThreadLogger.create(log_dir, [variant]):
+            print("=" * 80)
+            print(self.test_name)
+            print("=" * 80)
+            print(f"Number of Functions: {getattr(self.config, 'num_functions', 'N/A')}")
+            print(f"Project: {getattr(self.config, 'project', 'N/A')}")
+            print(f"Base Function Name: {getattr(self.config, 'base_function_name', 'N/A')}")
+            print("Note: Functions will be automatically cleaned up on exit")
+            print()
+            
+            # Deploy, prepare, and test all functions in parallel
+            deployments, test_results, preparation_metrics = self.deploy_and_test_all_functions()
+            
+            self.deployments = deployments
+            self.test_results = test_results
+            
+            self.save_results(deployments, test_results)
+            
+            print("\n" + "=" * 80)
+            print("Test completed! Functions will be cleaned up automatically on exit.")
+            print("=" * 80)
+            
+            return self.get_results()

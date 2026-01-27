@@ -13,6 +13,7 @@ from .cold_start_benchmark_manager import ColdStartBenchmarkManager
 from .cold_start_benchmark_report import ColdStartReportGenerator
 from .cold_start_results_viewer import ColdStartResultsViewer
 from shared_modules.cli_parser import CLIParser
+from shared_modules.thread_logger import ThreadLogger, thread_task_wrapper
 
 
 def run_single_test(config: argparse.Namespace, function_dir: Path, base_name: str, entry_point: str, output_dir: Path) -> dict:
@@ -61,7 +62,6 @@ def main():
     print("Cloud Function Parallel Cold Start Performance Test - Comparative Analysis")
     print("=" * 80)
     print(f"Number of Functions per Variant: {args.num_functions}")
-    print(f"Cold Start Wait Time: {args.wait_minutes} minutes")
     print(f"Region: {args.region}")
     print(f"Project: {args.project}")
     print(f"Number of Worker Threads per Variant: {args.num_workers}")
@@ -86,35 +86,44 @@ def main():
     print(f"Results will be saved to: {test_results_dir}")
     print()
     
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        # Submit both tests
-        future_with = executor.submit(
-            run_single_test,
-            args,
-            hello_lightrun_dir,
-            'helloLightrun',
-            'helloLightrun',
-            test_results_dir
-        )
-        future_without = executor.submit(
-            run_single_test,
-            args,
-            hello_no_lightrun_dir,
-            'helloNoLightrun',
-            'helloNoLightrun',
-            test_results_dir
-        )
-        
-        # Wait for both to complete
-        with_lightrun_results = future_with.result()
-        without_lightrun_results = future_without.result()
+    log_dir = test_results_dir / 'logs'
+    variant_names = ['Variant-With-Lightrun', 'Variant-Without-Lightrun']
+    with ThreadLogger.create(log_dir, variant_names):
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            # Submit both tests
+            future_with = executor.submit(
+                thread_task_wrapper(
+                    'Variant-With-Lightrun',
+                    run_single_test,
+                    args,
+                    hello_lightrun_dir,
+                    'helloLightrun',
+                    'helloLightrun',
+                    test_results_dir
+                )
+            )
+            future_without = executor.submit(
+                thread_task_wrapper(
+                    'Variant-Without-Lightrun',
+                    run_single_test,
+                    args,
+                    hello_no_lightrun_dir,
+                    'helloNoLightrun',
+                    'helloNoLightrun',
+                    test_results_dir
+                )
+            )
+            
+            # Wait for both to complete
+            with_lightrun_results = future_with.result()
+            without_lightrun_results = future_without.result()
     
     # Generate comparative report
     print("\n" + "=" * 80)
     print("Generating Comparative Analysis...")
     print("=" * 80)
     
-    report_generator = ReportGenerator(with_lightrun_results, without_lightrun_results)
+    report_generator = ColdStartReportGenerator(with_lightrun_results, without_lightrun_results)
     report_generator.set_output_dir(test_results_dir)
     report_generator.generate_all(args.report_file)
     

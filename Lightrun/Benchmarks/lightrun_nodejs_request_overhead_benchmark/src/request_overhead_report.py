@@ -43,82 +43,88 @@ class RequestOverheadReportGenerator:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
     
-    def _extract_metrics(self, results: Dict[str, Any]) -> Dict[str, List[float]]:
+    def _extract_iterative_metrics(self, results: Dict[str, Any]) -> Dict[int, List[float]]:
+        """Extract metrics per iteration (number of actions)."""
+        metrics_per_action = {}
+        
         test_results = results.get('test_results', [])
-        successful_results = [r for r in test_results if not r.get('error', False)]
-        
-        if not successful_results:
-            return {}
-            
-        # We need "totalDurationForWarmRequests" averaged per request? 
-        # Or better: construct a list of ALL individual request latencies?
-        # SendRequestTask returns `_all_request_results`.
-        
-        all_request_latencies = []
-        all_handler_runtimes = []
-        
-        for res in successful_results:
-            request_list = res.get('_all_request_results', [])
-            for req in request_list:
-                # Skip the first request (warmup/cold) if we want pure warm overhead?
-                # Benchmark says "send 1 request... then actions... then loop num-requests".
-                # SendRequestTask sends num-requests.
-                # If we want to measure overhead, we typically look at warm requests.
-                # SendRequestTask splits cold/warm in `totalDurationForWarmRequests`.
-                # Let's extract all latencies.
-                if not req.get('error'):
-                    if '_request_latency' in req:
-                        all_request_latencies.append(req['_request_latency'])
-                    if 'handlerRunTime' in req:
-                        # handlerRunTime is in nanoseconds string from JS
-                        try:
-                            all_handler_runtimes.append(float(req['handlerRunTime']))
-                        except:
-                            pass
-                            
-        return {
-            'requestLatency': all_request_latencies,
-            'handlerRunTime': all_handler_runtimes
-        }
+        for res in test_results:
+            if res.get('is_iterative'):
+                iterations = res.get('iterations', [])
+                for iter_res in iterations:
+                    if not iter_res.get('error'):
+                        iter_num = iter_res.get('iteration', 0)
+                        
+                        # Extract handlerRunTime
+                        request_list = iter_res.get('_all_request_results', [])
+                        for req in request_list:
+                            if not req.get('error') and 'handlerRunTime' in req:
+                                try:
+                                    val = float(req['handlerRunTime'])
+                                    if iter_num not in metrics_per_action:
+                                        metrics_per_action[iter_num] = []
+                                    metrics_per_action[iter_num].append(val)
+                                except:
+                                    pass
+            else:
+                # Fallback for non-iterative results (treat as 0 actions)
+                pass
+                
+        return metrics_per_action
 
     def generate_report(self, filename: str = 'overhead_report.txt'):
         report_lines = []
         report_lines.append("=" * 80)
-        report_lines.append("Lightrun Request Overhead Benchmark Report")
+        report_lines.append("Lightrun Iterative Request Overhead Benchmark Report")
         report_lines.append("=" * 80)
         
-        with_metrics = self._extract_metrics(self.with_lightrun)
-        without_metrics = self._extract_metrics(self.without_lightrun)
+        # With Lightrun (Iterative)
+        w_metrics = self._extract_iterative_metrics(self.with_lightrun)
         
-        for metric in ['requestLatency', 'handlerRunTime']:
-            report_lines.append(f"\nMETRIC: {metric}")
+        # Without Lightrun (Baseline - assume 0 actions always)
+        wo_metrics_map = self._extract_iterative_metrics(self.without_lightrun)
+        wo_values = wo_metrics_map.get(0, []) # Should be iteration 0
+        
+        baseline_mean = statistics.mean(wo_values) if wo_values else 0
+        report_lines.append(f"Baseline (No Lightrun) Mean Runtime: {format_duration(baseline_mean)}")
+        report_lines.append("-" * 40)
+        
+        # Regression Data
+        x_actions = []
+        y_runtimes = []
+        
+        report_lines.append(f"{'Actions':<10} {'Mean Runtime':<20} {'Overhead':<20} {'% Increase':<10}")
+        
+        sorted_actions = sorted(w_metrics.keys())
+        for action_count in sorted_actions:
+            vals = w_metrics[action_count]
+            mean_val = statistics.mean(vals)
+            
+            x_actions.append(action_count)
+            y_runtimes.append(mean_val)
+            
+            overhead = mean_val - baseline_mean
+            pct = (overhead / baseline_mean * 100) if baseline_mean > 0 else 0
+            
+            report_lines.append(f"{action_count:<10} {format_duration(mean_val):<20} {format_duration(overhead):<20} {pct:6.2f}%")
+            
+        # Linear Regression
+        if len(x_actions) > 1:
+            try:
+                slope, intercept = statistics.linear_regression(x_actions, y_runtimes)
+            except AttributeError:
+                 # Phyton < 3.10
+                 n = len(x_actions)
+                 sum_x = sum(x_actions)
+                 sum_y = sum(y_runtimes)
+                 sum_xy = sum(x*y for x,y in zip(x_actions, y_runtimes))
+                 sum_xx = sum(x*x for x in x_actions)
+                 slope = (n*sum_xy - sum_x*sum_y) / (n*sum_xx - sum_x**2) if (n*sum_xx - sum_x**2) != 0 else 0
+                 intercept = (sum_y - slope*sum_x) / n
+                 
             report_lines.append("-" * 40)
-            
-            w_vals = with_metrics.get(metric, [])
-            wo_vals = without_metrics.get(metric, [])
-            
-            if not w_vals or not wo_vals:
-                report_lines.append("Insufficient data.")
-                continue
-                
-            w_stats = calculate_stats(w_vals)
-            wo_stats = calculate_stats(wo_vals)
-            
-            diff_mean = w_stats['mean'] - wo_stats['mean']
-            pct_mean = (diff_mean / wo_stats['mean']) * 100 if wo_stats['mean'] > 0 else 0
-            
-            report_lines.append(f"Without Lightrun (Baseline):")
-            report_lines.append(f"  Mean:   {format_duration(wo_stats['mean'])}")
-            report_lines.append(f"  Median: {format_duration(wo_stats['median'])}")
-            report_lines.append(f"  StdDev: {format_duration(wo_stats['stdev'])}")
-            
-            report_lines.append(f"With Lightrun:")
-            report_lines.append(f"  Mean:   {format_duration(w_stats['mean'])}")
-            report_lines.append(f"  Median: {format_duration(w_stats['median'])}")
-            report_lines.append(f"  StdDev: {format_duration(w_stats['stdev'])}")
-            
-            report_lines.append(f"OVERHEAD:")
-            report_lines.append(f"  Mean:   {format_duration(diff_mean)} (+{pct_mean:.2f}%)")
+            report_lines.append(f"Linear Regression: Runtime = {format_duration(slope)} * Actions + {format_duration(intercept)}")
+            report_lines.append(f"Cost per Action: {format_duration(slope)}")
             
         # Save to file
         out_path = self.output_dir / filename

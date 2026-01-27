@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from shared_modules.cli_parser import CLIParser
+from shared_modules.thread_logger import ThreadLogger, thread_task_wrapper
 from .request_overhead_benchmark_manager import RequestOverheadBenchmarkManager
 from .code_generator import CodeGenerator
 from .request_overhead_report import RequestOverheadReportGenerator
@@ -59,7 +60,7 @@ def main():
     print("Lightrun Request Overhead Benchmark")
     print("=" * 80)
     print(f"Function Length (calls): {args.test_file_length}")
-    print(f"Num Actions: {args.number_of_lightrun_actions} ({args.lightrun_action_type})")
+    print(f"Num Actions/Repeats: {args.test_size} ({args.lightrun_action_type})")
     
     # Setup results directory
     benchmark_name = Path(__file__).resolve().parents[1].name
@@ -71,21 +72,30 @@ def main():
     print(f"Results directory: {test_results_dir}")
     
     # Run variants
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        future_with = executor.submit(
-            run_single_variant,
-            args, 'helloLightrun', True, test_results_dir
-        )
-        future_without = executor.submit(
-            run_single_variant,
-            args, 'helloNoLightrun', False, test_results_dir
-        )
-        
-        with_results = future_with.result()
-        without_results = future_without.result()
+    log_dir = test_results_dir / 'logs'
+    variant_names = ['Variant-With-Lightrun', 'Variant-Without-Lightrun']
+    with ThreadLogger.create(log_dir, variant_names):
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_with = executor.submit(
+                thread_task_wrapper(
+                    'Variant-With-Lightrun',
+                    run_single_variant,
+                    args, 'helloLightrun', True, test_results_dir
+                )
+            )
+            future_without = executor.submit(
+                thread_task_wrapper(
+                    'Variant-Without-Lightrun',
+                    run_single_variant,
+                    args, 'helloNoLightrun', False, test_results_dir
+                )
+            )
+            
+            with_results = future_with.result()
+            without_results = future_without.result()
         
     # Generate report
-    print("\nGenerating Reprot...")
+    print("\nGenerating Report...")
     report_gen = RequestOverheadReportGenerator(with_results, without_results)
     report_gen.set_output_dir(test_results_dir)
     report_gen.generate_all(args.report_file)

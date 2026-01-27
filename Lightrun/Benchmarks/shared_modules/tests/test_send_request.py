@@ -21,7 +21,7 @@ class TestSendRequestTask(unittest.TestCase):
         """Set up test fixtures."""
         self.config = argparse.Namespace(
             delay_between_requests=0,
-            num_requests_per_function=5,
+            test_size=5,
             base_function_name='testFunction',
             lightrun_api_key='key',
             lightrun_company_id='id'
@@ -140,7 +140,7 @@ class TestSendRequestTask(unittest.TestCase):
     def test_execute_response_data_preserved(self, mock_time, mock_get):
         """Test that all response data is preserved."""
         # Set explicitly to 1 request
-        self.config.num_requests_per_function = 1
+        self.config.test_size = 1
         
         mock_time.side_effect = [1000.0, 1000.1]
         
