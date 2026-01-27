@@ -44,12 +44,6 @@ Examples:
             help='Length of generated test file (number of dummy functions) (default: 10)'
         )
         parser.add_argument(
-            '--number-of-lightrun-actions',
-            type=int,
-            default=0,
-            help='Number of Lightrun actions to insert (default: 0)'
-        )
-        parser.add_argument(
             '--lightrun-action-type',
             type=str,
             default='snapshot',
@@ -100,10 +94,10 @@ Examples:
             help='Seconds to wait between requests to each function (default: 10)'
         )
         parser.add_argument(
-            '--num-requests-per-function',
+            '--test-size',
             type=int,
             default=10,
-            help='Number of requests to send to each function (default: 10)'
+            help='The size/length/repeats dimention of the test. each test is free to use this dimention as it wishes but usually it is used as the number of times to run the test, perhaps with some variation happening in some of the test iterations (default: 10)'
         )
         parser.add_argument(
             '--lightrun-api-key',
@@ -147,5 +141,14 @@ Examples:
         # Set default num_workers to num_functions if not specified
         if args.num_workers is None:
             args.num_workers = args.num_functions
+
+        if not args.lightrun_api_key:
+            parser.error("the following arguments are required: --lightrun-api-key (or set the LIGHTRUN_API_KEY environment variable)")
+        
+        if not args.lightrun_company_id:
+            parser.error("the following arguments are required: --lightrun-company-id (or set the LIGHTRUN_COMPANY_ID environment variable)")
+        
+        if not args.lightrun_secret:
+            parser.error("the following arguments are required: --lightrun-secret (or set the LIGHTRUN_SECRET environment variable)")
         
         return args
