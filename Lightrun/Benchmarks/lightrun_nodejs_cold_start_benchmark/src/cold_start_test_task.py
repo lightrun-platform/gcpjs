@@ -1,8 +1,8 @@
 """Test task for Cold Start Benchmark (Loop: Wait -> Request)."""
 
 import time
-import argparse
 from typing import Dict, Any, List
+from shared_modules.cli_parser import ParsedCLIArguments
 
 from shared_modules.gcf_models.gcp_function import GCPFunction
 from shared_modules.send_request import SendRequestTask
@@ -16,7 +16,7 @@ class ColdStartTestTask:
       2. Send request.
     """
     
-    def __init__(self, function: GCPFunction, config: argparse.Namespace, deployment_start_time: float):
+    def __init__(self, function: GCPFunction, config: ParsedCLIArguments, deployment_start_time: float):
         self.function = function
         self.config = config
         self.deployment_start_time = deployment_start_time

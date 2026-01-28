@@ -11,19 +11,20 @@ parent_dir = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(parent_dir))
 
 from lightrun_nodejs_request_overhead_benchmark.src.iterative_test_task import IterativeOverheadTestTask
+from shared_modules.cli_parser import ParsedCLIArguments
 from shared_modules.gcf_models.gcp_function import GCPFunction
 
 class TestIterativeOverheadTestTask(unittest.TestCase):
     """Test Iterative Task."""
     
     def setUp(self):
-        self.config = argparse.Namespace(
+        self.config = ParsedCLIArguments(argparse.Namespace(
             test_size=2,
             lightrun_action_type='snapshot',
             lightrun_api_key='key',
             lightrun_company_id='cid',
             delay_between_requests=0
-        )
+        ))
         self.function_dir = Path('/tmp')
         self.function = GCPFunction(index=1, region='us-central1', base_name='test-lightrun')
         self.function.url = 'http://test'

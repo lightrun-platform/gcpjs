@@ -32,7 +32,7 @@ class GCPFunction:
         """Computed display name for the function."""
         return f"{self.base_name}-gcf-performance-test-{self.index:03d}"
 
-    def deploy(self, lightrun_secret: str, config, function_dir):
+    def deploy(self, lightrun_secret: str, config: ParsedCLIArguments, function_dir: Path):
         """
         Deploy this function.
 

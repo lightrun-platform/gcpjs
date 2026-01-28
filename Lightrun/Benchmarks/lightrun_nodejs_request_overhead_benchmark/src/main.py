@@ -14,14 +14,14 @@ from datetime import datetime, timezone
 # Add parent directories to path to import shared_modules
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from shared_modules.cli_parser import CLIParser
+from shared_modules.cli_parser import CLIParser, ParsedCLIArguments
 from shared_modules.thread_logger import ThreadLogger, thread_task_wrapper
 from .request_overhead_benchmark_manager import RequestOverheadBenchmarkManager
 from .code_generator import CodeGenerator
 from .request_overhead_report import RequestOverheadReportGenerator
 from .request_overhead_results_viewer import RequestOverheadResultsViewer
 
-def run_single_variant(config, base_name, is_lightrun, output_dir):
+def run_single_variant(config: ParsedCLIArguments, base_name: str, is_lightrun: bool, output_dir: Path):
     """Run benchmark for a single variant."""
     print(f"\n{'='*80}")
     print(f"Starting test for: {base_name}")
@@ -126,7 +126,7 @@ Examples:
     combined = {
         'with_lightrun': with_results,
         'without_lightrun': without_results,
-        'config': vars(args),
+        'config': args.to_dict(),
         'timestamp': timestamp
     }
     with open(test_results_dir / args.results_file, 'w') as f:

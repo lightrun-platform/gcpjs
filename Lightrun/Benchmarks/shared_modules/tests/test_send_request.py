@@ -12,6 +12,7 @@ parent_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(parent_dir))
 
 from shared_modules.send_request import SendRequestTask
+from shared_modules.cli_parser import ParsedCLIArguments
 
 
 class TestSendRequestTask(unittest.TestCase):
@@ -19,13 +20,13 @@ class TestSendRequestTask(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.config = argparse.Namespace(
+        self.config = ParsedCLIArguments(argparse.Namespace(
             delay_between_requests=0,
             test_size=5,
             base_function_name='testFunction',
             lightrun_api_key='key',
             lightrun_company_id='id'
-        )
+        ))
         self.function = Mock()
         self.function.url = 'https://test-function-001-abc123.run.app'
         self.function.index = 1

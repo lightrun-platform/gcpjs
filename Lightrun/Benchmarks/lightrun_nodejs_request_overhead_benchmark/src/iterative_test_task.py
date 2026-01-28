@@ -2,9 +2,11 @@
 
 import time
 import requests
-import argparse
+import copy
 from typing import Dict, Any, List, Optional
 from pathlib import Path
+
+from shared_modules.cli_parser import ParsedCLIArguments
 
 from shared_modules.gcf_models.gcp_function import GCPFunction
 from shared_modules.send_request import SendRequestTask
@@ -13,17 +15,13 @@ from shared_modules.lightrun_api import LightrunAPI
 class IterativeOverheadTestTask:
     """Task to run iterative benchmark with incresing Lightrun actions."""
     
-    def __init__(self, function: GCPFunction, config: argparse.Namespace, function_dir: Path):
+    def __init__(self, function: GCPFunction, config: ParsedCLIArguments, function_dir: Path):
         self.function = function
         self.config = config
         self.function_dir = function_dir
         self.total_actions = getattr(config, 'test_size', 0)
         self.action_type = getattr(config, 'lightrun_action_type', 'snapshot')
-        self.lightrun_api = LightrunAPI(
-            api_key=getattr(config, 'lightrun_api_key', ''),
-            company_id=getattr(config, 'lightrun_company_id', ''),
-            api_url=getattr(config, 'lightrun_api_url', None)
-        )
+        self.lightrun_api = LightrunAPI(config.lightrun_api_key, config.lightrun_company_id, config.lightrun_api_url)
         self.is_lightrun = function.is_lightrun_variant
 
     def execute(self) -> Dict[str, Any]:
@@ -82,7 +80,6 @@ class IterativeOverheadTestTask:
     def _run_single_iteration(self, iteration_num: int) -> Dict[str, Any]:
         """Run a single test pass."""
         # Ensure SendRequestTask doesn't add its own snapshots, as we manage them here
-        import copy
         config_copy = copy.deepcopy(self.config)
         config_copy.skip_lightrun_action_setup = True
         task = SendRequestTask(self.function, config_copy)

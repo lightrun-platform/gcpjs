@@ -14,11 +14,11 @@ from datetime import datetime, timezone
 from .cold_start_benchmark_manager import ColdStartBenchmarkManager
 from .cold_start_benchmark_report import ColdStartReportGenerator
 from .cold_start_results_viewer import ColdStartResultsViewer
-from shared_modules.cli_parser import CLIParser
+from shared_modules.cli_parser import CLIParser, ParsedCLIArguments
 from shared_modules.thread_logger import ThreadLogger, thread_task_wrapper
 
 
-def run_single_test(config: argparse.Namespace, function_dir: Path, base_name: str, entry_point: str, output_dir: Path) -> dict:
+def run_single_test(config: ParsedCLIArguments, function_dir: Path, base_name: str, entry_point: str, output_dir: Path) -> dict:
     """Run a single test variant (with or without Lightrun)."""
     # Create a copy of config with variant-specific settings
     import copy
@@ -65,6 +65,7 @@ Examples:
 """
     )
     args = cli_parser.parse()
+    args.print_configuration(table_header="Cloud Function Parallel Cold Start Performance Test - Comparative Analysis")
     
     # Validate LIGHTRUN_SECRET
     if not args.lightrun_secret:
@@ -85,13 +86,6 @@ Examples:
         print(f"ERROR: Directory not found: {hello_no_lightrun_dir}")
         sys.exit(1)
     
-    print("=" * 80)
-    print("Cloud Function Parallel Cold Start Performance Test - Comparative Analysis")
-    print("=" * 80)
-    print(f"Number of Functions per Variant: {args.num_functions}")
-    print(f"Region: {args.region}")
-    print(f"Project: {args.project}")
-    print(f"Number of Worker Threads per Variant: {args.num_workers}")
     print("Note: Functions will be automatically cleaned up on exit")
     print()
     

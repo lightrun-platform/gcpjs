@@ -12,13 +12,14 @@ sys.path.insert(0, str(parent_dir))
 sys.path.insert(0, str(parent_dir.parent)) # Benchmarks dir for shared_modules
 
 from lightrun_nodejs_request_overhead_benchmark.src.request_overhead_benchmark_manager import RequestOverheadBenchmarkManager
+from shared_modules.cli_parser import ParsedCLIArguments
 from shared_modules.gcf_models.gcp_function import GCPFunction
 
 class TestRequestOverheadBenchmarkManager(unittest.TestCase):
     """Test RequestOverheadBenchmarkManager class."""
 
     def setUp(self):
-        self.config = argparse.Namespace(
+        self.config = ParsedCLIArguments(argparse.Namespace(
             base_function_name='testFunction',
             num_functions=1,
             lightrun_secret='test-secret',
@@ -32,7 +33,7 @@ class TestRequestOverheadBenchmarkManager(unittest.TestCase):
             lightrun_action_type='snapshot',
             lightrun_api_key='key',
             lightrun_company_id='cid'
-        )
+        ))
         self.function_dir = Path('/tmp/test_function')
 
     @patch('lightrun_nodejs_request_overhead_benchmark.src.request_overhead_benchmark_manager.time')

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional
 import argparse
+from shared_modules.cli_parser import ParsedCLIArguments
 
 from .gcf_models.deployment_result import DeploymentResult
 
@@ -22,7 +23,7 @@ class DeployTask:
         region: str,
         index: int,
         lightrun_secret: str,
-        config: argparse.Namespace,
+        config: ParsedCLIArguments,
         function_dir: Path
     ):
         """

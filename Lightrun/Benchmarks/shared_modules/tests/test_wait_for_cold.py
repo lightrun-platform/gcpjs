@@ -11,6 +11,7 @@ parent_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(parent_dir))
 
 from shared_modules.wait_for_cold import WaitForColdTask, ColdStartDetectionError
+from shared_modules.cli_parser import ParsedCLIArguments
 
 
 class TestWaitForColdTask(unittest.TestCase):
@@ -18,10 +19,10 @@ class TestWaitForColdTask(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.config = argparse.Namespace(
+        self.config = ParsedCLIArguments(argparse.Namespace(
             region='us-central1',
             project='test-project'
-        )
+        ))
         # Function names are lowercase for Cloud Run compatibility
         self.function_name = 'testfunction-001'
         self.function_index = 1

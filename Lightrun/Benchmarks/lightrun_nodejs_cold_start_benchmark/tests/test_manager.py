@@ -3,15 +3,16 @@
 import unittest
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
-import argparse
 import sys
 import threading
+import argparse
 
 # Add parent directory to path so we can import as a package
 parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 sys.path.insert(0, str(parent_dir.parent)) # Add Benchmarks dir
 
+from shared_modules.cli_parser import ParsedCLIArguments
 from src.manager import ColdStartBenchmarkManager
 from shared_modules.wait_for_cold import ColdStartDetectionError
 from shared_modules.gcf_models import GCPFunction
@@ -21,7 +22,7 @@ class TestBenchmarkManager(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.config = argparse.Namespace(
+        self.config = ParsedCLIArguments(argparse.Namespace(
             base_function_name='testFunction',
             num_functions=2,
             wait_minutes=1,
@@ -32,7 +33,7 @@ class TestBenchmarkManager(unittest.TestCase):
             entry_point='testFunction',
             num_workers=2,
             max_allocations_per_region=5
-        )
+        ))
         self.function_dir = Path('/tmp/test_function')
     
     def test_init(self):

@@ -12,6 +12,7 @@ parent_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(parent_dir))
 
 from shared_modules.deploy import DeployTask
+from shared_modules.cli_parser import ParsedCLIArguments
 from shared_modules.gcf_models.gcp_function import GCPFunction
 
 
@@ -20,13 +21,13 @@ class TestDeployTask(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.config = argparse.Namespace(
+        self.config = ParsedCLIArguments(argparse.Namespace(
             base_function_name='testFunction',
             runtime='nodejs20',
             region='us-central1',
             project='test-project',
             entry_point='testFunction'
-        )
+        ))
         self.function_dir = Path('/tmp/test_function')
         self.lightrun_secret = 'test-secret-123'
         self.function_index = 1

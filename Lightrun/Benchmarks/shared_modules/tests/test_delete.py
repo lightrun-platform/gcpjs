@@ -11,6 +11,7 @@ parent_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(parent_dir))
 
 from shared_modules.delete import DeleteTask
+from shared_modules.cli_parser import ParsedCLIArguments
 
 
 class TestDeleteTask(unittest.TestCase):
@@ -18,10 +19,10 @@ class TestDeleteTask(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.config = argparse.Namespace(
+        self.config = ParsedCLIArguments(argparse.Namespace(
             region='us-central1',
             project='test-project'
-        )
+        ))
 
         # Mock function object
         self.function = Mock()

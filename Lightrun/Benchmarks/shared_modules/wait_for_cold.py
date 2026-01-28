@@ -4,6 +4,7 @@ import subprocess
 import time
 from typing import Optional
 import argparse
+from shared_modules.cli_parser import ParsedCLIArguments
 import json
 import requests
 from datetime import datetime, timezone, timedelta
@@ -18,7 +19,7 @@ class ColdStartDetectionError(Exception):
 class WaitForColdTask:
     """Task to wait for a single Cloud Function to become cold."""
     
-    def __init__(self, function_name: str, region: str, index: int, config: argparse.Namespace):
+    def __init__(self, function_name: str, region: str, index: int, config: ParsedCLIArguments):
         """
         Initialize wait for cold task for a single function.
         

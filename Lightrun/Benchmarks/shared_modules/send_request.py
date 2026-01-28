@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 import argparse
+from shared_modules.cli_parser import ParsedCLIArguments
 from .gcf_models import GCPFunction
 from .lightrun_api import LightrunAPI
 
@@ -12,7 +13,7 @@ from .lightrun_api import LightrunAPI
 class SendRequestTask:
     """Task to send multiple requests to a Cloud Function."""
 
-    def __init__(self, function: GCPFunction, config: argparse.Namespace):
+    def __init__(self, function: GCPFunction, config: ParsedCLIArguments):
         """
         Initialize send request task.
 
