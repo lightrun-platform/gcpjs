@@ -2,7 +2,10 @@
 
 import os
 import requests
+import socket
 from typing import Optional
+from urllib.parse import urlparse
+from urllib3.exceptions import NameResolutionError
 
 
 class LightrunAPI:
@@ -18,13 +21,20 @@ class LightrunAPI:
         Initialize the Lightrun API client.
 
         Args:
-            api_url: Lightrun API URL (default: from LIGHTRUN_API_URL env var or https://api.lightrun.com)
+            api_url: Lightrun API URL (default: from LIGHTRUN_API_URL env var or https://app.lightrun.com)
             api_key: Lightrun API key (default: from LIGHTRUN_API_KEY env var)
             company_id: Lightrun Company ID (default: from LIGHTRUN_COMPANY_ID env var)
         """
-        self.api_url = api_url or os.environ.get("LIGHTRUN_API_URL", "https://api.lightrun.com")
+        self.api_url = api_url or os.environ.get("LIGHTRUN_API_URL", "https://app.lightrun.com")
         self.api_key = api_key or os.environ.get("LIGHTRUN_API_KEY", "")
         self.company_id = company_id or os.environ.get("LIGHTRUN_COMPANY_ID", "")
+        self.session = requests.Session()
+        # Add a simple retry adapter
+        from urllib3.util.retry import Retry
+        from requests.adapters import HTTPAdapter
+        retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+        self.session.mount('https://', HTTPAdapter(max_retries=retries))
+        self.session.mount('http://', HTTPAdapter(max_retries=retries))
 
     def _get_headers(self) -> dict:
         """Get the authorization headers for API requests."""
@@ -49,7 +59,7 @@ class LightrunAPI:
 
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/agents"
-            response = requests.get(url, headers=self._get_headers(), timeout=30)
+            response = self.session.get(url, headers=self._get_headers(), timeout=30)
 
             if response.status_code == 200:
                 agents = response.json()
@@ -60,7 +70,31 @@ class LightrunAPI:
             else:
                 print(f"    Warning: Failed to fetch agents: {response.status_code} - {response.text[:100]}")
         except Exception as e:
-            print(f"    Warning: Could not get agent ID: {e}")
+            self._handle_api_error(e, "get agent ID")
+        return None
+
+    def _handle_api_error(self, e: Exception, context: str):
+        """Handle and diagnose API errors, specifically DNS issues."""
+        parsed = urlparse(self.api_url)
+        hostname = parsed.hostname or "app.lightrun.com"
+        
+        if isinstance(e, requests.exceptions.ConnectionError) and "NameResolutionError" in str(e):
+            print(f"    ❌ DNS RESOLUTION ERROR: Could not resolve '{hostname}'")
+            print(f"    This error is occurring on your LOCAL MACHINE, not inside the Cloud Function.")
+            print(f"    Possible reasons:")
+            print(f"    1. No internet connection or DNS server is down.")
+            print(f"    2. A VPN or Firewall is blocking access to {hostname}.")
+            print(f"    3. You are on a network that doesn't resolve public DNS names correctly.")
+            print(f"    4. The URL '{self.api_url}' is incorrect or missing the scheme (e.g., https://).")
+            print(f"    Try running: 'ping {hostname}' or 'nslookup {hostname}' in your terminal.")
+            
+            # Additional socket-level check
+            try:
+                socket.getaddrinfo(hostname, 443)
+            except Exception as se:
+                 print(f"    (Socket diagnostic: {se})")
+        else:
+            print(f"    Warning: Could not {context}: {e}")
 
         return None
 
@@ -98,7 +132,7 @@ class LightrunAPI:
                 "maxHitCount": max_hit_count,
                 "expireSec": expire_seconds,
             }
-            response = requests.post(url, json=snapshot_data, headers=self._get_headers(), timeout=30)
+            response = self.session.post(url, json=snapshot_data, headers=self._get_headers(), timeout=30)
 
             if response.status_code in [200, 201]:
                 snapshot_id = response.json().get("id")
@@ -107,7 +141,7 @@ class LightrunAPI:
             else:
                 print(f"    Warning: Failed to create snapshot: {response.status_code} - {response.text[:100]}")
         except Exception as e:
-            print(f"    Warning: Error creating snapshot: {e}")
+            self._handle_api_error(e, "create snapshot")
 
         return None
 
@@ -148,7 +182,7 @@ class LightrunAPI:
                 "expireSec": expire_seconds,
                 "logMessage": message,
             }
-            response = requests.post(url, json=log_data, headers=self._get_headers(), timeout=30)
+            response = self.session.post(url, json=log_data, headers=self._get_headers(), timeout=30)
 
             if response.status_code in [200, 201]:
                 action_id = response.json().get("id")
@@ -157,7 +191,7 @@ class LightrunAPI:
             else:
                 print(f"    Warning: Failed to create log: {response.status_code} - {response.text[:100]}")
         except Exception as e:
-            print(f"    Warning: Error creating log: {e}")
+            self._handle_api_error(e, "create log")
 
         return None
 
@@ -168,7 +202,7 @@ class LightrunAPI:
             
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots/{snapshot_id}"
-            response = requests.get(url, headers=self._get_headers(), timeout=10)
+            response = self.session.get(url, headers=self._get_headers(), timeout=10)
             if response.status_code == 200:
                 return response.json()
         except Exception as e:
@@ -182,7 +216,7 @@ class LightrunAPI:
             
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs/{log_id}"
-            response = requests.get(url, headers=self._get_headers(), timeout=10)
+            response = self.session.get(url, headers=self._get_headers(), timeout=10)
             if response.status_code == 200:
                 return response.json()
         except Exception as e:

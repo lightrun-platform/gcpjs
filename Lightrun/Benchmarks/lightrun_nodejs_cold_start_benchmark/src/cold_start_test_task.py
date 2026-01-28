@@ -75,7 +75,12 @@ class ColdStartTestTask:
             is_cold = req_result.get('isColdStart', False)
             duration = float(req_result.get('totalDuration', 0))
             
-            print(f"[{self.function.index:3d}] Request {i}: Cold={is_cold}, Duration={duration/1e9:.3f}s")
+            # Use higher precision if duration is small
+            duration_s = duration / 1e9
+            if duration_s < 0.1:
+                print(f"[{self.function.index:3d}] Request {i}: Cold={is_cold}, Duration={duration/1e6:.3f}ms")
+            else:
+                print(f"[{self.function.index:3d}] Request {i}: Cold={is_cold}, Duration={duration_s:.3f}s")
             
             # Store result
             # We want to keep the detailed result of THIS request.

@@ -125,17 +125,20 @@ class DeployTask:
                 
                 if result.returncode != 0:
                     # Check for rate limits and transient server errors
-                    error_msg = result.stderr
+                    error_msg_lower = result.stderr.lower()
                     retry_triggers = [
-                        '429', 'Quota exceeded', 'Too Many Requests',
+                        '429', 'quota exceeded', 'too many requests',
                         '500', '502', '503', '504', 
-                        'OperationError', 'Internal', 'server error', 'unavailable'
+                        'operationerror', 'internal', 'server error', 'unavailable',
+                        'failed to initialize'
                     ]
                     
-                    if any(trigger in error_msg for trigger in retry_triggers):
+                    if any(trigger in error_msg_lower for trigger in retry_triggers):
                         if attempt < max_retries - 1:
                             retry_means = [30, 90, 120]
-                            print(f"TRANSIENT ERROR ({error_msg[:50]}...), retrying in ...", end=" ", flush=True)
+                            # Clean up error message for inline printing
+                            clean_error = error_msg.replace('\n', ' ').replace('\r', '').strip()[:50]
+                            print(f"TRANSIENT ERROR ({clean_error}...), retrying in ...", end=" ", flush=True)
                             wait_time = self.wait_before_retry(attempt)
                             print(f"{wait_time}s (mean={retry_means[attempt]}s)...", end=" ", flush=True)
                             continue

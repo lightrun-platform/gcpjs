@@ -1,19 +1,18 @@
 """Manager class for coordinating Cloud Function cold start tests."""
 
 from typing import Optional
-import argparse
 from pathlib import Path
 
 from shared_modules.base_manager import BaseBenchmarkManager
 from shared_modules.gcf_models.gcp_function import GCPFunction
 from shared_modules.wait_for_cold import ColdStartDetectionError
 from .cold_start_test_task import ColdStartTestTask
-
+from shared_modules.cli_parser import ParsedCLIArguments
 
 class ColdStartBenchmarkManager(BaseBenchmarkManager):
     """Specific manager for Cold Start benchmarks."""
     
-    def __init__(self, config: argparse.Namespace, function_dir: Path):
+    def __init__(self, config: ParsedCLIArguments, function_dir: Path):
         """Initialize with specific test name."""
         super().__init__(
             config, 

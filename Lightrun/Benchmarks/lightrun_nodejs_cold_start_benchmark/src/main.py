@@ -3,6 +3,8 @@
 
 import os
 import sys
+import shutil
+import argparse
 
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -32,11 +34,36 @@ def run_single_test(config: argparse.Namespace, function_dir: Path, base_name: s
     print(f"{'='*80}")
     
     with ColdStartBenchmarkManager(variant_config, function_dir) as manager:
-        return manager.run()
+        results = manager.run()
+        
+        # Archive source code
+        source_archive_dir = output_dir / 'source' / base_name
+        source_archive_dir.mkdir(parents=True, exist_ok=True)
+        # Copy directory contents
+        for item in function_dir.iterdir():
+            if item.is_file():
+                shutil.copy2(item, source_archive_dir / item.name)
+            elif item.is_dir():
+                shutil.copytree(item, source_archive_dir / item.name, dirs_exist_ok=True)
+                
+        return results
 
 def main():
     """Main entry point."""
-    cli_parser = CLIParser()
+    cli_parser = CLIParser(
+        description='Test Cloud Functions with guaranteed cold starts. '
+                    'Deploys multiple functions for both with/without Lightrun, '
+                    'waits for them to become cold, then tests them all in parallel.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Use defaults (100 functions each)
+  %(prog)s --lightrun-secret YOUR_SECRET
+
+  # Test with 50 functions each
+  %(prog)s --lightrun-secret YOUR_SECRET --num-functions 50
+"""
+    )
     args = cli_parser.parse()
     
     # Validate LIGHTRUN_SECRET

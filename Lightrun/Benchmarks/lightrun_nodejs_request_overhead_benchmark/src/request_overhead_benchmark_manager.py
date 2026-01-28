@@ -2,7 +2,6 @@
 
 import time
 import requests
-import argparse
 from pathlib import Path
 from typing import Optional
 
@@ -10,12 +9,12 @@ from shared_modules.base_manager import BaseBenchmarkManager
 from shared_modules.gcf_models.gcp_function import GCPFunction
 from shared_modules.lightrun_api import LightrunAPI
 from .iterative_test_task import IterativeOverheadTestTask
-
+from shared_modules.cli_parser import ParsedCLIArguments
 
 class RequestOverheadBenchmarkManager(BaseBenchmarkManager):
     """Specific manager for Request Overhead benchmarks."""
     
-    def __init__(self, config: argparse.Namespace, function_dir: Path):
+    def __init__(self, config: ParsedCLIArguments, function_dir: Path):
         """Initialize with specific test name."""
         super().__init__(
             config, 

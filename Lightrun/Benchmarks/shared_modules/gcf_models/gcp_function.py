@@ -10,6 +10,7 @@ class GCPFunction:
     index: int
     region: str
     base_name: str
+    is_lightrun_variant: bool = False
     url: Optional[str] = None
     is_deployed: bool = False
     deployment_duration_seconds: Optional[float] = None

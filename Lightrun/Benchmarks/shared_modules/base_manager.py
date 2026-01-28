@@ -3,13 +3,13 @@
 import json
 import time
 import os
+import threading
 import atexit
 import signal
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import argparse
 from dataclasses import asdict
 from abc import ABC, abstractmethod
 
@@ -18,13 +18,13 @@ from shared_modules.send_request import SendRequestTask
 from shared_modules.delete import DeleteTask
 from shared_modules.gcf_models.gcp_function import GCPFunction
 from shared_modules.region_allocator import RegionAllocator
-
+from shared_modules.cli_parser import ParsedCLIArguments
 
 class BaseBenchmarkManager(ABC):
     """Abstract base class for managing the lifecycle of a benchmark run."""
     
-    def __init__(self, config: argparse.Namespace, function_dir: Path, test_name: str):
-        """
+    def __init__(self, config: ParsedCLIArguments, function_dir: Path, test_name: str):
+        """ 
         Initialize the manager.
         
         Args:
@@ -35,6 +35,7 @@ class BaseBenchmarkManager(ABC):
         self.config = config
         self.function_dir = function_dir
         self.test_name = test_name
+        self.is_lightrun_variant = 'lightrun' in getattr(config, 'base_function_name', '').lower() and 'nolightrun' not in getattr(config, 'base_function_name', '').lower()
         self.executor: Optional[ThreadPoolExecutor] = None
         self.deployed_functions: List[GCPFunction] = []
         self.cleanup_registered = False
@@ -144,21 +145,26 @@ class BaseBenchmarkManager(ABC):
         """
         return SendRequestTask(function, self.config)
 
-    def create_functions(self) -> List[GCPFunction]:
+    def create_functions(self, regions: List[str]) -> List[GCPFunction]:
         """
         Create all GCPFunction objects with region allocation.
 
+        Args:
+            regions: Pre-calculated list of regions for each function
+
         Returns:
-            List[GCPFunction]: List of created function objects with regions allocated
+            List[GCPFunction]: List of created function objects
         """
         functions = []
 
-        region_allocator = iter(RegionAllocator(self.config.max_allocations_per_region))
-
         # Create all functions with region allocation
-        for i in range(1, self.config.num_functions + 1):
-            region = next(region_allocator)
-            function = GCPFunction(index=i, region=region, base_name=self.config.base_function_name)
+        for i, region in enumerate(regions, 1):
+            function = GCPFunction(
+                index=i, 
+                region=region, 
+                base_name=self.config.base_function_name,
+                is_lightrun_variant=self.is_lightrun_variant
+            )
             functions.append(function)
             print(f"[{function.index:3d}] Created function {function.index} for region {region}")
 
@@ -171,27 +177,35 @@ class BaseBenchmarkManager(ABC):
         Returns:
             Tuple of (deployments list, test_results list, preparation_metrics dict)
         """
+
         print("=" * 80)
         print("Creating, Deploying and Testing Functions in Phases")
         print("=" * 80)
+        # Pre-calculate all regional allocations
+        region_allocator = iter(RegionAllocator(self.config.max_allocations_per_region))
+        all_regions = [next(region_allocator) for _ in range(self.config.num_functions)]
+
+        # Register all worker thread names for alignment BEFORE any Phase 1/2/3 output
+        variant = getattr(self.config, 'base_function_name', 'Default')
+        worker_names = []
+        for i, region in enumerate(all_regions, 1):
+            worker_names.append(f"{variant}-Deploy-{region}-{i}")
+            worker_names.append(f"{variant}-Test-{region}-{i}")
+            worker_names.append(f"{variant}-Cleanup-{region}-{i}")
+        
+        # Add variant main thread name just in case it wasn't registered
+        worker_names.append(threading.current_thread().name)
+        ThreadLogger.register_names(worker_names)
+
         print(f"Phase 1: Create {self.config.num_functions} functions with region allocation")
         print(f"Phase 2: Deploy all functions in parallel")
         print(f"Phase 3: Prepare and Test each function in parallel")
         print()
 
         # Phase 1: Create all functions with region allocation
-        functions = self.create_functions()
+        functions = self.create_functions(all_regions)
         print(f"Created {len(functions)} functions")
         print()
-
-        # Register all worker thread names for alignment
-        variant = getattr(self.config, 'base_function_name', 'Default')
-        worker_names = []
-        for f in functions:
-            worker_names.append(f"{variant}-Deploy-{f.region}-{f.index}")
-            worker_names.append(f"{variant}-Test-{f.region}-{f.index}")
-            worker_names.append(f"{variant}-Cleanup-{f.region}-{f.index}")
-        ThreadLogger.create(None, worker_names)
 
         # Phase 2: Deploy all functions in parallel
         print("Phase 2: Deploying all functions in parallel...")

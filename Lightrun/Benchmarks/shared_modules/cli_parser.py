@@ -1,37 +1,191 @@
-
 import argparse
 import os
+import sys
+import copy
+import math
+
+class ParsedCLIArguments:
+
+    def __init__(self, ns: argparse.Namespace):
+        self._ns = ns
+
+    def __getattr__(self, name):
+        ns = object.__getattribute__(self, "_ns")
+        return object.__getattribute__(ns, name)
+
+    # def __setstate__(self, state):
+    #     ns = self._ns
+    #     ns.__setstate__(state)
+
+    def _mask_secret(self, value: str) -> str:
+        """Mask a secret value: show first 10% and last 10%, hide the rest."""
+        if not value:
+            return ""
+        length = len(value)
+        # Calculate 10% of length, rounded up to the nearest integer
+        show_count = math.ceil(length * 0.1)
+        
+        # Ensure we don't overlap or show too much
+        if show_count * 2 >= length:
+            # For very short strings, show at most 1 char if length > 1
+            if length <= 2:
+                return value
+            show_count = 1
+            
+        start = value[:show_count]
+        end = value[-show_count:]
+        mask = "*" * (length - (show_count * 2))
+        return f"{start}{mask}{end}"
+
+    def print_configuration(self, table_header: str = None):
+        """Print the entire benchmark configuration with sources and masked secrets."""
+
+        if table_header:
+            print("=" * 80)
+            print(table_header)
+            print("=" * 80)
+        
+        # Determine column widths
+        config_dict = {k: v for k, v in vars(self._ns).items() if not k.startswith('_')}
+        metadata = getattr(self._ns, '_metadata', {})
+        
+        name_width = max(len(k) for k in config_dict.keys()) if config_dict else 20
+        name_width = max(name_width, 4) # At least "NAME" length
+        source_width = 8 # "Default", "CLI", "Env"
+        
+        # Print headers
+        print(f"{'NAME':<{name_width}}  {'SOURCE':<{source_width}}  {'VALUE'}")
+        print(f"{'-' * name_width}  {'-' * source_width}  {'-' * 20}")
+        
+        # Sort keys for consistent output
+        sorted_keys = sorted(config_dict.keys())
+        
+        for key in sorted_keys:
+            val = config_dict[key]
+            entry = metadata.get(key, {})
+            source = entry.get('source', 'Unknown')
+            is_secret = entry.get('is_secret', False)
+            
+            # Format value
+            display_val = str(val)
+            if is_secret and display_val:
+                display_val = self._mask_secret(display_val)
+            
+            # Print row
+            print(f"{key:<{name_width}}  {source:<{source_width}}  {display_val}")
+        
+        print("=" * 80)
+        print()
+
+
+class MetadataArgumentParser(argparse.ArgumentParser):
+    """Argument parser that automatically tracks the source and other metadata of arguments."""
+    def __init__(self, *args, _metadata_schema={}, **kwargs):
+        # Initialize schema before super().__init__ because super().__init__ calls add_argument for --help
+        self._metadata_schema = _metadata_schema
+        super().__init__(*args, **kwargs)
+
+    def add_argument(self, *args, **kwargs):
+        # Intercept metadata properties based on the schema
+        metadata = {}
+        for prop, config in self._metadata_schema.items():
+            if prop in kwargs:
+                metadata[prop] = kwargs.pop(prop)
+            elif config.get('has_default'):
+                metadata[prop] = config.get('default_value')
+        
+        # env_var is a special behavior property
+        env_var = kwargs.pop('env_var', None)
+        
+        # Automatic environment variable derivation
+        env_found = False
+        if env_var and env_var in os.environ:
+            kwargs['default'] = os.environ[env_var]
+            env_found = True
+            
+        action = super().add_argument(*args, **kwargs)
+        
+        # Attach metadata and tracking info to the action object
+        action.metadata = metadata
+        action.env_var = env_var
+        action._env_found = env_found
+        
+        # Use dynamic subclassing to wrap __call__ since special methods 
+        # like __call__ are looked up on the class, not the instance.
+        original_class = action.__class__
+        
+        class WrappedAction(original_class):
+            def __call__(self, parser, namespace, values, option_string=None):
+                if not hasattr(namespace, '_metadata'):
+                    namespace._metadata = {}
+                
+                # Copy metadata and add source
+                ns_metadata = copy.deepcopy(getattr(self, 'metadata', {}))
+                ns_metadata['source'] = 'CLI'
+                namespace._metadata[self.dest] = ns_metadata
+                
+                return super().__call__(parser, namespace, values, option_string)
+        
+        action.__class__ = WrappedAction
+        return action
+
+    def parse_args(self, args=None, namespace=None):
+        ns = super().parse_args(args, namespace)
+        
+        if not hasattr(ns, '_metadata'):
+            ns._metadata = {}
+            
+        # For all actions that weren't triggered by CLI (not in _metadata)
+        # determine if they came from Env or Default
+        for action in self._actions:
+            if not hasattr(action, 'dest') or action.dest == 'help':
+                continue
+                
+            if action.dest not in ns._metadata:
+                source = 'Env' if getattr(action, '_env_found', False) else 'Default'
+                
+                # Populate metadata for non-CLI sources
+                metadata = copy.deepcopy(getattr(action, 'metadata', {}))
+                metadata['source'] = source
+                ns._metadata[action.dest] = metadata
+        
+        namespace_original_class = ns.__class__
+        
+        return ns
 
 class CLIParser:
     """Parses command-line arguments for the benchmark."""
 
-    def parse(self):
+    def __init__(self, *args, **kwargs):
+        self._configuration = None
+        self._args = args
+        self._kwargs = kwargs
+        self._metadata_schema = {
+            "is_secret": {"has_default": True, "default_value": False}
+        }
+
+    def parse(self) -> ParsedCLIArguments:
+        if self._configuration is None:
+            self._configuration = self._parse()
+        return ParsedCLIArguments(copy.deepcopy(self._configuration))
+
+    def _parse(self):
         """Parse command-line arguments."""
-        parser = argparse.ArgumentParser(
-            description='Test Cloud Functions with guaranteed cold starts. '
-                        'Deploys multiple functions for both with/without Lightrun, '
-                        'waits for them to become cold, then tests them all in parallel.',
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-            epilog="""
-Examples:
-  # Use defaults (100 functions each, 20 minute wait)
-  %(prog)s --lightrun-secret YOUR_SECRET
-
-  # Test with 50 functions each
-  %(prog)s --lightrun-secret YOUR_SECRET --num-functions 50
-
-  # Custom region and project
-  %(prog)s --lightrun-secret YOUR_SECRET --region us-central1 --project my-project
-            """
+        parser = MetadataArgumentParser(
+            *self._args,
+            **self._kwargs,
+            _metadata_schema=self._metadata_schema
         )
         
         parser.add_argument(
             '--lightrun-secret',
             type=str,
-            default=os.environ.get('LIGHTRUN_SECRET', ''),
+            default='',
+            is_secret=True,
+            env_var='LIGHTRUN_SECRET',
             help='Lightrun secret (default: from LIGHTRUN_SECRET env var)'
         )
-        parser.add_argument(
+        parser.add_argument(    
             '--num-functions',
             type=int,
             default=100,
@@ -91,25 +245,37 @@ Examples:
             '--delay-between-requests',
             type=int,
             default=10,
+            is_secret=False,
             help='Seconds to wait between requests to each function (default: 10)'
         )
         parser.add_argument(
             '--test-size',
             type=int,
             default=10,
+            is_secret=False,
             help='The size/length/repeats dimention of the test. each test is free to use this dimention as it wishes but usually it is used as the number of times to run the test, perhaps with some variation happening in some of the test iterations (default: 10)'
         )
         parser.add_argument(
             '--lightrun-api-key',
             type=str,
-            default=os.environ.get('LIGHTRUN_API_KEY', ''),
+            default='',
+            is_secret=True,
+            env_var='LIGHTRUN_API_KEY',
             help='Lightrun API key for adding snapshots (default: from LIGHTRUN_API_KEY env var)'
         )
         parser.add_argument(
             '--lightrun-company-id',
             type=str,
-            default=os.environ.get('LIGHTRUN_COMPANY_ID', ''),
+            default='',
+            env_var='LIGHTRUN_COMPANY_ID',
             help='Lightrun Company ID (default: from LIGHTRUN_COMPANY_ID env var)'
+        )
+        parser.add_argument(
+            '--lightrun-api-url',
+            type=str,
+            default='https://app.lightrun.com',
+            env_var='LIGHTRUN_API_URL',
+            help='Lightrun API URL (default: from LIGHTRUN_API_URL env var or https://app.lightrun.com)'
         )
         parser.add_argument(
             '--max-allocations-per-region',
@@ -138,9 +304,11 @@ Examples:
         
         args = parser.parse_args()
         
-        # Set default num_workers to num_functions if not specified
+        # Set default num_workers to num_functions (capped at 16) if not specified
         if args.num_workers is None:
-            args.num_workers = args.num_functions
+            # GCP Cloud Build often has a default concurrency of 10-30. 
+            # 16 is a safe default to avoid hitting project-wide quotas too easily.
+            args.num_workers = min(args.num_functions, 16)
 
         if not args.lightrun_api_key:
             parser.error("the following arguments are required: --lightrun-api-key (or set the LIGHTRUN_API_KEY environment variable)")

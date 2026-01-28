@@ -21,9 +21,10 @@ class IterativeOverheadTestTask:
         self.action_type = getattr(config, 'lightrun_action_type', 'snapshot')
         self.lightrun_api = LightrunAPI(
             api_key=getattr(config, 'lightrun_api_key', ''),
-            company_id=getattr(config, 'lightrun_company_id', '')
+            company_id=getattr(config, 'lightrun_company_id', ''),
+            api_url=getattr(config, 'lightrun_api_url', None)
         )
-        self.is_lightrun = 'lightrun' in function.name.lower()
+        self.is_lightrun = function.is_lightrun_variant
 
     def execute(self) -> Dict[str, Any]:
         """Execute iterative test."""
@@ -80,7 +81,11 @@ class IterativeOverheadTestTask:
 
     def _run_single_iteration(self, iteration_num: int) -> Dict[str, Any]:
         """Run a single test pass."""
-        task = SendRequestTask(self.function, self.config)
+        # Ensure SendRequestTask doesn't add its own snapshots, as we manage them here
+        import copy
+        config_copy = copy.deepcopy(self.config)
+        config_copy.skip_lightrun_action_setup = True
+        task = SendRequestTask(self.function, config_copy)
         result = task.execute()
         result['iteration'] = iteration_num
         return result

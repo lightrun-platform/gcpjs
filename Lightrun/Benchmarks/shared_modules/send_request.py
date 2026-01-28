@@ -29,7 +29,7 @@ class SendRequestTask:
         self.num_requests = getattr(config, 'test_size', 10)
 
         # Determine if this is a "With Lightrun" function
-        self.is_lightrun = 'lightrun' in getattr(config, 'base_function_name', '').lower()
+        self.is_lightrun = function.is_lightrun_variant
 
     def _send_single_request(self, request_number: int) -> Dict[str, Any]:
         """Send a single request and return the result."""
@@ -84,14 +84,23 @@ class SendRequestTask:
                 if i == 1:
                     cold_start_duration = duration
                     is_cold = result.get('isColdStart', False)
-                    print(f"[{self.function_index:3d}] Request 1/{self.num_requests}: Cold={is_cold}, Duration={duration/1e9:.3f}s")
+                    # Use higher precision if duration is small
+                    duration_s = duration / 1e9
+                    if duration_s < 0.1:
+                        print(f"[{self.function_index:3d}] Request 1/{self.num_requests}: Cold={is_cold}, Duration={duration/1e6:.3f}ms")
+                    else:
+                        print(f"[{self.function_index:3d}] Request 1/{self.num_requests}: Cold={is_cold}, Duration={duration_s:.3f}s")
 
                     if self.is_lightrun and not getattr(self.config, 'skip_lightrun_action_setup', False):
                         self._add_lightrun_snapshot()
                 else:
                     warm_request_durations += duration
                     if self.num_requests <= 5 or i % 5 == 0 or i == self.num_requests: # Reduce log noise for many requests
-                        print(f"[{self.function_index:3d}] Request {i}/{self.num_requests}: Duration={duration/1e9:.3f}s")
+                        duration_s = duration / 1e9
+                        if duration_s < 0.1:
+                            print(f"[{self.function_index:3d}] Request {i}/{self.num_requests}: Duration={duration/1e6:.3f}ms")
+                        else:
+                            print(f"[{self.function_index:3d}] Request {i}/{self.num_requests}: Duration={duration_s:.3f}s")
             else:
                 print(f"[{self.function_index:3d}] Request {i}/{self.num_requests}: FAILED")
 
@@ -119,6 +128,7 @@ class SendRequestTask:
         lightrun_api = LightrunAPI(
             api_key=getattr(self.config, 'lightrun_api_key', ''),
             company_id=getattr(self.config, 'lightrun_company_id', ''),
+            api_url=getattr(self.config, 'lightrun_api_url', None)
         )
 
         agent_id = lightrun_api.get_agent_id(self.display_name)

@@ -5,6 +5,7 @@ import sys
 import shutil
 import json
 import time
+import argparse
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from concurrent.futures import ThreadPoolExecutor
@@ -45,22 +46,43 @@ def run_single_variant(config, base_name, is_lightrun, output_dir):
         
         # Run benchmark
         with RequestOverheadBenchmarkManager(variant_config, tmp_path) as manager:
-            return manager.run()
+            results = manager.run()
+            
+            # Archive source code
+            source_archive_dir = output_dir / 'source' / base_name
+            source_archive_dir.mkdir(parents=True, exist_ok=True)
+            # shutil.copytree(tmp_path, source_archive_dir, dirs_exist_ok=True) is Python 3.8+
+            # We can use a simpler approach since we know we're in a fresh directory
+            for item in tmp_path.iterdir():
+                if item.is_file():
+                    shutil.copy2(item, source_archive_dir / item.name)
+                elif item.is_dir():
+                    shutil.copytree(item, source_archive_dir / item.name, dirs_exist_ok=True)
+            
+            return results
 
 def main():
     """Main entry point."""
-    cli_parser = CLIParser()
+    cli_parser = CLIParser(
+        description='Measure the overhead of Lightrun actions on request latency.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Measure overhead with snapshots
+  %(prog)s --lightrun-secret YOUR_SECRET
+
+  # Measure overhead with logs
+  %(prog)s --lightrun-secret YOUR_SECRET --lightrun-action-type log
+"""
+    )
     args = cli_parser.parse()
-    
-    if not args.lightrun_secret:
-        print("ERROR: --lightrun-secret is required")
-        sys.exit(1)
+    args.print_configuration(table_header="Lightrun Request Overhead Benchmark Configuration")
         
-    print("=" * 80)
-    print("Lightrun Request Overhead Benchmark")
-    print("=" * 80)
-    print(f"Function Length (calls): {args.test_file_length}")
-    print(f"Num Actions/Repeats: {args.test_size} ({args.lightrun_action_type})")
+    # print("=" * 80)
+    # print("Lightrun Request Overhead Benchmark")
+    # print("=" * 80)
+    # print(f"Function Length (calls): {args.test_file_length}")
+    # print(f"Num Actions/Repeats: {args.test_size} ({args.lightrun_action_type})")
     
     # Setup results directory
     benchmark_name = Path(__file__).resolve().parents[1].name

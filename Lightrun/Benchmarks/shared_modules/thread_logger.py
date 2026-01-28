@@ -1,6 +1,7 @@
 import sys
 import threading
 import os
+import re
 import queue
 import time
 import atexit
@@ -22,6 +23,13 @@ class LogQueueConsumer(threading.Thread):
         self.running = True
         self.file_handles: Dict[Path, Any] = {}
         self.max_thread_name_len = 0
+        self.width_lock = threading.Lock()
+
+    def register_names(self, names: List[str]):
+        """Synchronously update the max thread name length for alignment."""
+        with self.width_lock:
+            for name in names:
+                self.max_thread_name_len = max(self.max_thread_name_len, len(str(name)))
 
     def run(self):
         while self.running or not self.log_queue.empty():
@@ -34,20 +42,19 @@ class LogQueueConsumer(threading.Thread):
                 
                 # Check for control messages
                 if isinstance(record, tuple) and record[0] == "REGISTER_NAMES":
-                    names = record[1]
-                    for name in names:
-                        self.max_thread_name_len = max(self.max_thread_name_len, len(str(name)))
+                    self.register_names(record[1])
                     self.log_queue.task_done()
                     continue
 
                 timestamp, level, message, thread_name, stream_type, log_dir = record
                 
-                # Update max seen so far to handle unregistered threads gracefully
-                self.max_thread_name_len = max(self.max_thread_name_len, len(str(thread_name)))
+                with self.width_lock:
+                    # Update max seen so far to handle unregistered threads gracefully
+                    self.max_thread_name_len = max(self.max_thread_name_len, len(str(thread_name)))
+                    display_width = self.max_thread_name_len
                 
                 # Format: ${time}  ${thread_name}  ${LOG_LEVEL}  ||  ${message}
-                # Use padding for thread_name and level
-                padded_name = f"{thread_name:<{self.max_thread_name_len}}"
+                padded_name = f"{thread_name:<{display_width}}"
                 formatted_msg = f"{timestamp}  {padded_name}  {level:<5}  ||  {message}\n"
                 
                 # 1. Write to console (serialized)
@@ -124,10 +131,22 @@ class LogProxy:
     def _set_buffer(self, val: str):
         self.local.buffer = val
 
+    def _sanitize(self, data: str) -> str:
+        """Strip control characters like \r and \b that mess up serialized logs."""
+        if not data:
+            return data
+        # Remove carriage return and backspace
+        data = data.replace('\r', '').replace('\b', '')
+        # Remove ANSI escape sequences if any
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        data = ansi_escape.sub('', data)
+        return data
+
     def write(self, data: str):
         if not data:
             return
             
+        data = self._sanitize(data)
         buf = self._get_buffer()
         buf += data
         
@@ -186,9 +205,18 @@ class ThreadLogger:
         Factory method to create a ThreadLogger and register expected thread names for alignment.
         """
         _ensure_consumer_running()
-        if names:
-            _GLOBAL_LOG_QUEUE.put(("REGISTER_NAMES", names))
+        if names and _CONSUMER:
+            _CONSUMER.register_names(names)
         return cls(log_dir)
+
+    @staticmethod
+    def register_names(names: List[str]):
+        """
+        Register expected thread names for the global logger.
+        """
+        _ensure_consumer_running()
+        if _CONSUMER:
+            _CONSUMER.register_names(names)
 
     def __enter__(self):
         _ensure_consumer_running()
