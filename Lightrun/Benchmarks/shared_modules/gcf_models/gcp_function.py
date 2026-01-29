@@ -3,13 +3,14 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 
 from .deployment_result import DeploymentResult
+from ..cli_parser import ParsedCLIArguments
+
 
 @dataclass
 class GCPFunction:
     """Represents a Google Cloud Function instance throughout its lifecycle."""
-    index: int
     region: str
-    base_name: str
+    name: str
     is_lightrun_variant: bool = False
     url: Optional[str] = None
     is_deployed: bool = False
@@ -21,16 +22,6 @@ class GCPFunction:
     test_result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     deployment_result: Optional[DeploymentResult] = None
-
-    @property
-    def name(self) -> str:
-        """Computed function name in GCP format."""
-        return f"{self.base_name}-{self.index:03d}".lower()
-
-    @property
-    def display_name(self) -> str:
-        """Computed display name for the function."""
-        return f"{self.base_name}-gcf-performance-test-{self.index:03d}"
 
     def deploy(self, lightrun_secret: str, config: ParsedCLIArguments, function_dir: Path):
         """
@@ -44,7 +35,7 @@ class GCPFunction:
         Returns:
             DeploymentResult: Result of the deployment
         """
-        from ..deploy import DeployTask
+        from ..deploy_function_task import DeployFunctionTask
 
         if self.is_deployed:
             return DeploymentResult(
@@ -56,14 +47,13 @@ class GCPFunction:
             )   
 
         # Deploy the function
-        deploy_task = DeployTask(
+        deploy_task = DeployFunctionTask(
             function_name=self.name,
             display_name=self.display_name,
             region=self.region,
-            index=self.index,
             lightrun_secret=lightrun_secret,
             config=config,
-            function_dir=function_dir
+            source_code_dir=function_dir
         )
         result = deploy_task.execute()
         if result.success:
@@ -86,6 +76,5 @@ class GCPFunction:
         return WaitForColdTask(
             function_name=self.name,
             region=self.region,
-            index=self.index,
             config=config
         ).execute(deployment_start_time)

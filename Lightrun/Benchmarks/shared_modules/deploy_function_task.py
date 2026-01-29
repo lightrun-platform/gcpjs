@@ -3,17 +3,13 @@
 import subprocess
 import time
 import random
-import math
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, Optional
-import argparse
-from shared_modules.cli_parser import ParsedCLIArguments
 
 from .gcf_models.deployment_result import DeploymentResult
 
 
-class DeployTask:
+class DeployFunctionTask:
     """Task to deploy a single Cloud Function."""
     
     def __init__(
@@ -21,10 +17,10 @@ class DeployTask:
         function_name: str,
         display_name: str,
         region: str,
-        index: int,
         lightrun_secret: str,
-        config: ParsedCLIArguments,
-        function_dir: Path
+        runtime: str,
+        entry_point: str,
+        source_code_dir: Path
     ):
         """
         Initialize deploy task.
@@ -36,15 +32,15 @@ class DeployTask:
             index: Function index for logging purposes
             lightrun_secret: Lightrun secret for environment variable
             config: Configuration namespace with deployment settings
-            function_dir: Directory containing the function source code
+            source_code_dir: Directory containing the function source code
         """
         self.function_name = function_name
         self.display_name = display_name
         self.region = region
-        self.index = index
         self.lightrun_secret = lightrun_secret
-        self.config = config
-        self.function_dir = function_dir
+        self.runtime = runtime
+        self.entry_point = entry_point
+        self.function_dir = source_code_dir
     
     def wait_before_retry(self, attempt: int) -> int:
         """
@@ -82,11 +78,11 @@ class DeployTask:
         """
         env_vars = f"LIGHTRUN_SECRET={self.lightrun_secret},DISPLAY_NAME={self.display_name}"
         
-        print(f"[{self.index:3d}] Deploying {self.function_name} to {self.region}...", end=" ", flush=True)
+        print(f"[{self.function_name}] Deploying {self.function_name} to {self.region}...", end=" ", flush=True)
         
         # Add small delay to avoid hitting rate limits (stagger deployments)
         # Delay based on function index to spread out requests
-        time.sleep(self.index * 0.5)  # 0.5s delay per function index
+        time.sleep(hash(self.function_name) % 30)  # spreading out function deployments to avoid rate limits
         
         max_retries = 3
         deployment_duration_seconds = None
@@ -103,7 +99,7 @@ class DeployTask:
                     [
                         'gcloud', 'functions', 'deploy', self.function_name,
                         '--gen2',
-                        f'--runtime={self.config.runtime}',
+                        f'--runtime={self.runtime}',
                         f'--region={self.region}',
                         f'--source={self.function_dir}',
                         f'--entry-point={self.config.entry_point}',

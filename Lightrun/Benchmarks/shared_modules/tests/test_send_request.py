@@ -1,7 +1,7 @@
 """Unit tests for SendRequestTask class."""
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, call, MagicMock
 from datetime import datetime, timezone
 import argparse
 import sys

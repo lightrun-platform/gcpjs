@@ -20,7 +20,10 @@ from shared_modules.gcf_models.gcp_function import GCPFunction
 from shared_modules.region_allocator import RegionAllocator
 from shared_modules.cli_parser import ParsedCLIArguments
 
-class BaseBenchmarkManager(ABC):
+from Lightrun.Benchmarks.shared_modules.benchmark_cases_generator import BenchmarkCase
+
+
+class BenchmarkManager[T](ABC):
     """Abstract base class for managing the lifecycle of a benchmark run."""
     
     def __init__(self, config: ParsedCLIArguments, function_dir: Path, test_name: str):
@@ -104,27 +107,26 @@ class BaseBenchmarkManager(ABC):
         except Exception as e:
             # Subclasses should handle specific exceptions in prepare_function if they want specific logging matches
             # or we can catch generic here.
-            print(f"[{function.index:3d}] ❌ Preparation failed: {e}")
+            print(f"[{function.name}] ❌ Preparation failed: {e}")
             return function, {
-                'function_index': function.index,
                 'function_name': function.name,
                 'error': True,
                 'error_message': str(e)
             }, None
 
-        print(f"[{function.index:3d}] Testing now...")
+        print(f"[{function.name}] Testing now...")
 
         # Step 3: Test (multiple requests based on config)
         test_task = self.get_test_task(function, deployment_start_time)
         test_result = test_task.execute()
 
         if test_result.get('error'):
-            print(f"[{function.index:3d}] ✗ Test failed")
+            print(f"[{function.name}] ✗ Test failed")
         else:
             cold_duration = float(test_result.get('totalDurationForColdStarts', 0)) / 1_000_000_000
             warm_duration = float(test_result.get('totalDurationForWarmRequests', 0)) / 1_000_000_000
             num_requests = test_result.get('_num_requests', 1)
-            print(f"[{function.index:3d}] ✓ Test complete: ColdDur={cold_duration:.3f}s, WarmDur={warm_duration:.3f}s, Requests={num_requests}")
+            print(f"[{function.name}] ✓ Test complete: ColdDur={cold_duration:.3f}s, WarmDur={warm_duration:.3f}s, Requests={num_requests}")
             function.test_result = test_result
 
         # Save individual function results to file
@@ -158,15 +160,15 @@ class BaseBenchmarkManager(ABC):
         functions = []
 
         # Create all functions with region allocation
+        is_lightrun = self.is_lightrun_variant
         for i, region in enumerate(regions, 1):
             function = GCPFunction(
-                index=i, 
                 region=region, 
-                base_name=self.config.base_function_name,
-                is_lightrun_variant=self.is_lightrun_variant
+                name=f"{self.config.base_function_name}-{region}-{"Lightrun" if is_lightrun else "noLightrun"}",
+                is_lightrun_variant=is_lightrun
             )
             functions.append(function)
-            print(f"[{function.index:3d}] Created function {function.index} for region {region}")
+            print(f"Created function {function.name}")
 
         return functions
 
@@ -183,19 +185,19 @@ class BaseBenchmarkManager(ABC):
         print("=" * 80)
         # Pre-calculate all regional allocations
         region_allocator = iter(RegionAllocator(self.config.max_allocations_per_region))
-        all_regions = [next(region_allocator) for _ in range(self.config.num_functions)]
-
-        # Register all worker thread names for alignment BEFORE any Phase 1/2/3 output
-        variant = getattr(self.config, 'base_function_name', 'Default')
-        worker_names = []
-        for i, region in enumerate(all_regions, 1):
-            worker_names.append(f"{variant}-Deploy-{region}-{i}")
-            worker_names.append(f"{variant}-Test-{region}-{i}")
-            worker_names.append(f"{variant}-Cleanup-{region}-{i}")
-        
-        # Add variant main thread name just in case it wasn't registered
-        worker_names.append(threading.current_thread().name)
-        ThreadLogger.register_names(worker_names)
+        # all_regions = [next(region_allocator) for _ in range(self.config.num_functions)]
+        #
+        # # Register all worker thread names for alignment BEFORE any Phase 1/2/3 output
+        # variant = getattr(self.config, 'base_function_name', 'Default')
+        # worker_names = []
+        # for i, region in enumerate(all_regions, 1):
+        #     worker_names.append(f"{variant}-Deploy-{region}-{i}")
+        #     worker_names.append(f"{variant}-Test-{region}-{i}")
+        #     worker_names.append(f"{variant}-Cleanup-{region}-{i}")
+        #
+        # # Add variant main thread name just in case it wasn't registered
+        # worker_names.append(threading.current_thread().name)
+        # ThreadLogger.register_names(worker_names)
 
         print(f"Phase 1: Create {self.config.num_functions} functions with region allocation")
         print(f"Phase 2: Deploy all functions in parallel")
@@ -237,11 +239,11 @@ class BaseBenchmarkManager(ABC):
                 
                 # Print success/failure status
                 if result.success:
-                    print(f"[{function.index:3d}] ✓ Deployed: {function.name} in {function.region}")
+                    print(f"[{function.name}] ✓ Deployed: {function.name} in {function.region}")
                 else:
-                    print(f"[{function.index:3d}] ✗ Deployment failed: {result.error[:50] if result.error else 'Unknown error'}...")
+                    print(f"[{function.name}] ✗ Deployment failed: {result.error[:50] if result.error else 'Unknown error'}...")
             except Exception as e:
-                print(f"[{function.index:3d}] Deployment task failed with exception: {e}")
+                print(f"[{function.name}] Deployment task failed with exception: {e}")
 
         successful_deployments = [f for f in deployments if f.is_deployed and f.url]
         print(f"Deployed {len(successful_deployments)}/{len(deployments)} functions successfully")
@@ -428,14 +430,14 @@ class BaseBenchmarkManager(ABC):
         print(f"\nCleanup Summary: {deleted_count} deleted, {failed_count} failed")
         self.cleanup_stats = {'deleted': deleted_count, 'failed': failed_count}
         self.deployed_functions = []
-    
-    def run(self) -> Dict[str, Any]:
+
+    def run(self, benchmark_cases: List[BenchmarkCase[T]]) -> Dict[str, Any]:
         """Run the complete test workflow and return results."""
-        log_dir = Path(getattr(self.config, 'output_dir', '.')) / 'logs'
-        
+
+
         # Pre-register variant name
         variant = getattr(self.config, 'base_function_name', 'Default')
-        
+
         with ThreadLogger.create(log_dir, [variant]):
             print("=" * 80)
             print(self.test_name)
@@ -445,17 +447,17 @@ class BaseBenchmarkManager(ABC):
             print(f"Base Function Name: {getattr(self.config, 'base_function_name', 'N/A')}")
             print("Note: Functions will be automatically cleaned up on exit")
             print()
-            
+
             # Deploy, prepare, and test all functions in parallel
             deployments, test_results, preparation_metrics = self.deploy_and_test_all_functions()
-            
+
             self.deployments = deployments
             self.test_results = test_results
-            
+
             self.save_results(deployments, test_results)
-            
+
             print("\n" + "=" * 80)
             print("Test completed! Functions will be cleaned up automatically on exit.")
             print("=" * 80)
-            
+
             return self.get_results()

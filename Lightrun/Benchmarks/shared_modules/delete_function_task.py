@@ -7,7 +7,7 @@ from shared_modules.cli_parser import ParsedCLIArguments
 from .gcf_models import GCPFunction
 
 
-class DeleteTask:
+class DeleteFunctionTask:
     """Task to delete a single Cloud Function."""
     
     def __init__(self, function: GCPFunction, config: ParsedCLIArguments):

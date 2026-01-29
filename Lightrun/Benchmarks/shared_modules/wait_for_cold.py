@@ -19,7 +19,7 @@ class ColdStartDetectionError(Exception):
 class WaitForColdTask:
     """Task to wait for a single Cloud Function to become cold."""
     
-    def __init__(self, function_name: str, region: str, index: int, config: ParsedCLIArguments):
+    def __init__(self, function_name: str, region: str, config: ParsedCLIArguments):
         """
         Initialize wait for cold task for a single function.
         
@@ -31,7 +31,6 @@ class WaitForColdTask:
         """
         self.function_name = function_name
         self.region = region
-        self.index = index
         self.config = config
     
     def check_function_instances(self) -> int:
@@ -213,14 +212,14 @@ class WaitForColdTask:
             ColdStartDetectionError: If function cannot be confirmed cold within timeout
         """
         # Initial wait period (10 seconds grace)
-        print(f"[{self.index:3d}] Waiting 10s grace period...", end='\r')
+        print(f"[{self.function_name}] Waiting 10s grace period...", end='\r')
         time.sleep(10)
         
         # Poll to confirm function is actually cold
         # The Monitoring API NEVER reports 0 - it just omits timeSeries when cold.
         # We need multiple consecutive "no data" checks over 4 minutes, polling every 15 seconds.
         # This ensures metrics would have appeared if instances existed (accounting for 60-120s delay).
-        print(f"[{self.index:3d}] Verifying {self.function_name} is cold...")
+        print(f"[{self.function_name}] Verifying {self.function_name} is cold...")
         
         start_time = time.time()
         max_wait_seconds = max_poll_minutes * 60
@@ -253,22 +252,22 @@ class WaitForColdTask:
                     current_time = time.time()
                     time_to_cold = current_time - deployment_start_time
                     duration_mins = required_cold_duration_seconds / 60
-                    print(f"[{self.index:3d}] ✓ {self.function_name} confirmed cold after {time_to_cold/60:.1f} minutes ({cold_confirmation_count} consecutive 'no data' checks over {duration_mins:.1f} minutes)")
+                    print(f"[{self.function_name}] ✓ {self.function_name} confirmed cold after {time_to_cold/60:.1f} minutes ({cold_confirmation_count} consecutive 'no data' checks over {duration_mins:.1f} minutes)")
                     
                     return time_to_cold
                 else:
                     consecutive_duration = cold_confirmation_count * poll_interval
-                    print(f"[{self.index:3d}] [{elapsed_minutes}m] No instance data: {consecutive_duration}s/{required_cold_duration_seconds}s ({cold_confirmation_count}/{required_cold_confirmations} checks)...", end='\r')
+                    print(f"[{self.function_name}] [{elapsed_minutes}m] No instance data: {consecutive_duration}s/{required_cold_duration_seconds}s ({cold_confirmation_count}/{required_cold_confirmations} checks)...", end='\r')
             elif count > 1:
                 # We have explicit data showing instances exist - definitely warm
                 cold_confirmation_count = 0
                 elapsed_minutes = int((time.time() - start_time) / 60)
-                print(f"[{self.index:3d}] [{elapsed_minutes}m] Still warm (instances: {count})", end='\r')
+                print(f"[{self.function_name}] [{elapsed_minutes}m] Still warm (instances: {count})", end='\r')
             else:
                 # count == 0 shouldn't happen, but handle it
                 cold_confirmation_count = 0
                 elapsed_minutes = int((time.time() - start_time) / 60)
-                print(f"[{self.index:3d}] [{elapsed_minutes}m] Unexpected count={count}, continuing...", end='\r')
+                print(f"[{self.function_name}] [{elapsed_minutes}m] Unexpected count={count}, continuing...", end='\r')
             
             time.sleep(poll_interval)
         

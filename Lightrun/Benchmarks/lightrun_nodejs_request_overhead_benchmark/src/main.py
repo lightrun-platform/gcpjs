@@ -10,6 +10,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+import threading
+
 
 # Add parent directories to path to import shared_modules
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -95,19 +97,21 @@ Examples:
     
     # Run variants
     log_dir = test_results_dir / 'logs'
-    variant_names = ['Variant-With-Lightrun', 'Variant-Without-Lightrun']
-    with ThreadLogger.create(log_dir, variant_names):
-        with ThreadPoolExecutor(max_workers=2) as executor:
+    base_name = "lightrun_request_overhead_benchmark"
+    max_workers = 2
+    barrier = threading.Barrier(max_workers + 1)
+    with ThreadLogger.create(log_dir):
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_with = executor.submit(
                 thread_task_wrapper(
-                    'Variant-With-Lightrun',
+                    base_name,
                     run_single_variant,
                     args, 'helloLightrun', True, test_results_dir
                 )
             )
             future_without = executor.submit(
                 thread_task_wrapper(
-                    'Variant-Without-Lightrun',
+                    base_name,
                     run_single_variant,
                     args, 'helloNoLightrun', False, test_results_dir
                 )
