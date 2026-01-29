@@ -25,7 +25,7 @@ class LightrunBenchmark[T]:
                  report_visualizer: BenchmarkResultsVisualizer[T]):
 
         self.cli_parser = CLIParser(description=cli_description, formatter_class=argparse.RawDescriptionHelpFormatter, epilog=cli_epilog)
-        self.cli_args = self.cli_parser.parse()
+        self.benchmark_parameters = self.cli_parser.parse()
         self.logger = logging.getLogger(__name__)
         self.cli_description = cli_description
         self.cli_epilog = cli_epilog
@@ -47,12 +47,12 @@ class LightrunBenchmark[T]:
 
     def run(self):
         self.test_results_dir.mkdir(parents=True, exist_ok=True)
-        self.cli_args.print_configuration(table_header="Lightrun Request Overhead Benchmark Configuration")
+        self.benchmark_parameters.print_configuration(table_header="Lightrun Request Overhead Benchmark Configuration")
         self.logger.info(f"Benchmark results directory: {self.test_results_dir}")
 
-        self.benchmark_cases = self.benchmark_cases_generator.generate_benchmark_cases(self.benchmark_name, self.cli_args)
+        self.benchmark_cases = self.benchmark_cases_generator.generate_benchmark_cases(self.benchmark_name, self.benchmark_parameters)
         # self.logger = ThreadSafeBenchmarkLogger.create(self.per_thread_logs_dir, [case.get_gcp_function().name for case in self.benchmark_cases])
-        self.benchmark_manager = BenchmarkManager()
+        self.benchmark_manager = BenchmarkManager(self.benchmark_parameters.num_workers)
         self.benchmark_results = self.benchmark_manager.run(self.benchmark_cases)
         self.benchmark_report = self.benchmark_report_generator.generate_report(self.benchmark_results)
         self.benchmark_report_visualizations = self.benchmark_report_visualizer.create_visualizations(self.benchmark_report)

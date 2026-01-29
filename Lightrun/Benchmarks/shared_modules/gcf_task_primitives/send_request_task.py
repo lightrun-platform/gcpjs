@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 import argparse
 from shared_modules.cli_parser import ParsedCLIArguments
-from .gcf_models import GCPFunction
-from .lightrun_api import LightrunAPI
+from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
+from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI
 
 
 class SendRequestTask:

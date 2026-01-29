@@ -5,8 +5,9 @@ import time
 import random
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Dict
 
-from .gcf_models.deployment_result import DeploymentResult
+from Lightrun.Benchmarks.shared_modules.gcf_models.deployment_result import DeploymentResult
 
 
 def wait_before_retry(attempt: int) -> int:
@@ -46,11 +47,11 @@ class DeployFunctionTask:
         function_name: str,
         display_name: str,
         region: str,
-        lightrun_secret: str,
         runtime: str,
         entry_point: str,
         source_code_dir: Path,
-        project: str
+        project: str,
+        env_vars: Dict[str, str],
     ):
         """
         Initialize deploy task.
@@ -62,16 +63,16 @@ class DeployFunctionTask:
             index: Function index for logging purposes
             lightrun_secret: Lightrun secret for environment variable
             config: Configuration namespace with deployment settings
-            source_code_dir: Directory containing the function source code
+            source_code_dir: path to a directory containing the function's source code
         """
         self.function_name = function_name
         self.display_name = display_name
         self.region = region
-        self.lightrun_secret = lightrun_secret
         self.runtime = runtime
         self.entry_point = entry_point
         self.function_dir = source_code_dir
         self.project = project
+        self.env_vars = env_vars
 
     def execute(self) -> DeploymentResult:
         """Execute the deployment task with retry logic for rate limiting.
@@ -79,8 +80,7 @@ class DeployFunctionTask:
         Returns:
             DeploymentResult: Immutable result of the deployment
         """
-        env_vars = f"LIGHTRUN_SECRET={self.lightrun_secret},DISPLAY_NAME={self.display_name}"
-        
+        # env_vars = f"LIGHTRUN_SECRET={self.lightrun_secret},DISPLAY_NAME={self.display_name}"
         print(f"[{self.function_name}] Deploying {self.function_name} to {self.region}...", end=" ", flush=True)
         
         # Add small delay to avoid hitting rate limits (stagger deployments)
@@ -91,12 +91,13 @@ class DeployFunctionTask:
         deployment_duration_seconds = None
         deployment_duration_nanoseconds = None
         deploy_time = None
-        
+
         for attempt in range(max_retries):
             # Track start time for this specific attempt
             attempt_start_time = time.time()
         
             try:
+                env_vars = ",".join([f"{key}={value}" for key,value in self.env_vars.items()])
                 # Deploy using gcloud
                 result = subprocess.run(
                     [

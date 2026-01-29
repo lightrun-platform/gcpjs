@@ -4,7 +4,7 @@ import subprocess
 from typing import Dict, Any, Optional
 import argparse
 from shared_modules.cli_parser import ParsedCLIArguments
-from .gcf_models import GCPFunction
+from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
 
 
 class DeleteFunctionTask:

@@ -1,6 +1,7 @@
 """GCPFunction model."""
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Dict, Any
+from pathlib import Path
 
 from .deployment_result import DeploymentResult
 from ..cli_parser import ParsedCLIArguments
@@ -21,21 +22,23 @@ class GCPFunction:
     time_to_cold_minutes: Optional[float] = None
     test_result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
-    deployment_result: Optional[DeploymentResult] = None
+    deployment_result: Optional[DeploymentResult] = None,
+    runtime: str = None
+    function_source_code_dir: Path = None
 
-    def deploy(self, lightrun_secret: str, config: ParsedCLIArguments, function_dir: Path):
+    def deploy(self, env_vars: Dict[str, str]) -> DeploymentResult:
         """
         Deploy this function.
 
         Args:
             lightrun_secret: Lightrun secret for environment variable
             config: Configuration namespace with deployment settings
-            function_dir: Directory containing the function source code
+            function_source_code_dir: Directory containing the function source code
 
         Returns:
             DeploymentResult: Result of the deployment
         """
-        from ..deploy_function_task import DeployFunctionTask
+        from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task import DeployFunctionTask
 
         if self.is_deployed:
             return DeploymentResult(
@@ -49,11 +52,12 @@ class GCPFunction:
         # Deploy the function
         deploy_task = DeployFunctionTask(
             function_name=self.name,
-            display_name=self.display_name,
+            display_name=self.name,
             region=self.region,
-            lightrun_secret=lightrun_secret,
-            config=config,
-            source_code_dir=function_dir
+            lightrun_secret=self.lightrun_secret,
+            runtime=self.runtime,
+            entry_point=self.entry_point,
+            source_code_dir=function_source_code_dir
         )
         result = deploy_task.execute()
         if result.success:
@@ -72,7 +76,7 @@ class GCPFunction:
     def wait_for_cold(self, config, deployment_start_time):
         """Wait for the function to become cold."""
         # Import here to avoid circular import
-        from ..wait_for_cold import WaitForColdTask
+        from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.wait_for_cold_task import WaitForColdTask
         return WaitForColdTask(
             function_name=self.name,
             region=self.region,
