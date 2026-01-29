@@ -9,6 +9,35 @@ from pathlib import Path
 from .gcf_models.deployment_result import DeploymentResult
 
 
+def wait_before_retry(attempt: int) -> int:
+    """
+    Wait before retrying using a random delay from normal distribution.
+
+    Args:
+        attempt: Retry attempt number (0-indexed: 0, 1, 2)
+
+    Returns:
+        Wait time in seconds that was actually waited (minimum 20 seconds)
+    """
+    # Retry delay means: 30s, 90s, 120s for attempts 1, 2, 3
+    retry_means = [30, 90, 120]  # seconds
+    retry_std_dev = 60  # Standard deviation of 60 seconds
+
+    mean = retry_means[attempt]
+
+    # Redraw if wait time is less than 20 seconds
+    while True:
+        wait_time = random.normalvariate(mean, retry_std_dev)
+        wait_time = max(1, int(wait_time))  # Ensure >= 1s and round to integer
+        if wait_time >= 20:
+            break
+
+    # Sleep for the calculated wait time
+    time.sleep(wait_time)
+
+    return wait_time
+
+
 class DeployFunctionTask:
     """Task to deploy a single Cloud Function."""
     
@@ -20,7 +49,8 @@ class DeployFunctionTask:
         lightrun_secret: str,
         runtime: str,
         entry_point: str,
-        source_code_dir: Path
+        source_code_dir: Path,
+        project: str
     ):
         """
         Initialize deploy task.
@@ -41,35 +71,8 @@ class DeployFunctionTask:
         self.runtime = runtime
         self.entry_point = entry_point
         self.function_dir = source_code_dir
-    
-    def wait_before_retry(self, attempt: int) -> int:
-        """
-        Wait before retrying using a random delay from normal distribution.
-        
-        Args:
-            attempt: Retry attempt number (0-indexed: 0, 1, 2)
-            
-        Returns:
-            Wait time in seconds that was actually waited (minimum 20 seconds)
-        """
-        # Retry delay means: 30s, 90s, 120s for attempts 1, 2, 3
-        retry_means = [30, 90, 120]  # seconds
-        retry_std_dev = 60  # Standard deviation of 60 seconds
-        
-        mean = retry_means[attempt]
-        
-        # Redraw if wait time is less than 20 seconds
-        while True:
-            wait_time = random.normalvariate(mean, retry_std_dev)
-            wait_time = max(1, int(wait_time))  # Ensure >= 1s and round to integer
-            if wait_time >= 20:
-                break
-        
-        # Sleep for the calculated wait time
-        time.sleep(wait_time)
-        
-        return wait_time
-    
+        self.project = project
+
     def execute(self) -> DeploymentResult:
         """Execute the deployment task with retry logic for rate limiting.
         
@@ -102,7 +105,7 @@ class DeployFunctionTask:
                         f'--runtime={self.runtime}',
                         f'--region={self.region}',
                         f'--source={self.function_dir}',
-                        f'--entry-point={self.config.entry_point}',
+                        f'--entry-point={self.entry_point}',
                         '--trigger-http',
                         '--allow-unauthenticated',
                         f'--set-env-vars={env_vars}',
@@ -112,7 +115,7 @@ class DeployFunctionTask:
                         '--concurrency=80',
                         '--memory=512Mi',
                         '--cpu=2',
-                        f'--project={self.config.project}',
+                        f'--project={self.project}',
                         '--quiet'
                     ],
                     capture_output=True,
@@ -136,7 +139,7 @@ class DeployFunctionTask:
                             # Clean up error message for inline printing
                             clean_error = error_msg.replace('\n', ' ').replace('\r', '').strip()[:50]
                             print(f"TRANSIENT ERROR ({clean_error}...), retrying in ...", end=" ", flush=True)
-                            wait_time = self.wait_before_retry(attempt)
+                            wait_time = wait_before_retry(attempt)
                             print(f"{wait_time}s (mean={retry_means[attempt]}s)...", end=" ", flush=True)
                             continue
                     
@@ -158,7 +161,7 @@ class DeployFunctionTask:
                 if attempt < max_retries - 1:
                     retry_means = [30, 90, 120]
                     print(f"TIMEOUT, retrying in ...", end=" ", flush=True)
-                    wait_time = self.wait_before_retry(attempt)
+                    wait_time = wait_before_retry(attempt)
                     print(f"{wait_time}s (mean={retry_means[attempt]}s)...", end=" ", flush=True)
                     continue
                 print("TIMEOUT")
@@ -171,7 +174,7 @@ class DeployFunctionTask:
                 if attempt < max_retries - 1:
                     retry_means = [30, 90, 120]
                     print(f"ERROR, retrying in ...", end=" ", flush=True)
-                    wait_time = self.wait_before_retry(attempt)
+                    wait_time = wait_before_retry(attempt)
                     print(f"{wait_time}s (mean={retry_means[attempt]}s)...", end=" ", flush=True)
                     continue
                 print(f"EXCEPTION: {str(e)}")

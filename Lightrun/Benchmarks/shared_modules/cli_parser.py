@@ -4,6 +4,28 @@ import sys
 import copy
 import math
 
+
+def _mask_secret(value: str) -> str:
+    """Mask a secret value: show first 10% and last 10%, hide the rest."""
+    if not value:
+        return ""
+    length = len(value)
+    # Calculate 10% of length, rounded up to the nearest integer
+    show_count = math.ceil(length * 0.1)
+
+    # Ensure we don't overlap or show too much
+    if show_count * 2 >= length:
+        # For very short strings, show at most 1 char if length > 1
+        if length <= 2:
+            return value
+        show_count = 1
+
+    start = value[:show_count]
+    end = value[-show_count:]
+    mask = "*" * (length - (show_count * 2))
+    return f"{start}{mask}{end}"
+
+
 class ParsedCLIArguments:
 
     def __init__(self, ns: argparse.Namespace):
@@ -16,26 +38,6 @@ class ParsedCLIArguments:
     # def __setstate__(self, state):
     #     ns = self._ns
     #     ns.__setstate__(state)
-
-    def _mask_secret(self, value: str) -> str:
-        """Mask a secret value: show first 10% and last 10%, hide the rest."""
-        if not value:
-            return ""
-        length = len(value)
-        # Calculate 10% of length, rounded up to the nearest integer
-        show_count = math.ceil(length * 0.1)
-        
-        # Ensure we don't overlap or show too much
-        if show_count * 2 >= length:
-            # For very short strings, show at most 1 char if length > 1
-            if length <= 2:
-                return value
-            show_count = 1
-            
-        start = value[:show_count]
-        end = value[-show_count:]
-        mask = "*" * (length - (show_count * 2))
-        return f"{start}{mask}{end}"
 
     def print_configuration(self, table_header: str = None):
         """Print the entire benchmark configuration with sources and masked secrets."""
@@ -69,7 +71,7 @@ class ParsedCLIArguments:
             # Format value
             display_val = str(val)
             if is_secret and display_val:
-                display_val = self._mask_secret(display_val)
+                display_val = _mask_secret(display_val)
             
             # Print row
             print(f"{key:<{name_width}}  {source:<{source_width}}  {display_val}")
