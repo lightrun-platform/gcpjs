@@ -54,16 +54,43 @@ class BenchmarkCase[T](ABC):
             self.errors.append(e)
         finally:
             self.delete_result = self.gcp_function.delete()
+            
             summary = f"Finished benchmark case: {self.name}.\n"
-            summary += f"Deployment result: {'Success' if self.deployment_result['success'] else 'Failure'}\n"
-            if not self.deployment_result['success']:
-                summary += f"Failure\n"
-                summary += f"Error: {self.deployment_result['error']}"
+            
+            # Deployment result - always shown if attempted
+            if self.deployment_result is None:
+                summary += "Deployment result: deployment not attempted or info is missing"
             else:
-                summary += f"Success\n"
-                self.log_info(summary)
-                if not self.delete_result['success']:
-                    self.log_error(f"Failed to delete function {self.delete_result['function_name']}: {self.delete_result['error']}")
+                summary += "Deployment result: "
+                if not self.deployment_result.success:
+                    summary += f"Failure\n"
+                    summary += f"Error: {self.deployment_result.error}\n"
+                else:
+                    summary += f"Success\n"
+                    # Only show benchmark result if deployment succeeded
+                    if self.benchmark_result is None:
+                        summary += "Benchmark result: benchmark did not run or info is missing"
+                    else:
+                        summary += f"Benchmark result: "
+                        if not self.benchmark_result.success:
+                            summary += f"Failure\n"
+                            summary += f"Error: {self.benchmark_result.error}\n"
+                        else:
+                            summary += f"Success\n"
+                    # only check delete state if the function was deployed, hence its in this nested else
+                    if self.delete_result is None:
+                        summary += "Delete result: delete was not attempted or info is missing"
+                    else:
+                        summary += "Delete result: "
+                        if not self.delete_result.success:
+                            summary += f"Failure\n"
+                            summary += f"Error: {self.delete_result.error}\n"
+
+            self.log_info(summary)
+            
+            # Log delete errors separately as errors
+            if self.delete_result and not self.delete_result['success']:
+                self.log_error(f"Failed to delete function {self.delete_result['function_name']}: {self.delete_result['error']}")
 
 
 

@@ -226,6 +226,8 @@ class GCFDeployCommandParameters(metaclass=NoPublicConstructor):
     @classmethod
     def create(cls,
                # Mandatory params that don't have default and will fail the deployment if not actually set
+               # * syntax means only named arguments are accepted
+               *,
                function_name: str,
                region: str,
                runtime: str,

@@ -180,8 +180,11 @@ class DeployFunctionTask:
             )
 
     def deploy_gcp_function(
-            # only commonly used parameters, the entire list can be found in GCFDeployCommandExtendedParameters
             self,
+            # only commonly used parameters listed here, but **kwargs allows passing all possible arguments down the chain
+            # the entire (long) list of possible arguments can be found in GCFDeployCommandExtendedParameters
+            # p.s the * syntax in next line enforces named parameters only
+            *,
             function_name: str,
             region: str,
             runtime: str,

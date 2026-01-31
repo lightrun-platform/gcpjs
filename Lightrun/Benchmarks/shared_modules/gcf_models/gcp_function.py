@@ -4,7 +4,6 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 
 from .deployment_result import DeploymentResult
-from ..cli_parser import ParsedCLIArguments
 from ..gcf_task_primitives.delete_function_task import DeleteFunctionTask
 
 
@@ -16,7 +15,6 @@ class GCPFunction:
     name: str
     is_lightrun_variant: bool = False
     url: Optional[str] = None
-    is_deployed: bool = False
     deployment_duration_seconds: Optional[float] = None
     deployment_duration_nanoseconds: Optional[int] = None
     deploy_time: Optional[str] = None
@@ -45,6 +43,11 @@ class GCPFunction:
     env_vars: Dict[str, str] = None,
     kwargs: Dict[str, Any] = None,
 
+
+    @property
+    def is_deployed(self) -> bool:
+        return self.deployment_result and self.deployment_result.success
+
     def deploy(self, deployment_timeout_seconds=600) -> DeploymentResult:
         """
         Deploy this function. idempotent action - if the function was already deployed in the past it will not deploy
@@ -56,19 +59,14 @@ class GCPFunction:
         Returns:
             DeploymentResult: Result of the deployment
         """
-        from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task import DeployFunctionTask
 
         if self.is_deployed:
-            return DeploymentResult(
-                success=True,
-                url=self.url,
-                deployment_duration_seconds=self.deployment_duration_seconds,
-                deployment_duration_nanoseconds=self.deployment_duration_nanoseconds,
-                deploy_time=self.deploy_time
-            )   
+            return self.deployment_result
 
         # Deploy the function
-        result = DeployFunctionTask(deployment_timeout_seconds).deploy_gcp_function(
+        from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task import DeployFunctionTask
+
+        self.deployment_result = DeployFunctionTask(deployment_timeout_seconds).deploy_gcp_function(
                                                                 function_name=self.name,
                                                                 region=self.region,
                                                                 runtime=self.runtime,
@@ -87,18 +85,8 @@ class GCPFunction:
                                                                 gen2=self.gen2,
                                                                 env_vars=self.env_vars,
                                                                 **self.kwargs if self.kwargs else {})
-        if result.success:
-            self.deployment_result = result
-            self.is_deployed = True
-            self.url = result.url
-            self.deployment_duration_seconds = result.deployment_duration_seconds
-            self.deployment_duration_nanoseconds = result.deployment_duration_nanoseconds
-            self.deploy_time = result.deploy_time
-        else:
-            self.is_deployed = False
-            self.error = result.error
-        
-        return result
+
+        return self.deployment_result
 
 
     def delete(self):
