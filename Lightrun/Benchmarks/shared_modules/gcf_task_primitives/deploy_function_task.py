@@ -5,9 +5,10 @@ import time
 import random
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional, List
 
 from Lightrun.Benchmarks.shared_modules.gcf_models.deployment_result import DeploymentResult
+from Lightrun.Benchmarks.shared_modules.gcf_models.gcf_deploy_extended_parameters import GCFDeployCommandCompleteParametersList
 
 
 def wait_before_retry(attempt: int) -> int:
@@ -41,40 +42,58 @@ def wait_before_retry(attempt: int) -> int:
 
 class DeployFunctionTask:
     """Task to deploy a single Cloud Function."""
-    
-    def __init__(
-        self,
-        function_name: str,
-        display_name: str,
-        region: str,
-        runtime: str,
-        entry_point: str,
-        source_code_dir: Path,
-        project: str,
-        env_vars: Dict[str, str],
-    ):
-        """
-        Initialize deploy task.
-        
-        Args:
-            function_name: The name of the function in GCP format
-            display_name: Display name for the function
-            region: GCP region to deploy to
-            index: Function index for logging purposes
-            lightrun_secret: Lightrun secret for environment variable
-            config: Configuration namespace with deployment settings
-            source_code_dir: path to a directory containing the function's source code
-        """
-        self.function_name = function_name
-        self.display_name = display_name
-        self.region = region
-        self.runtime = runtime
-        self.entry_point = entry_point
-        self.function_dir = source_code_dir
-        self.project = project
-        self.env_vars = env_vars
 
-    def execute(self) -> DeploymentResult:
+
+    def __init__(self, deployment_timeout_seconds: int = 600):
+        self.deployment_timeout_seconds = deployment_timeout_seconds
+
+    def deploy_gcp_function(
+            # only commonly used parameters, the entire list can be found in GCFDeployCommandExtendedParameters
+            self,
+            function_name: str,
+            display_name: str,
+            region: str,
+            runtime: str,
+            entry_point: str,
+            source_code_dir: Path,
+
+            # commonly used parameters with sane defaults
+            memory: str = "512Mi",
+            cpu: str = "2",
+            concurrency: int = 80,
+            max_instances: int = 1,
+            min_instances: int = 0,
+            timeout: int = 540,
+            project: str = "lightrun-temp",
+            allow_unauthenticated: bool = True,
+            deployment_timeout: int = 600,  # 10 minutes
+            quiet: bool = True,
+            gen2: bool = True,
+            env_vars: Dict[str, str] = None,
+            **kwargs
+    ):
+
+        self.deploy_with_extended_parameters(GCFDeployCommandCompleteParametersList.create(function_name,
+                                                                                           display_name,
+                                                                                           region,
+                                                                                           runtime,
+                                                                                           entry_point,
+                                                                                           source_code_dir,
+                                                                                           memory,
+                                                                                           cpu,
+                                                                                           concurrency,
+                                                                                           max_instances,
+                                                                                           min_instances,
+                                                                                           timeout,
+                                                                                           project,
+                                                                                           allow_unauthenticated,
+                                                                                           deployment_timeout,
+                                                                                           quiet,
+                                                                                           gen2,
+                                                                                           env_vars
+                                                                                           **kwargs))
+
+    def deploy_with_extended_parameters(self, extended_parameters: GCFDeployCommandCompleteParametersList) -> DeploymentResult:
         """Execute the deployment task with retry logic for rate limiting.
         
         Returns:
@@ -97,31 +116,13 @@ class DeployFunctionTask:
             attempt_start_time = time.time()
         
             try:
-                env_vars = ",".join([f"{key}={value}" for key,value in self.env_vars.items()])
-                # Deploy using gcloud
+                # Build gcloud command with all parameters
+                cmd = self._build_gcloud_command()
                 result = subprocess.run(
-                    [
-                        'gcloud', 'functions', 'deploy', self.function_name,
-                        '--gen2',
-                        f'--runtime={self.runtime}',
-                        f'--region={self.region}',
-                        f'--source={self.function_dir}',
-                        f'--entry-point={self.entry_point}',
-                        '--trigger-http',
-                        '--allow-unauthenticated',
-                        f'--set-env-vars={env_vars}',
-                        '--min-instances=0',
-                        '--max-instances=5',
-                        '--timeout=540',
-                        '--concurrency=80',
-                        '--memory=512Mi',
-                        '--cpu=2',
-                        f'--project={self.project}',
-                        '--quiet'
-                    ],
+                    cmd,
                     capture_output=True,
                     text=True,
-                    timeout=300  # 5 minute timeout per deployment
+                    timeout=self.params.deployment_timeout
                 )
                 
                 if result.returncode != 0:
@@ -138,7 +139,7 @@ class DeployFunctionTask:
                         if attempt < max_retries - 1:
                             retry_means = [30, 90, 120]
                             # Clean up error message for inline printing
-                            clean_error = error_msg.replace('\n', ' ').replace('\r', '').strip()[:50]
+                            clean_error = result.stderr.replace('\n', ' ').replace('\r', '').strip()[:50]
                             print(f"TRANSIENT ERROR ({clean_error}...), retrying in ...", end=" ", flush=True)
                             wait_time = wait_before_retry(attempt)
                             print(f"{wait_time}s (mean={retry_means[attempt]}s)...", end=" ", flush=True)
@@ -192,7 +193,7 @@ class DeployFunctionTask:
                     'gcloud', 'functions', 'describe', self.function_name,
                     f'--region={self.region}',
                     f'--gen2',
-                    f'--project={self.config.project}',
+                    f'--project={self.params.project}',
                     '--format=value(serviceConfig.uri)'
                 ],
                 capture_output=True,
@@ -201,7 +202,7 @@ class DeployFunctionTask:
             )
             
             url = url_result.stdout.strip() if url_result.returncode == 0 else None
-            
+    
             print(f"OK - URL: {url[:50]}..." if url else "OK (no URL)")
             
             return DeploymentResult(
@@ -220,3 +221,4 @@ class DeployFunctionTask:
                 error=f'Failed to get URL: {str(e)}',
                 used_region=self.region
             )
+[]
