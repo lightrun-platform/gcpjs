@@ -37,7 +37,7 @@ class ColdStartTestTask:
             # WaitForColdTask logic relies on querying metrics.
             try:
                 # We reuse the logic from GCPFunction which calls WaitForColdTask
-                time_to_cold = self.function.wait_for_cold(self.config, self.deployment_start_time)
+                time_to_cold = self.function.wait_for_cold(self.deployment_start_time, self.config.cold_check_delay, self.config.consecutive_cold_checks)
                 print(f"[{self.function.index:3d}] Request {i}: Confirmed cold after {time_to_cold/60:.1f}m")
                 
                 # Grace period? User output showed "Waiting 1 minute grace period".
@@ -62,9 +62,15 @@ class ColdStartTestTask:
             # I will instantiate it with num_requests=1 to reuse its logic (logging, error handling, result format)
             # OR just copy `_send_single_request`. `SendRequestTask` has `_send_single_request`.
             # Usage:
-            req_task = SendRequestTask(self.function, self.config)
-            # We enforce 1 request per task instance here
-            req_task.num_requests = 1
+            req_task = SendRequestTask(
+                function=self.function,
+                delay_between_requests=getattr(self.config, 'delay_between_requests', 10),
+                num_requests=1,  # We enforce 1 request per task instance here
+                skip_lightrun_action_setup=getattr(self.config, 'skip_lightrun_action_setup', False),
+                lightrun_api_key=getattr(self.config, 'lightrun_api_key', None),
+                lightrun_company_id=getattr(self.config, 'lightrun_company_id', None),
+                lightrun_api_url=getattr(self.config, 'lightrun_api_url', None),
+            )
             # We execute. It returns a summary dict.
             req_result = req_task.execute()
             

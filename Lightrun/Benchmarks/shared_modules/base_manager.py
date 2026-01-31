@@ -3,7 +3,6 @@
 import json
 import time
 import os
-import threading
 import atexit
 import signal
 from datetime import datetime, timezone
@@ -145,7 +144,15 @@ class BenchmarkManager[T](ABC):
         Returns:
             Task object with execute() method
         """
-        return SendRequestTask(function, self.config)
+        return SendRequestTask(
+            function=function,
+            delay_between_requests=getattr(self.config, 'delay_between_requests', 10),
+            num_requests=getattr(self.config, 'test_size', 10),
+            skip_lightrun_action_setup=getattr(self.config, 'skip_lightrun_action_setup', False),
+            lightrun_api_key=getattr(self.config, 'lightrun_api_key', None),
+            lightrun_company_id=getattr(self.config, 'lightrun_company_id', None),
+            lightrun_api_url=getattr(self.config, 'lightrun_api_url', None),
+        )
 
     def create_functions(self, regions: List[str]) -> List[GCPFunction]:
         """

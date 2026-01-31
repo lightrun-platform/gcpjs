@@ -80,9 +80,15 @@ class IterativeOverheadTestTask:
     def _run_single_iteration(self, iteration_num: int) -> Dict[str, Any]:
         """Run a single test pass."""
         # Ensure SendRequestTask doesn't add its own snapshots, as we manage them here
-        config_copy = copy.deepcopy(self.config)
-        config_copy.skip_lightrun_action_setup = True
-        task = SendRequestTask(self.function, config_copy)
+        task = SendRequestTask(
+            function=self.function,
+            delay_between_requests=getattr(self.config, 'delay_between_requests', 10),
+            num_requests=getattr(self.config, 'test_size', 10),
+            skip_lightrun_action_setup=True,  # We manage snapshots here
+            lightrun_api_key=getattr(self.config, 'lightrun_api_key', None),
+            lightrun_company_id=getattr(self.config, 'lightrun_company_id', None),
+            lightrun_api_url=getattr(self.config, 'lightrun_api_url', None),
+        )
         result = task.execute()
         result['iteration'] = iteration_num
         return result

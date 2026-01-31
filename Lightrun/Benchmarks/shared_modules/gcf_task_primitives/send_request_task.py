@@ -4,8 +4,6 @@ import requests
 import time
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
-import argparse
-from shared_modules.cli_parser import ParsedCLIArguments
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
 from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI
 
@@ -13,21 +11,38 @@ from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI
 class SendRequestTask:
     """Task to send multiple requests to a Cloud Function."""
 
-    def __init__(self, function: GCPFunction, config: ParsedCLIArguments):
+    def __init__(
+        self, 
+        function: GCPFunction,
+        delay_between_requests: int,
+        num_requests: int,
+        skip_lightrun_action_setup: bool,
+        lightrun_api_key: Optional[str] = None,
+        lightrun_company_id: Optional[str] = None,
+        lightrun_api_url: Optional[str] = None,
+    ):
         """
         Initialize send request task.
 
         Args:
             function: GCPFunction object including URL and Index
-            config: Configuration namespace with test parameters
+            delay_between_requests: Seconds to wait between requests
+            num_requests: Number of requests to send
+            skip_lightrun_action_setup: If True, skip setting up Lightrun actions
+            lightrun_api_key: API key for Lightrun API
+            lightrun_company_id: Company ID for Lightrun API
+            lightrun_api_url: Optional custom API URL for Lightrun
         """
         self.function = function
         self.url = function.url
         self.function_index = function.index
         self.display_name = function.display_name
-        self.config = config
-        self.delay_between_requests = getattr(config, 'delay_between_requests', 10)
-        self.num_requests = getattr(config, 'test_size', 10)
+        self.delay_between_requests = delay_between_requests
+        self.num_requests = num_requests
+        self.skip_lightrun_action_setup = skip_lightrun_action_setup
+        self.lightrun_api_key = lightrun_api_key
+        self.lightrun_company_id = lightrun_company_id
+        self.lightrun_api_url = lightrun_api_url
 
         # Determine if this is a "With Lightrun" function
         self.is_lightrun = function.is_lightrun_variant
@@ -92,7 +107,7 @@ class SendRequestTask:
                     else:
                         print(f"[{self.function_index:3d}] Request 1/{self.num_requests}: Cold={is_cold}, Duration={duration_s:.3f}s")
 
-                    if self.is_lightrun and not getattr(self.config, 'skip_lightrun_action_setup', False):
+                    if self.is_lightrun and not self.skip_lightrun_action_setup:
                         self._add_lightrun_snapshot()
                 else:
                     warm_request_durations += duration
@@ -127,9 +142,9 @@ class SendRequestTask:
     def _add_lightrun_snapshot(self):
         """Add a Lightrun snapshot to the function's agent."""
         lightrun_api = LightrunAPI(
-            api_key=getattr(self.config, 'lightrun_api_key', ''),
-            company_id=getattr(self.config, 'lightrun_company_id', ''),
-            api_url=getattr(self.config, 'lightrun_api_url', None)
+            api_key=self.lightrun_api_key or '',
+            company_id=self.lightrun_company_id or '',
+            api_url=self.lightrun_api_url
         )
 
         agent_id = lightrun_api.get_agent_id(self.display_name)

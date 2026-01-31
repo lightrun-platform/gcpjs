@@ -3,8 +3,6 @@
 import subprocess
 import time
 from typing import Optional
-import argparse
-from shared_modules.cli_parser import ParsedCLIArguments
 import json
 import requests
 from datetime import datetime, timezone, timedelta
@@ -19,19 +17,29 @@ class ColdStartDetectionError(Exception):
 class WaitForColdTask:
     """Task to wait for a single Cloud Function to become cold."""
     
-    def __init__(self, function_name: str, region: str, config: ParsedCLIArguments):
+    def __init__(
+        self, 
+        function_name: str, 
+        region: str, 
+        project: str,
+        cold_check_delay: int,
+        consecutive_cold_checks: int,
+    ):
         """
         Initialize wait for cold task for a single function.
         
         Args:
             function_name: Name of the function in GCP format
             region: Region where function is deployed
-            index: Function index for logging purposes
-            config: Configuration namespace with project settings.
+            project: GCP project ID
+            cold_check_delay: Seconds to wait between cold checks
+            consecutive_cold_checks: Number of consecutive cold checks required
         """
         self.function_name = function_name
         self.region = region
-        self.config = config
+        self.project = project
+        self.cold_check_delay = cold_check_delay
+        self.consecutive_cold_checks = consecutive_cold_checks
     
     def check_function_instances(self) -> int:
         """
@@ -48,7 +56,7 @@ class WaitForColdTask:
                 [
                     'gcloud', 'run', 'services', 'describe', self.function_name,
                     f'--region={self.region}',
-                    f'--project={self.config.project}',
+                    f'--project={self.project}',
                     '--format=value(status.observedGeneration,status.conditions[0].status)',
                     '--platform=managed'
                 ],
@@ -96,7 +104,7 @@ class WaitForColdTask:
             access_token = token_result.stdout.strip()
             filter_encoded = quote(filter_str)
             api_url = (
-                f'https://monitoring.googleapis.com/v3/projects/{self.config.project}/'
+                f'https://monitoring.googleapis.com/v3/projects/{self.project}/'
                 f'timeSeries?filter={filter_encoded}&interval.startTime={start_time_str}'
                 f'&interval.endTime={end_time_str}'
             )
@@ -225,8 +233,8 @@ class WaitForColdTask:
         max_wait_seconds = max_poll_minutes * 60
         
         # Use configurable polling parameters
-        poll_interval = getattr(self.config, 'cold_check_delay', 30)
-        required_cold_confirmations = getattr(self.config, 'consecutive_cold_checks', 3)
+        poll_interval = self.cold_check_delay
+        required_cold_confirmations = self.consecutive_cold_checks
         
         # Calculate total duration for display
         required_cold_duration_seconds = required_cold_confirmations * poll_interval

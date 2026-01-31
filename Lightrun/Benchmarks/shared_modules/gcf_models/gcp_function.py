@@ -92,12 +92,14 @@ class GCPFunction:
     def delete(self):
         return DeleteFunctionTask(self).execute()
 
-    def wait_for_cold(self, config, deployment_start_time):
+    def wait_for_cold(self, deployment_start_time, cold_check_delay, consecutive_cold_checks):
         """Wait for the function to become cold."""
         # Import here to avoid circular import
         from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.wait_for_cold_task import WaitForColdTask
         return WaitForColdTask(
             function_name=self.name,
             region=self.region,
-            config=config
+            project=self.project,
+            cold_check_delay=cold_check_delay,
+            consecutive_cold_checks=consecutive_cold_checks,
         ).execute(deployment_start_time)
