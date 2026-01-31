@@ -69,24 +69,24 @@ class GCPFunction:
 
         # Deploy the function
         result = DeployFunctionTask(deployment_timeout_seconds).deploy_gcp_function(
-                                                                function_name,
-                                                                region,
-                                                                runtime,
-                                                                entry_point,
-                                                                source_code_dir,
-                                                                memory,
-                                                                cpu,
-                                                                concurrency,
-                                                                max_instances,
-                                                                min_instances,
-                                                                timeout,
-                                                                project,
-                                                                allow_unauthenticated,
-                                                                deployment_timeout,
-                                                                quiet,
-                                                                gen2,
-                                                                env_vars,
-                                                                **self.kwargs)
+                                                                function_name=self.name,
+                                                                region=self.region,
+                                                                runtime=self.runtime,
+                                                                entry_point=self.entry_point,
+                                                                source_code_dir=self.function_source_code_dir,
+                                                                memory=self.memory,
+                                                                cpu=self.cpu,
+                                                                concurrency=self.concurrency,
+                                                                max_instances=self.max_instances,
+                                                                min_instances=self.min_instances,
+                                                                timeout=self.timeout,
+                                                                project=self.project,
+                                                                allow_unauthenticated=self.allow_unauthenticated,
+                                                                deployment_timeout=self.deployment_timeout,
+                                                                quiet=self.quiet,
+                                                                gen2=self.gen2,
+                                                                env_vars=self.env_vars,
+                                                                **self.kwargs if self.kwargs else {})
         if result.success:
             self.deployment_result = result
             self.is_deployed = True

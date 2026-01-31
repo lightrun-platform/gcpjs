@@ -5,7 +5,7 @@ import time
 import random
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional, List
+from typing import Dict
 
 from Lightrun.Benchmarks.shared_modules.gcf_models.deployment_result import DeploymentResult
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcf_deploy_extended_parameters import GCFDeployCommandParameters
@@ -150,7 +150,7 @@ class DeployFunctionTask:
                     'gcloud', 'functions', 'describe', ep.function_name,
                     f'--region={ep.region}',
                     f'--gen2',
-                    f'--project={ep.params.project}',
+                    f'--project={ep.project}',
                     '--format=value(serviceConfig.uri)'
                 ],
                 capture_output=True,
@@ -204,21 +204,21 @@ class DeployFunctionTask:
             **kwargs
     ) -> DeploymentResult:
 
-        return self.deploy_with_extended_gcf_parameters(GCFDeployCommandParameters.create(function_name,
-                                                                                          region,
-                                                                                          runtime,
-                                                                                          entry_point,
-                                                                                          source_code_dir,
-                                                                                          memory,
-                                                                                          cpu,
-                                                                                          concurrency,
-                                                                                          max_instances,
-                                                                                          min_instances,
-                                                                                          timeout,
-                                                                                          project,
-                                                                                          allow_unauthenticated,
-                                                                                          deployment_timeout,
-                                                                                          quiet,
-                                                                                          gen2,
-                                                                                          env_vars,
+        return self.deploy_with_extended_gcf_parameters(GCFDeployCommandParameters.create(function_name=function_name,
+                                                                                          region=region,
+                                                                                          runtime=runtime,
+                                                                                          entry_point=entry_point,
+                                                                                          source_code_dir=source_code_dir,
+                                                                                          memory=memory,
+                                                                                          cpu=cpu,
+                                                                                          concurrency=concurrency,
+                                                                                          max_instances=max_instances,
+                                                                                          min_instances=min_instances,
+                                                                                          timeout=timeout,
+                                                                                          project=project,
+                                                                                          allow_unauthenticated=allow_unauthenticated,
+                                                                                          deployment_timeout=deployment_timeout,
+                                                                                          quiet=quiet,
+                                                                                          gen2=gen2,
+                                                                                          env_vars=env_vars,
                                                                                           **kwargs))
