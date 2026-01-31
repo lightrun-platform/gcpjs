@@ -10,16 +10,14 @@ from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
 class DeleteFunctionTask:
     """Task to delete a single Cloud Function."""
     
-    def __init__(self, function: GCPFunction, config: ParsedCLIArguments):
+    def __init__(self, function: GCPFunction):
         """
         Initialize delete task.
         
         Args:
             function: GCPFunction object to delete
-            config: Configuration namespace with region and project
         """
         self.function = function
-        self.config = config
     
     def execute(self) -> Dict[str, Any]:
         """Execute the deletion task."""
@@ -28,8 +26,8 @@ class DeleteFunctionTask:
                 [
                     'gcloud', 'functions', 'delete', self.function.name,
                     f'--region={self.function.region}',
-                    '--gen2',
-                    f'--project={self.config.project}',
+                    {'--gen2' if function.gen2 else ''},
+                    f'--project={self.function.project}',
                     '--quiet'
                 ],
                 capture_output=True,

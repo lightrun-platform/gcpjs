@@ -5,11 +5,13 @@ from pathlib import Path
 
 from .deployment_result import DeploymentResult
 from ..cli_parser import ParsedCLIArguments
+from ..gcf_task_primitives.delete_function_task import DeleteFunctionTask
 
 
 @dataclass
 class GCPFunction:
     """Represents a Google Cloud Function instance throughout its lifecycle."""
+
     region: str
     name: str
     is_lightrun_variant: bool = False
@@ -23,17 +25,33 @@ class GCPFunction:
     test_result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     deployment_result: Optional[DeploymentResult] = None,
+
     runtime: str = None
     function_source_code_dir: Path = None
+    entry_point = None
 
-    def deploy(self, env_vars: Dict[str, str]) -> DeploymentResult:
+    # commonly used parameters with sane defaults
+    memory: str = "512Mi",
+    cpu: str = "2",
+    concurrency: int = 80,
+    max_instances: int = 1,
+    min_instances: int = 0,
+    timeout: int = 540,
+    project: str = "lightrun-temp",
+    allow_unauthenticated: bool = True,
+    deployment_timeout: int = 600,  # 10 minutes
+    quiet: bool = True,
+    gen2: bool = True,
+    env_vars: Dict[str, str] = None,
+    kwargs: Dict[str, Any] = None,
+
+    def deploy(self, deployment_timeout_seconds=600) -> DeploymentResult:
         """
-        Deploy this function.
+        Deploy this function. idempotent action - if the function was already deployed in the past it will not deploy
+        again but return the previous result.
 
         Args:
-            lightrun_secret: Lightrun secret for environment variable
-            config: Configuration namespace with deployment settings
-            function_source_code_dir: Directory containing the function source code
+            deployment_timeout_seconds: maximum time to wait for the function's deployment to complete successfully.
 
         Returns:
             DeploymentResult: Result of the deployment
@@ -50,16 +68,25 @@ class GCPFunction:
             )   
 
         # Deploy the function
-        deploy_task = DeployFunctionTask(
-            function_name=self.name,
-            display_name=self.name,
-            region=self.region,
-            lightrun_secret=self.lightrun_secret,
-            runtime=self.runtime,
-            entry_point=self.entry_point,
-            source_code_dir=function_source_code_dir
-        )
-        result = deploy_task.execute()
+        result = DeployFunctionTask(deployment_timeout_seconds).deploy_gcp_function(
+                                                                function_name,
+                                                                region,
+                                                                runtime,
+                                                                entry_point,
+                                                                source_code_dir,
+                                                                memory,
+                                                                cpu,
+                                                                concurrency,
+                                                                max_instances,
+                                                                min_instances,
+                                                                timeout,
+                                                                project,
+                                                                allow_unauthenticated,
+                                                                deployment_timeout,
+                                                                quiet,
+                                                                gen2,
+                                                                env_vars,
+                                                                **self.kwargs)
         if result.success:
             self.deployment_result = result
             self.is_deployed = True
@@ -72,6 +99,10 @@ class GCPFunction:
             self.error = result.error
         
         return result
+
+
+    def delete(self):
+        return DeleteFunctionTask(self).execute()
 
     def wait_for_cold(self, config, deployment_start_time):
         """Wait for the function to become cold."""

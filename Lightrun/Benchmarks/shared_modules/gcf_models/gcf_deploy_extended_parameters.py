@@ -1,6 +1,5 @@
 from pathlib import Path
-from typing import Dict, Optional, List
-from typing import Type, Any, TypeVar
+from typing import Dict, List, Type, Any, TypeVar, Optional
 
 
 T = TypeVar("T")
@@ -28,7 +27,7 @@ class NoPublicConstructor(type):
 
 
 
-class GCFDeployCommandCompleteParametersList(metaclass=NoPublicConstructor):
+class GCFDeployCommandParameters(metaclass=NoPublicConstructor):
     """A DTO representing all currently supported parameters for the 'gcloud deploy' command as of Jan. 2026.
     it is included mostly for comprehensiveness. """
 
@@ -37,7 +36,6 @@ class GCFDeployCommandCompleteParametersList(metaclass=NoPublicConstructor):
             self,
             # Mandatory params that don't have default and will fail the deployment if not actually set
             function_name: str,
-            display_name: str,
             region: str,
             runtime: str,
             entry_point: str,
@@ -140,7 +138,6 @@ class GCFDeployCommandCompleteParametersList(metaclass=NoPublicConstructor):
     ):
         # Mandatory params that don't have default and must be set to actually make the deployment work
         self.function_name = function_name,
-        self.display_name = display_name,
         self.region = region,
         self.runtime = runtime,
         self.entry_point = entry_point,
@@ -230,7 +227,6 @@ class GCFDeployCommandCompleteParametersList(metaclass=NoPublicConstructor):
     def create(cls,
                # Mandatory params that don't have default and will fail the deployment if not actually set
                function_name: str,
-               display_name: str,
                region: str,
                runtime: str,
                entry_point: str,
@@ -248,14 +244,13 @@ class GCFDeployCommandCompleteParametersList(metaclass=NoPublicConstructor):
                deployment_timeout: int,
                quiet: bool,
                gen2: bool,
-               env_vars: Dict[str, str] = None,
+               env_vars: Optional[Dict[str, str]] = None,
 
                # rest of parameters
                **kwargs
-               ) -> 'GCFDeployCommandCompleteParametersList':
+               ) -> 'GCFDeployCommandParameters':
 
         return cls(function_name=function_name,
-                   display_name=display_name,
                    region=region,
                    runtime=runtime,
                    entry_point=entry_point,
@@ -277,11 +272,10 @@ class GCFDeployCommandCompleteParametersList(metaclass=NoPublicConstructor):
     def build_gcloud_command(self) -> List[str]:
         """Build the gcloud functions deploy command with all specified parameters."""
 
-        for index, param in enumerate([self.function_name, self.display_name, self.region, self.runtime, self.entry_point, self.source_code_dir]):
+        for index, param in enumerate([self.function_name, self.region, self.runtime, self.entry_point, self.source_code_dir]):
             if param is None:
                 raise Exception(f'Missing mandatory parameter. index in the above list: {index}')
 
-        p = self.params  # Shorthand for readability
         cmd = ['gcloud', 'functions', 'deploy', self.function_name]
 
         # Basic configuration
@@ -294,7 +288,7 @@ class GCFDeployCommandCompleteParametersList(metaclass=NoPublicConstructor):
         cmd.extend([
             f'--runtime={self.runtime}',
             f'--region={self.region}',
-            f'--source={self.function_dir}',
+            f'--source={self.source_code_dir}',
             f'--entry-point={self.entry_point}',
             f'--project={self.project}',
         ])
