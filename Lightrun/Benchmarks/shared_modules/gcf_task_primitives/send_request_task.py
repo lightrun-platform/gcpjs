@@ -3,56 +3,34 @@
 import requests
 import time
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
-from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI
 
 
 class SendRequestTask:
-    """Task to send multiple requests to a Cloud Function."""
+    """Task to send a single request to a Cloud Function."""
 
-    def __init__(
-        self, 
-        function: GCPFunction,
-        delay_between_requests: int,
-        num_requests: int,
-        skip_lightrun_action_setup: bool,
-        lightrun_api_key: Optional[str] = None,
-        lightrun_company_id: Optional[str] = None,
-        lightrun_api_url: Optional[str] = None,
-    ):
+    def __init__(self, function: GCPFunction):
         """
         Initialize send request task.
 
         Args:
-            function: GCPFunction object including URL and Index
-            delay_between_requests: Seconds to wait between requests
-            num_requests: Number of requests to send
-            skip_lightrun_action_setup: If True, skip setting up Lightrun actions
-            lightrun_api_key: API key for Lightrun API
-            lightrun_company_id: Company ID for Lightrun API
-            lightrun_api_url: Optional custom API URL for Lightrun
+            function: GCPFunction object including URL
         """
         self.function = function
         self.url = function.url
-        self.function_index = function.index
-        self.display_name = function.display_name
-        self.delay_between_requests = delay_between_requests
-        self.num_requests = num_requests
-        self.skip_lightrun_action_setup = skip_lightrun_action_setup
-        self.lightrun_api_key = lightrun_api_key
-        self.lightrun_company_id = lightrun_company_id
-        self.lightrun_api_url = lightrun_api_url
 
-        # Determine if this is a "With Lightrun" function
-        self.is_lightrun = function.is_lightrun_variant
-
-    def _send_single_request(self, request_number: int) -> Dict[str, Any]:
-        """Send a single request and return the result."""
+    def execute(self, request_number: int = 1) -> Dict[str, Any]:
+        """
+        Send a single request and return the result.
+        
+        Args:
+            request_number: Optional request number to include in the result
+        """
         try:
-            start_time = time.time()
+            start_time = time.perf_counter()
             response = requests.get(self.url, timeout=60)
-            end_time = time.time()
+            end_time = time.perf_counter()
             latency_ns = (end_time - start_time) * 1_000_000_000
 
             if response.status_code == 200:
@@ -79,80 +57,3 @@ class SendRequestTask:
                 '_timestamp': datetime.now(timezone.utc).isoformat(),
                 '_url': self.url
             }
-
-    def execute(self) -> Dict[str, Any]:
-        """Execute the request task with multiple requests."""
-        all_results: List[Dict[str, Any]] = []
-        cold_start_duration = 0.0
-        warm_request_durations = 0.0
-        total_duration = 0.0
-
-        for i in range(1, self.num_requests + 1):
-            result = self._send_single_request(i)
-            all_results.append(result)
-
-            if not result.get('error'):
-                # Handle both Python (totalDuration) and Node.js (handlerRunTime) metric names
-                duration_str = result.get('totalDuration') or result.get('handlerRunTime')
-                duration = float(duration_str) if duration_str is not None else 0.0
-                total_duration += duration
-
-                if i == 1:
-                    cold_start_duration = duration
-                    is_cold = result.get('isColdStart', False)
-                    # Use higher precision if duration is small
-                    duration_s = duration / 1e9
-                    if duration_s < 0.1:
-                        print(f"[{self.function_index:3d}] Request 1/{self.num_requests}: Cold={is_cold}, Duration={duration/1e6:.3f}ms")
-                    else:
-                        print(f"[{self.function_index:3d}] Request 1/{self.num_requests}: Cold={is_cold}, Duration={duration_s:.3f}s")
-
-                    if self.is_lightrun and not self.skip_lightrun_action_setup:
-                        self._add_lightrun_snapshot()
-                else:
-                    warm_request_durations += duration
-                    if self.num_requests <= 5 or i % 5 == 0 or i == self.num_requests: # Reduce log noise for many requests
-                        duration_s = duration / 1e9
-                        if duration_s < 0.1:
-                            print(f"[{self.function_index:3d}] Request {i}/{self.num_requests}: Duration={duration/1e6:.3f}ms")
-                        else:
-                            print(f"[{self.function_index:3d}] Request {i}/{self.num_requests}: Duration={duration_s:.3f}s")
-            else:
-                print(f"[{self.function_index:3d}] Request {i}/{self.num_requests}: FAILED")
-
-            # Wait between requests (except after the last one)
-            if i < self.num_requests:
-                time.sleep(self.delay_between_requests)
-
-        # Aggregate results
-        first_result = all_results[0] if all_results else {}
-        return {
-            **first_result,  # Include first request's detailed data
-            '_function_index': self.function_index,
-            '_display_name': self.display_name,
-            '_all_request_results': all_results,
-            'totalDurationForColdStarts': cold_start_duration,
-            'totalDurationForWarmRequests': warm_request_durations,
-            'totalDuration': total_duration,
-            'handlerRunTime': first_result.get('handlerRunTime'), # Perpetuate the metric name
-            '_num_requests': self.num_requests,
-            '_num_successful_requests': sum(1 for r in all_results if not r.get('error')),
-        }
-
-    def _add_lightrun_snapshot(self):
-        """Add a Lightrun snapshot to the function's agent."""
-        lightrun_api = LightrunAPI(
-            api_key=self.lightrun_api_key or '',
-            company_id=self.lightrun_company_id or '',
-            api_url=self.lightrun_api_url
-        )
-
-        agent_id = lightrun_api.get_agent_id(self.display_name)
-        if agent_id:
-            lightrun_api.add_snapshot(
-                agent_id=agent_id,
-                filename="helloLightrun.js",
-                line_number=67,
-                max_hit_count=self.num_requests,
-            )
-
