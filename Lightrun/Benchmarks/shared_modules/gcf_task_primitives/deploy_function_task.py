@@ -1,5 +1,5 @@
 """Deploy task for Cloud Functions."""
-
+import logging
 import subprocess
 import time
 import random
@@ -46,6 +46,7 @@ class DeployFunctionTask:
 
 
     def __init__(self, deployment_timeout_seconds: int = 600):
+        self.logger = logging.getLogger(__name__)
         self.deployment_timeout_seconds = deployment_timeout_seconds
 
     def deploy_with_extended_gcf_parameters(self, extended_parameters: GCFDeployCommandParameters) -> DeploymentResult:
@@ -56,8 +57,7 @@ class DeployFunctionTask:
         """
 
         ep = extended_parameters
-        # env_vars = f"LIGHTRUN_SECRET={self.lightrun_secret},DISPLAY_NAME={self.display_name}"
-        print(f"[{ep.function_name}] Deploying {ep.function_name} to {ep.region}...", end=" ", flush=True)
+        self.logger.info(f"[{ep.function_name}] Deploying {ep.function_name} to {ep.region}")
 
         # Add small delay to avoid hitting rate limits (stagger deployments)
         # Delay based on function index to spread out requests
@@ -94,12 +94,10 @@ class DeployFunctionTask:
 
                     if any(trigger in error_msg_lower for trigger in retry_triggers):
                         if attempt < max_retries - 1:
-                            retry_means = [30, 90, 120]
-                            # Clean up error message for inline printing
-                            clean_error = result.stderr.replace('\n', ' ').replace('\r', '').strip()[:50]
-                            print(f"TRANSIENT ERROR ({clean_error}...), retrying in ...", end=" ", flush=True)
+                            error_msg = result.stderr.replace('\n', ' ').replace('\r', '').strip()[:50]
+                            self.logger.error(f"Experienced an error during deployment, retry {attempt+1}/{max_retries}. Reason: {error_msg}")
                             wait_time = wait_before_retry(attempt)
-                            print(f"{wait_time}s (mean={retry_means[attempt]}s)...", end=" ", flush=True)
+                            self.logger.info(f"waited {wait_time} seconds")
                             continue
 
                     print(f"FAILED: {result.stderr[:100]}")
@@ -118,17 +116,17 @@ class DeployFunctionTask:
 
             except subprocess.TimeoutExpired:
                 if attempt < max_retries - 1:
-                    retry_means = [30, 90, 120]
-                    print(f"TIMEOUT, retrying in ...", end=" ", flush=True)
+                    self.logger.error(f"Deployment timed out. attempt {attempt+1}/{max_retries}.")
                     wait_time = wait_before_retry(attempt)
-                    print(f"{wait_time}s (mean={retry_means[attempt]}s)...", end=" ", flush=True)
+                    self.logger.info(f"waited {wait_time} seconds")
                     continue
-                print("TIMEOUT")
-                return DeploymentResult(
-                    success=False,
-                    error='Deployment timed out after 5 minutes',
-                    used_region=ep.region
-                )
+                else:
+                    self.logger.info(f"Final timeout reached. {attempt+1}/{max_retries}. Returning deployment failure")
+                    return DeploymentResult(
+                        success=False,
+                        error='Deployment timed out after 5 minutes',
+                        used_region=ep.region
+                    )
             except Exception as e:
                 if attempt < max_retries - 1:
                     retry_means = [30, 90, 120]

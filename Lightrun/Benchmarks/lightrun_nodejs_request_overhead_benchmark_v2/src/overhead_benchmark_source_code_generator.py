@@ -59,14 +59,16 @@ class OverheadBenchmarkSourceCodeGenerator(SourceCodeGenerator):
 
     def _generate_dummy_functions(self) -> str:
         """Generate N dummy functions."""
-        functions = [f"""
-        let functionResult = 0;
-        
-        function calc(secret, salt) {{
-            // Synthetic load using crypto to avoid V8 optimization
-            return crypto.pbkdf2Sync(secret, salt, 1000, 64, 'sha512');
-        }}
-        """]
+        functions = [
+f"""
+let functionResult = 0;
+
+function calc(secret, salt) {{
+    // Synthetic load using crypto to avoid V8 optimization
+    return crypto.pbkdf2Sync(secret, salt, 1000, 64, 'sha512');
+}}
+"""
+        ]
 
         for i in range(1, self.test_size + 1):
             functions.append(f"""
