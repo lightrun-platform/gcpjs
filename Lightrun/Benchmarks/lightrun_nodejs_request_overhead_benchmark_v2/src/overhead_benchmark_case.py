@@ -4,6 +4,7 @@ from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
 from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import LightrunOverheadBenchmarkResult
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import MAX_GCP_FUNCTION_NAME_LENGTH
+from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 
 class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResult]):
     """Benchmark case for Lightrun overhead measurement."""
@@ -26,8 +27,9 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  cpu: str,
                  timeout: int,
                  deployment_timeout: int,
-                 gen2: bool):
-        super().__init__()
+                 gen2: bool,
+                 logger_factory: LoggerFactory):
+        super().__init__(logger_factory)
         self.benchmark_name = benchmark_name
         self.runtime = runtime
         self.region = region

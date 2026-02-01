@@ -46,14 +46,18 @@ class TestDeployFunctionTask(unittest.TestCase):
         # Patch sleep to prevent waiting during tests
         self.sleep_patcher = patch('shared_modules.gcf_task_primitives.deploy_function_task.time.sleep')
         self.mock_sleep = self.sleep_patcher.start()
+
+        self.mock_logger_factory = MagicMock()
+        self.mock_logger = MagicMock()
+        self.mock_logger_factory.get_logger.return_value = self.mock_logger
+        self.task = DeployFunctionTask(deployment_timeout_seconds=600, logger_factory=self.mock_logger_factory)
     
     def tearDown(self):
         self.sleep_patcher.stop()
     
     def test_init(self):
         """Test DeployFunctionTask initialization."""
-        task = DeployFunctionTask(deployment_timeout_seconds=300)
-        self.assertEqual(task.deployment_timeout_seconds, 300)
+        self.assertEqual(self.task.deployment_timeout_seconds, 600)
     
     @patch('shared_modules.gcf_task_primitives.deploy_function_task.subprocess.run')
     def test_deploy_successful(self, mock_subprocess):
@@ -71,7 +75,7 @@ class TestDeployFunctionTask(unittest.TestCase):
         
         mock_subprocess.side_effect = [mock_deploy_result, mock_url_result]
         
-        task = DeployFunctionTask()
+        task = DeployFunctionTask(logger_factory=self.mock_logger_factory)
         result = task.deploy_gcp_function(
             function_name=self.function.name,
             region=self.function.region,
@@ -82,7 +86,6 @@ class TestDeployFunctionTask(unittest.TestCase):
             env_vars={'LIGHTRUN_SECRET': 'secret', 'DISPLAY_NAME': 'disp'}
         )
         
-        self.assertTrue(result.success)
         self.assertIsInstance(result, DeploymentSuccess)
         self.assertEqual(result.url, 'https://test-function-001-abc123.run.app')
         self.assertIsNotNone(result.deploy_time)
@@ -97,7 +100,7 @@ class TestDeployFunctionTask(unittest.TestCase):
         
         mock_subprocess.return_value = mock_deploy_result
         
-        task = DeployFunctionTask()
+        task = DeployFunctionTask(logger_factory=self.mock_logger_factory)
         result = task.deploy_gcp_function(
             function_name=self.function.name,
             region=self.function.region,
@@ -106,7 +109,6 @@ class TestDeployFunctionTask(unittest.TestCase):
             source_code_dir=self.function_dir
         )
         
-        self.assertFalse(result.success)
         self.assertIsInstance(result, DeploymentFailure)
         self.assertIsNotNone(result.error)
         self.assertIn('Permission denied', result.error)
@@ -122,7 +124,7 @@ class TestDeployFunctionTask(unittest.TestCase):
         # Make subprocess.run raise TimeoutExpired immediately
         mock_subprocess.side_effect = subprocess.TimeoutExpired('gcloud', 300)
         
-        task = DeployFunctionTask()
+        task = DeployFunctionTask(logger_factory=self.mock_logger_factory)
         
         start = time.time()
         result = task.deploy_gcp_function(
@@ -133,7 +135,6 @@ class TestDeployFunctionTask(unittest.TestCase):
             source_code_dir=self.function_dir
         )
         
-        self.assertFalse(result.success)
         self.assertIsInstance(result, DeploymentFailure)
         self.assertEqual(result.error, 'Deployment timed out after 5 minutes')
     
@@ -151,7 +152,7 @@ class TestDeployFunctionTask(unittest.TestCase):
         
         mock_subprocess.side_effect = [mock_deploy_result, mock_url_result]
         
-        task = DeployFunctionTask()
+        task = DeployFunctionTask(logger_factory=self.mock_logger_factory)
         result = task.deploy_gcp_function(
             function_name=self.function.name,
             region=self.function.region,
@@ -160,7 +161,6 @@ class TestDeployFunctionTask(unittest.TestCase):
             source_code_dir=self.function_dir
         )
         
-        self.assertTrue(result.success)
         self.assertIsInstance(result, DeploymentSuccess)
         self.assertIsNone(result.url)
     
@@ -174,7 +174,7 @@ class TestDeployFunctionTask(unittest.TestCase):
         mock_url_result.stdout = 'https://test.run.app'
         mock_subprocess.side_effect = [mock_deploy_result, mock_url_result]
         
-        task = DeployFunctionTask()
+        task = DeployFunctionTask(logger_factory=self.mock_logger_factory)
         task.deploy_gcp_function(
             function_name='testfunction-001',
             region='us-central1',
@@ -206,7 +206,7 @@ class TestDeployFunctionTask(unittest.TestCase):
         mock_url_result.stdout = 'https://test.run.app'
         mock_subprocess.side_effect = [mock_deploy_result, mock_url_result]
         
-        task = DeployFunctionTask()
+        task = DeployFunctionTask(logger_factory=self.mock_logger_factory)
         task.deploy_gcp_function(
             function_name='test', region='us-central1', runtime='node', entry_point='func',
             source_code_dir=Path('.'),

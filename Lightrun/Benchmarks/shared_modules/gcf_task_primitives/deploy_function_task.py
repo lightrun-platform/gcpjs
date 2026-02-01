@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 
 from Lightrun.Benchmarks.shared_modules.gcf_models.deploy_function_result import DeploymentResult, DeploymentSuccess, DeploymentFailure
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcf_deploy_extended_parameters import GCFDeployCommandParameters
-from Lightrun.Benchmarks.shared_modules.logging_config import configure_logger
+from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 
 
 def wait_before_retry(attempt: int) -> int:
@@ -50,10 +50,9 @@ class DeployFunctionTask:
         'failed to initialize'
     ]
 
-    def __init__(self, deployment_timeout_seconds: int = 600):
-        self.logger = logging.getLogger(__name__)
+    def __init__(self, logger_factory: LoggerFactory, deployment_timeout_seconds: int = 600):
         self.deployment_timeout_seconds = deployment_timeout_seconds
-        configure_logger(self.logger)
+        self.logger = logger_factory.get_logger(__name__)
 
     def _execute_gcloud_command(self, cmd: List[str]) -> subprocess.CompletedProcess:
         """Executes the gcloud command."""

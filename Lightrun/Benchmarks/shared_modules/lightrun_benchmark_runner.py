@@ -11,6 +11,7 @@ from .benchmark_cases_generator import BenchmarkCasesGenerator
 from .benchmark_report_generator import BenchmarkReportGenerator
 from .benchmark_results_visualizer import BenchmarkResultsVisualizer
 from .cli_parser import CLIParser
+from .logger_factory import LoggerFactory
 
 class LightrunBenchmark[T]:
 
@@ -25,7 +26,6 @@ class LightrunBenchmark[T]:
 
         self.cli_parser = CLIParser(description=cli_description, formatter_class=argparse.RawDescriptionHelpFormatter, epilog=cli_epilog)
         self.benchmark_parameters = self.cli_parser.parse()
-        self.logger = logging.getLogger(__name__)
         self.cli_description = cli_description
         self.cli_epilog = cli_epilog
         self.benchmark_name = benchmark_name
@@ -35,6 +35,8 @@ class LightrunBenchmark[T]:
         self.benchmark_report_visualizer = report_visualizer
         self.test_results_dir = test_root_dir / 'benchmark_results' / self.benchmark_name / datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
         self.per_thread_logs_dir = self.test_results_dir / 'logs'
+        self.logger_factory = LoggerFactory(self.per_thread_logs_dir)
+        self.logger = self.logger_factory.get_logger(__name__)
         self.benchmark_manager = None
         self.benchmark_cases = None
         self.benchmark_results = None

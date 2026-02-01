@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
-from Lightrun.Benchmarks.shared_modules.logging_config import configure_logger
+from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 from typing import Union, Optional, List
 
 from Lightrun.Benchmarks.shared_modules.gcf_models.delete_function_result import DeleteFunctionResult, DeleteSuccess, DeleteFailure
@@ -11,7 +11,8 @@ import logging
 class BenchmarkCase[T](ABC):
     """A single unit of benchmark execution. self contains everything needed to run the benchmark case."""
 
-    def __init__(self):
+    def __init__(self, logger_factory: LoggerFactory):
+        self.logger_factory = logger_factory
         self._logger = None
         self.deploy_task: Optional[DeployFunctionTask] = None
         self.deployment_result: Optional[DeploymentResult] = None
@@ -24,8 +25,7 @@ class BenchmarkCase[T](ABC):
     @property
     def logger(self) -> logging.Logger:
         if self._logger is None:
-            self._logger = logging.getLogger(self.__class__.__name__ + "-" + self.name)
-            configure_logger(self._logger)
+            self._logger = self.logger_factory.get_logger(self.__class__.__name__ + "-" + self.name)
         return self._logger
 
     def log_error(self, e: Union[str,Exception]) -> None:
@@ -56,7 +56,7 @@ class BenchmarkCase[T](ABC):
     def run(self):
         self.log_info(f"Starting benchmark case: {self.name}")
         try:
-            self.deployment_result = self.gcp_function.deploy()
+            self.deployment_result = self.gcp_function.deploy(logger_factory=self.logger_factory)
             
             match self.deployment_result:
                 case DeploymentFailure(error=error):
@@ -70,7 +70,7 @@ class BenchmarkCase[T](ABC):
             self.log_error(e)
             self.errors.append(e)
         finally:
-            self.delete_result = self.gcp_function.delete()
+            self.delete_result = self.gcp_function.delete(logger_factory=self.logger_factory)
             
             summary = f"Finished benchmark case: {self.name}.\n"
 

@@ -6,22 +6,22 @@ from typing import Optional
 
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
 from Lightrun.Benchmarks.shared_modules.gcf_models.delete_function_result import DeleteFunctionResult, DeleteSuccess, DeleteFailure
-from Lightrun.Benchmarks.shared_modules.logging_config import configure_logger
+from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 
 
 class DeleteFunctionTask:
     """Task to delete a single Cloud Function."""
     
-    def __init__(self, function: GCPFunction):
+    def __init__(self, function: GCPFunction, logger_factory: LoggerFactory):
         """
         Initialize delete task.
         
         Args:
             function: GCPFunction object to delete
+            logger_factory: Factory to create logger
         """
         self.function = function
-        self.logger = logging.getLogger(self.__class__.__name__)
-        configure_logger(self.logger)
+        self.logger = logger_factory.get_logger(self.__class__.__name__)
         self.result = None
 
     @property

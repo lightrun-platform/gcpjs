@@ -9,11 +9,13 @@ from Lightrun.Benchmarks.shared_modules.cli_parser import ParsedCLIArguments
 from .overhead_benchmark_source_code_generator import OverheadBenchmarkSourceCodeGenerator
 from .overhead_benchmark_case import LightrunOverheadBenchmarkCase
 from .overhead_benchmark_result import LightrunOverheadBenchmarkResult
+from ...shared_modules.logger_factory import LoggerFactory
+
 
 class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOverheadBenchmarkResult]):
     """Generates benchmark cases for the Lightrun overhead benchmark."""
 
-    def _generate_benchmark_cases(self, benchmark_name: str, benchmark_config: ParsedCLIArguments, regions_allocation_order: Iterator[str]) -> List[BenchmarkCase[LightrunOverheadBenchmarkResult]]:
+    def _generate_benchmark_cases(self, benchmark_name: str, benchmark_config: ParsedCLIArguments, regions_allocation_order: Iterator[str], logger_factory: LoggerFactory) -> List[BenchmarkCase[LightrunOverheadBenchmarkResult]]:
         """
         Generate benchmark cases based on configuration.
         
@@ -75,7 +77,8 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
                                 cpu=cpu,
                                 timeout=benchmark_config.request_timeout,
                                 deployment_timeout=benchmark_config.deployment_timeout,
-                                gen2=is_gen2)
+                                gen2=is_gen2,
+                                logger_factory=logger_factory)
                             cases.append(case)
                 
         return cases

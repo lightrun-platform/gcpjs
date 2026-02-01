@@ -16,6 +16,7 @@ sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
 from ....shared_modules.gcf_task_primitives.delete_function_task import DeleteFunctionTask, DeleteSuccess, DeleteFailure
 from ....shared_modules.cli_parser import ParsedCLIArguments
+from unittest.mock import MagicMock
 
 
 class TestDeleteFunctionTask(unittest.TestCase):
@@ -35,10 +36,14 @@ class TestDeleteFunctionTask(unittest.TestCase):
         self.function.project = 'test-project'
         self.function.gen2 = True
         self.function_name = self.function.name
+
+        self.mock_logger_factory = MagicMock()
+        self.mock_logger = MagicMock()
+        self.mock_logger_factory.get_logger.return_value = self.mock_logger
     
     def test_init(self):
         """Test DeleteFunctionTask initialization."""
-        task = DeleteFunctionTask(self.function)
+        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
         
         self.assertEqual(task.function, self.function)
         
@@ -52,7 +57,7 @@ class TestDeleteFunctionTask(unittest.TestCase):
         mock_result.stderr = ''
         mock_subprocess.return_value = mock_result
         
-        task = DeleteFunctionTask(self.function)
+        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
         result = task.execute(timeout=120)
         
         
@@ -68,7 +73,7 @@ class TestDeleteFunctionTask(unittest.TestCase):
         mock_result.stderr = 'Function not found'
         mock_subprocess.return_value = mock_result
         
-        task = DeleteFunctionTask(self.function)
+        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
         result = task.execute(timeout=120)
         
         self.assertIsInstance(result, DeleteFailure)
@@ -82,7 +87,7 @@ class TestDeleteFunctionTask(unittest.TestCase):
         # Mock exception
         mock_subprocess.side_effect = Exception('Network error')
         
-        task = DeleteFunctionTask(self.function)
+        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
         result = task.execute(timeout=120)
         
         self.assertIsInstance(result, DeleteFailure)
@@ -97,7 +102,7 @@ class TestDeleteFunctionTask(unittest.TestCase):
         mock_result.returncode = 0
         mock_subprocess.return_value = mock_result
         
-        task = DeleteFunctionTask(self.function)
+        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
         task.execute(timeout=120)
         
         # Check delete command structure
@@ -123,7 +128,7 @@ class TestDeleteFunctionTask(unittest.TestCase):
         mock_result.stderr = long_error
         mock_subprocess.return_value = mock_result
         
-        task = DeleteFunctionTask(self.function)
+        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
         result = task.execute(timeout=120)
         
         self.assertLessEqual(len(result.stderr), 200)
@@ -136,7 +141,7 @@ class TestDeleteFunctionTask(unittest.TestCase):
         
         mock_subprocess.side_effect = subprocess.TimeoutExpired('gcloud', 60)
         
-        task = DeleteFunctionTask(self.function)
+        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
         result = task.execute(timeout=120)
         
         self.assertIsInstance(result, DeleteFailure)
