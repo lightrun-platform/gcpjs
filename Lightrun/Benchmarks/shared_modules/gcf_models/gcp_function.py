@@ -32,16 +32,16 @@ class GCPFunction:
     env_vars: Dict[str, str] = None,
     kwargs: Dict[str, Any] = None,
 
-    # other properties
-    url: Optional[str] = None
-    deployment_duration_seconds: Optional[float] = None
-    deployment_duration_nanoseconds: Optional[int] = None
-    deploy_time: Optional[str] = None
-    time_to_cold_seconds: Optional[float] = None
-    time_to_cold_minutes: Optional[float] = None
-    test_result: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
-    deployment_result: Optional[DeploymentResult] = None,
+    # other properties - internal state, excluded from init
+    url: Optional[str] = field(init=False, default=None)
+    deployment_duration_seconds: Optional[float] = field(init=False, default=None)
+    deployment_duration_nanoseconds: Optional[int] = field(init=False, default=None)
+    deploy_time: Optional[str] = field(init=False, default=None)
+    time_to_cold_seconds: Optional[float] = field(init=False, default=None)
+    time_to_cold_minutes: Optional[float] = field(init=False, default=None)
+    test_result: Optional[Dict[str, Any]] = field(init=False, default=None)
+    error: Optional[str] = field(init=False, default=None)
+    deployment_result: Optional[DeploymentResult] = field(init=False, default=None)
 
 
     @property
