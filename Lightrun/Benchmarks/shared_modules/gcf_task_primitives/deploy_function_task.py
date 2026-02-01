@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict
 
-from Lightrun.Benchmarks.shared_modules.gcf_models.deployment_result import DeploymentResult
+from Lightrun.Benchmarks.shared_modules.gcf_models.deploy_function_result import DeploymentResult
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcf_deploy_extended_parameters import GCFDeployCommandParameters
 
 

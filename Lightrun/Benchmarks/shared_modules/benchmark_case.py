@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
-from typing import Union
-from gcf_models.deployment_result import DeploymentResult
-from gcf_task_primitives.delete_function_task import DeleteFunctionTask
+from typing import Union, Optional, List
+
+from Lightrun.Benchmarks.shared_modules.gcf_models.delete_function_result import DeleteFunctionResult
+from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task import DeployFunctionTask
+from gcf_models.deploy_function_result import DeploymentResult
 import logging
 
 class BenchmarkCase[T](ABC):
@@ -10,11 +12,12 @@ class BenchmarkCase[T](ABC):
 
     def __init__(self):
         self.logger = logging.getLogger(BenchmarkCase.__class__.__name__ + "-" + self.name)
-        self.deploy_task = None
-        self.deployment_result = None
-        self.delete_result = None
-        self.benchmark_result = None
-        self.errors = []
+        self.deploy_task: Optional[DeployFunctionTask] = None
+        self.deployment_result: Optional[DeploymentResult] = None
+        self.delete_result: Optional[DeleteFunctionResult] = None
+        self.benchmark_result: Optional[T] = None
+        self.errors: List[Exception] = []
+        self.summary: Optional[str] = None
 
     def log_error(self, e: Union[str,Exception]) -> None:
         self.logger.error(e)
@@ -38,7 +41,7 @@ class BenchmarkCase[T](ABC):
         pass
 
     @abstractmethod
-    def execute_benchmark(self) -> DeploymentResult:
+    def execute_benchmark(self) -> T:
         pass
 
     def run(self):
@@ -56,8 +59,7 @@ class BenchmarkCase[T](ABC):
             self.delete_result = self.gcp_function.delete()
             
             summary = f"Finished benchmark case: {self.name}.\n"
-            
-            # Deployment result - always shown if attempted
+
             if self.deployment_result is None:
                 summary += "Deployment result: deployment not attempted or info is missing"
             else:
@@ -84,13 +86,13 @@ class BenchmarkCase[T](ABC):
                         summary += "Delete result: "
                         if not self.delete_result.success:
                             summary += f"Failure\n"
-                            summary += f"Error: {self.delete_result.error}\n"
+                            summary += f"Error: {str(self.delete_result.error)}\n"
+                            summary += f"Stderr: {self.delete_result.stderr}\n"
+                        else:
+                            summary += f"Success\n"
 
+            self.summary = summary
             self.log_info(summary)
-            
-            # Log delete errors separately as errors
-            if self.delete_result and not self.delete_result['success']:
-                self.log_error(f"Failed to delete function {self.delete_result['function_name']}: {self.delete_result['error']}")
 
 
 

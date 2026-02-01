@@ -20,7 +20,6 @@ class LightrunBenchmark[T]:
                  benchmark_name: str,
                  test_root_dir: Path,
                  benchmark_cases_generator: BenchmarkCasesGenerator[T],
-                 # benchmark_manager: BenchmarkManager,
                  report_generator: BenchmarkReportGenerator[T],
                  report_visualizer: BenchmarkResultsVisualizer[T]):
 
@@ -32,7 +31,6 @@ class LightrunBenchmark[T]:
         self.benchmark_name = benchmark_name
         self.test_root_dir = test_root_dir
         self.benchmark_cases_generator = benchmark_cases_generator
-        # self.benchmark_manager = benchmark_manager
         self.benchmark_report_generator = report_generator
         self.benchmark_report_visualizer = report_visualizer
         self.test_results_dir = test_root_dir / 'benchmark_results' / self.benchmark_name / datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
@@ -51,11 +49,10 @@ class LightrunBenchmark[T]:
         self.logger.info(f"Benchmark results directory: {self.test_results_dir}")
 
         self.benchmark_cases = self.benchmark_cases_generator.generate_benchmark_cases(self.benchmark_name, self.benchmark_parameters)
-        # self.logger = ThreadSafeBenchmarkLogger.create(self.per_thread_logs_dir, [case.get_gcp_function().name for case in self.benchmark_cases])
         self.benchmark_manager = BenchmarkManager(self.benchmark_parameters.num_workers)
-        self.benchmark_results = self.benchmark_manager.run(self.benchmark_cases)
-        self.benchmark_report = self.benchmark_report_generator.generate_report(self.benchmark_results)
-        self.benchmark_report_visualizations = self.benchmark_report_visualizer.create_visualizations(self.benchmark_report)
+        self.benchmark_manager.run(self.benchmark_cases)
+        self.benchmark_report = self.benchmark_report_generator.generate_report(self.benchmark_cases, self.test_results_dir)
+        self.benchmark_report_visualizations = self.benchmark_report_visualizer.create_visualizations(self.benchmark_report, self.test_results_dir)
 
         self.logger.info("Benchmark Complete.")
         self.logger.info("Opening benchmark results.")

@@ -1,10 +1,8 @@
 """Delete task for Cloud Functions."""
 
 import subprocess
-from typing import Dict, Any, Optional
-import argparse
-from shared_modules.cli_parser import ParsedCLIArguments
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
+from Lightrun.Benchmarks.shared_modules.gcf_models.delete_function_result import DeleteFunctionResult
 
 
 class DeleteFunctionTask:
@@ -18,30 +16,33 @@ class DeleteFunctionTask:
             function: GCPFunction object to delete
         """
         self.function = function
-    
-    def execute(self) -> Dict[str, Any]:
+        self.result = None
+
+    @property
+    def stderr(self):
+        return self.result.stderr[:200] if self.result.stderr else None
+
+    def execute(self, timeout) -> DeleteFunctionResult:
         """Execute the deletion task."""
         try:
-            result = subprocess.run(
-                [
-                    'gcloud', 'functions', 'delete', self.function.name,
-                    f'--region={self.function.region}',
-                    {'--gen2' if function.gen2 else ''},
-                    f'--project={self.function.project}',
-                    '--quiet'
-                ],
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            return {
-                'function_name': self.function.name,
-                'success': result.returncode == 0,
-                'error': result.stderr[:200] if result.returncode != 0 else None
-            }
+
+            args = ['gcloud', 'functions', 'delete', self.function.name,
+                   f'--region={self.function.region}',
+                   f'--project={self.function.project}',
+                   '--quiet',
+                   ]
+            if self.function.gen2:
+                args.append('--gen2')
+
+            self.result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+
+            if self.result.returncode == 0:
+                return DeleteFunctionResult(function_name=self.function.name, success=True, error=None)
+
+            return DeleteFunctionResult(function_name=self.function.name,
+                                        success=False,
+                                        error=Exception(f"Failed to delete function: {self.function.name}"),
+                                        stderr=self.stderr)
+
         except Exception as e:
-            return {
-                'function_name': self.function.name,
-                'success': False,
-                'error': str(e)
-            }
+            return DeleteFunctionResult(function_name=self.function.name, success=False, error=e, stderr=self.stderr)

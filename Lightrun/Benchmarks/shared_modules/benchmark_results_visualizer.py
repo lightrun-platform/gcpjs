@@ -1,7 +1,6 @@
 
 from abc import ABC, abstractmethod
 from typing import List
-from gcf_models.benchmark_case_result import BenchmarkCaseResult
 from pathlib import Path
 
 class BenchmarkResultsVisualizer[T](ABC):
@@ -12,7 +11,7 @@ class BenchmarkResultsVisualizer[T](ABC):
         pass
 
     @abstractmethod
-    def create_visualizations(self, benchmark_results: List[BenchmarkCaseResult[T]]) -> Path:
-        """Creates the visualizations and saves them, returning the path to the visualizations file."""
+    def create_visualizations(self, benchmark_report: Path, save_path: Path) -> Path:
+        """Creates the visualizations and saves them in save_path, returning the path to the visualizations file."""
         pass
 

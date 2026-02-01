@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Any
 from pathlib import Path
 
-from .deployment_result import DeploymentResult
+from .deploy_function_result import DeploymentResult
 from ..gcf_task_primitives.delete_function_task import DeleteFunctionTask
 
 
@@ -89,8 +89,8 @@ class GCPFunction:
         return self.deployment_result
 
 
-    def delete(self):
-        return DeleteFunctionTask(self).execute()
+    def delete(self, delete_timeout_seconds=120):
+        return DeleteFunctionTask(self).execute(delete_timeout_seconds)
 
     def wait_for_cold(self, deployment_start_time, cold_check_delay, consecutive_cold_checks):
         """Wait for the function to become cold."""
