@@ -1,8 +1,15 @@
 import unittest
 import os
-import argparse
-import copy
-from shared_modules.cli_parser import MetadataArgumentParser
+from pathlib import Path
+import sys
+
+# Add parent directories to path
+# We need 'Benchmarks' dir in path to import 'shared_modules'
+benchmarks_dir = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(benchmarks_dir))
+
+from ..cli_parser import MetadataArgumentParser, CLIParser
+
 
 class TestMetadataArgumentParser(unittest.TestCase):
     def setUp(self):
@@ -102,8 +109,7 @@ class TestMetadataArgumentParser(unittest.TestCase):
 
     def test_cli_parser_integration(self):
         # This tests the actual CLIParser class which uses MetadataArgumentParser
-        from shared_modules.cli_parser import CLIParser
-        import sys
+
         
         # Mock sys.argv
         original_argv = sys.argv

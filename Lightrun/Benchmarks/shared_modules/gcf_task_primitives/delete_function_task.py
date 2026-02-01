@@ -20,7 +20,7 @@ class DeleteFunctionTask:
 
     @property
     def stderr(self):
-        return self.result.stderr[:200] if self.result.stderr else None
+        return self.result.stderr[:200] if self.result and self.result.stderr else None
 
     def execute(self, timeout) -> DeleteFunctionResult:
         """Execute the deletion task."""
@@ -37,7 +37,7 @@ class DeleteFunctionTask:
             self.result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
 
             if self.result.returncode == 0:
-                return DeleteFunctionResult(function_name=self.function.name, success=True, error=None)
+                return DeleteFunctionResult(function_name=self.function.name, success=True, error=None, stderr=None)
 
             return DeleteFunctionResult(function_name=self.function.name,
                                         success=False,

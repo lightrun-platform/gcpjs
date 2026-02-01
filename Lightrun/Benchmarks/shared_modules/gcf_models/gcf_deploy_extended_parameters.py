@@ -137,14 +137,14 @@ class GCFDeployCommandParameters(metaclass=NoPublicConstructor):
             remove_labels: Optional[List[str]] = None,
     ):
         # Mandatory params that don't have default and must be set to actually make the deployment work
-        self.function_name = function_name,
-        self.region = region,
-        self.runtime = runtime,
-        self.entry_point = entry_point,
-        self.source_code_dir = source_code_dir,
+        self.function_name = function_name
+        self.region = region
+        self.runtime = runtime
+        self.entry_point = entry_point
+        self.source_code_dir = source_code_dir
 
         # Env vars
-        self.env_vars = env_vars,
+        self.env_vars = env_vars
 
 
         # Basic configuration
@@ -252,7 +252,7 @@ class GCFDeployCommandParameters(metaclass=NoPublicConstructor):
                **kwargs
                ) -> 'GCFDeployCommandParameters':
 
-        return cls(function_name=function_name,
+        return cls._create(function_name=function_name,
                    region=region,
                    runtime=runtime,
                    entry_point=entry_point,

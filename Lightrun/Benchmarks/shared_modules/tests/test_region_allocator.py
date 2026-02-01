@@ -5,7 +5,12 @@ from pathlib import Path
 import sys
 
 # Add parent directory to path so we can import as a package
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Add parent directory to path so we can import as a package
+# We need 'Benchmarks' dir in path to import 'shared_modules'
+benchmarks_dir = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(benchmarks_dir))
+# We need root dir in path to import 'Lightrun.Benchmarks...'
+sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
 from shared_modules.gcf_models import GCPFunction
 from shared_modules.region_allocator import RegionAllocator
@@ -50,7 +55,7 @@ us-central1,Location C,0.7,5.0"""
         # First 20 should go to 'us-central1' (best).
         # Next 5 should go to 'us-east1' (second best).
 
-        functions = [GCPFunction(index=i, region=next(allocator_iter), base_name='test') for i in range(25)]
+        functions = [GCPFunction(name=f'test-{i}', region=next(allocator_iter)) for i in range(25)]
 
         # Verify assigned regions on functions
         c_functions = [f for f in functions if f.region == 'us-central1']

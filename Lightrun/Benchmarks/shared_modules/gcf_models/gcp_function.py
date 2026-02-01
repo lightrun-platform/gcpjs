@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 
 from .deploy_function_result import DeploymentResult
-from ..gcf_task_primitives.delete_function_task import DeleteFunctionTask
+
 
 
 @dataclass
@@ -90,6 +90,7 @@ class GCPFunction:
 
 
     def delete(self, delete_timeout_seconds=120):
+        from ..gcf_task_primitives.delete_function_task import DeleteFunctionTask
         return DeleteFunctionTask(self).execute(delete_timeout_seconds)
 
     def wait_for_cold(self, deployment_start_time, cold_check_delay, consecutive_cold_checks):
