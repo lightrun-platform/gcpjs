@@ -40,7 +40,7 @@ class LightrunBenchmark[T]:
         self.benchmark_results = None
         self.benchmark_report = None
         self.benchmark_report_visualizations = None
-        self.logger = None
+
 
 
     def run(self):

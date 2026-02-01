@@ -11,13 +11,20 @@ class BenchmarkCase[T](ABC):
     """A single unit of benchmark execution. self contains everything needed to run the benchmark case."""
 
     def __init__(self):
-        self.logger = logging.getLogger(BenchmarkCase.__class__.__name__ + "-" + self.name)
+        self._logger = None
         self.deploy_task: Optional[DeployFunctionTask] = None
         self.deployment_result: Optional[DeploymentResult] = None
         self.delete_result: Optional[DeleteFunctionResult] = None
         self.benchmark_result: Optional[T] = None
         self.errors: List[Exception] = []
         self.summary: Optional[str] = None
+
+
+    @property
+    def logger(self) -> logging.Logger:
+        if self._logger is None:
+            logging.getLogger(BenchmarkCase.__class__.__name__ + "-" + self.name)
+        return self._logger
 
     def log_error(self, e: Union[str,Exception]) -> None:
         self.logger.error(e)

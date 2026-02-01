@@ -18,19 +18,19 @@ class GCPFunction:
     entry_point: str
 
     # commonly used parameters with sane defaults
-    memory: str = "512Mi",
-    cpu: str = "2",
-    concurrency: int = 80,
-    max_instances: int = 1,
-    min_instances: int = 0,
-    timeout: int = 540,
-    project: str = "lightrun-temp",
-    allow_unauthenticated: bool = True,
-    deployment_timeout: int = 600,  # 10 minutes
-    quiet: bool = True,
-    gen2: bool = True,
-    env_vars: Dict[str, str] = None,
-    kwargs: Dict[str, Any] = None,
+    memory: str = "512Mi"
+    cpu: str = "2"
+    concurrency: int = 80
+    max_instances: int = 1
+    min_instances: int = 0
+    timeout: int = 540
+    project: str = "lightrun-temp"
+    allow_unauthenticated: bool = True
+    deployment_timeout: int = 600  # 10 minutes
+    quiet: bool = True
+    gen2: bool = True
+    env_vars: Dict[str, str] = None
+    kwargs: Dict[str, Any] = None
 
     # other properties - internal state, excluded from init
     url: Optional[str] = field(init=False, default=None)
