@@ -322,6 +322,18 @@ class CLIParser:
             action='store_true',
             help='Skip waiting for functions to become cold (default: False)'
         )
+
+        parser.add_argument(
+            '--lightrun-version',
+            type=str,
+            help='Lightrun package version'
+        )
+        parser.add_argument(
+            '--google-library-version',
+            type=str,
+            default='3.3.0',
+            help='Google Cloud Functions Framework version (default: ^3.3.0)'
+        )
         
         args = parser.parse_args()
         

@@ -6,30 +6,24 @@ from pathlib import Path
 from Lightrun.Benchmarks.shared_modules.source_code_generator import SourceCodeGenerator
 
 
-def _generate_package_json(is_lightrun: bool, lightrun_version: str, node_version: str, gcp_functions_version: str) -> str:
+def _generate_package_json(lightrun_version: str, node_version: str, gcp_functions_version: str) -> str:
     """
     Generate package.json content.
 
     Args:
-        is_lightrun: Whether to include lightrun dependency
         lightrun_version: Lightrun package version
-        node_version: Node.js engine version
         gcp_functions_version: Google Cloud Functions Framework version
 
     Returns:
         JSON string content for package.json
     """
     deps = {
-        "@google-cloud/functions-framework": gcp_functions_version
+        "@google-cloud/functions-framework": gcp_functions_version,
+        "lightrun": lightrun_version
     }
 
-    if is_lightrun:
-        deps["lightrun"] = lightrun_version
-        name = "hello-lightrun"
-        main = "helloLightrun.js"
-    else:
-        name = "hello-no-lightrun"
-        main = "helloNoLightrun.js"
+    name = "hello-lightrun"
+    main = "helloLightrun.js"
 
     package_data = {
         "name": name,
@@ -91,13 +85,12 @@ function function{i}() {{
             calls.append(f"    function{i}();")
         return "\n".join(calls)
 
-    def create_source_dir(self, output_dir: Path, is_lightrun: bool) -> Path:
+    def create_source_dir(self, output_dir: Path) -> Path:
         """
         Generate all necessary files for a variant.
         
         Args:
             output_dir: Directory to generate files in
-            is_lightrun: Whether this is the Lightrun variant
 
         Returns:
             Path to the generated source directory
@@ -105,16 +98,12 @@ function function{i}() {{
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Determine filenames
-        if is_lightrun:
-            filename = "helloLightrun.js"
-        else:
-            filename = "helloNoLightrun.js"
+        filename = "helloLightrun.js"
             
         # Generate package.json
         package_json_content = _generate_package_json(
-            is_lightrun, 
-            self.lightrun_version, 
-            self.node_version, 
+            self.lightrun_version,
+            self.node_version,
             self.gcp_functions_version
         )
         with open(output_dir / "package.json", "w") as f:
@@ -124,8 +113,7 @@ function function{i}() {{
         dummy_functions = self._generate_dummy_functions()
         function_calls = self._generate_function_calls()
         
-        if is_lightrun:
-            js_content = f"""
+        js_content = f"""
 const functions = require('@google-cloud/functions-framework');
 const lightrun = require('lightrun/gcp');
 const crypto = require('crypto');
@@ -163,28 +151,9 @@ let func = async (req, res) => {{
 
 functions.http('functionTest', lightrun.wrap(func));
 """
-        else:
-            js_content = f"""
-const functions = require('@google-cloud/functions-framework');
-const crypto = require('crypto');
-
-{dummy_functions}
-
-let func = async (req, res) => {{
-    const handlerStartTime = process.hrtime.bigint();
-{function_calls}
-    const handlerEndTime = process.hrtime.bigint();
-    res.send({{ 
-        handlerRunTime: (handlerEndTime - handlerStartTime).toString(),
-        message: 'Function execution complete'
-    }});
-}};
-
-functions.http('functionTest', func);
-"""
 
         with open(output_dir / filename, "w") as f:
             f.write(js_content)
             
-        print(f"Generated code in {output_dir} (Lightrun={is_lightrun}, n={self.test_size})")
+        print(f"Generated code in {output_dir} (n={self.test_size})")
         return output_dir

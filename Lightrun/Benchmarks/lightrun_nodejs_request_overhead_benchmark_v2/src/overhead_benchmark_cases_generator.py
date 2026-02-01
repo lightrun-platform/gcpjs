@@ -41,11 +41,13 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
             # Generate source code for this runtime
             generator = OverheadBenchmarkSourceCodeGenerator(
                 test_size=benchmark_config.test_size,
-                node_version=node_version
+                node_version=node_version,
+                lightrun_version=benchmark_config.lightrun_version,
+                gcp_functions_version=benchmark_config.google_library_version
             )
             
             source_dir = build_dir / runtime
-            generated_path = generator.create_source_dir(source_dir, is_lightrun=True)
+            generated_path = generator.create_source_dir(source_dir)
             
             for generation in benchmark_config.function_generations:
                 is_gen2 = (generation.lower() == 'gen2')
