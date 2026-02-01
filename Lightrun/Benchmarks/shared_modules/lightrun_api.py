@@ -222,3 +222,37 @@ class LightrunAPI:
         except Exception as e:
             print(f"Error fetching log: {e}")
         return None
+
+    def delete_snapshot(self, snapshot_id: str) -> bool:
+        """Delete a snapshot by ID."""
+        if not self.api_key or not self.company_id:
+            return False
+
+        try:
+            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots/{snapshot_id}"
+            response = self.session.delete(url, headers=self._get_headers(), timeout=10)
+            if response.status_code in [200, 204]:
+                print(f"    ✓ Snapshot deleted: {snapshot_id}")
+                return True
+            else:
+                print(f"    Warning: Failed to delete snapshot {snapshot_id}: {response.status_code} - {response.text[:100]}")
+        except Exception as e:
+            self._handle_api_error(e, "delete snapshot")
+        return False
+
+    def delete_log_action(self, log_id: str) -> bool:
+        """Delete a log action by ID."""
+        if not self.api_key or not self.company_id:
+            return False
+
+        try:
+            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs/{log_id}"
+            response = self.session.delete(url, headers=self._get_headers(), timeout=10)
+            if response.status_code in [200, 204]:
+                print(f"    ✓ Log action deleted: {log_id}")
+                return True
+            else:
+                print(f"    Warning: Failed to delete log {log_id}: {response.status_code} - {response.text[:100]}")
+        except Exception as e:
+            self._handle_api_error(e, "delete log")
+        return False

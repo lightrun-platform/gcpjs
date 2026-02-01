@@ -10,8 +10,8 @@ benchmarks_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(benchmarks_dir))
 sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
-from ....shared_modules.gcf_task_primitives.compound_request_task import CompoundRequestTask
-from ....shared_modules.gcf_models.gcp_function import GCPFunction
+from shared_modules.gcf_task_primitives.compound_request_task import CompoundRequestTask
+from shared_modules.gcf_models.gcp_function import GCPFunction
 
 
 class TestCompoundRequestTask(unittest.TestCase):
@@ -40,9 +40,9 @@ class TestCompoundRequestTask(unittest.TestCase):
         self.assertEqual(task.num_requests, 5)
         self.assertEqual(task.lightrun_api_key, 'key')
     
-    @patch('shared_modules.gcf_task_primitives.sequential_request_task.SendRequestTask')
-    @patch('shared_modules.gcf_task_primitives.sequential_request_task.time.sleep')
-    @patch('shared_modules.gcf_task_primitives.sequential_request_task.LightrunAPI') # Mock the API class
+    @patch('shared_modules.gcf_task_primitives.compound_request_task.SendRequestTask')
+    @patch('shared_modules.gcf_task_primitives.compound_request_task.time.sleep')
+    @patch('shared_modules.gcf_task_primitives.compound_request_task.LightrunAPI') # Mock the API class
     def test_execute_flow(self, mock_lightrun_api_cls, mock_sleep, mock_send_task_cls):
         """Test execution flow including looping and lightrun setup."""
         

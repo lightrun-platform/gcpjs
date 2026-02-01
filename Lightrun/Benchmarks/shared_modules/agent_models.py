@@ -13,7 +13,11 @@ class LightrunAction(ABC):
     expire_seconds: int
 
     @abstractmethod
-    def apply(self, agent_id: str, lightrun_api: LightrunAPI):
+    def apply(self, agent_id: str, lightrun_api: LightrunAPI) -> str:
+        pass
+
+    @abstractmethod
+    def remove(self, lightrun_api: LightrunAPI, action_id: str) -> bool:
         pass
 
 @dataclass(frozen=True)
@@ -23,14 +27,16 @@ class LogAction(LightrunAction):
     name: str = "LogAction"
 
 
-    def apply(self, agent_id: str, lightrun_api: LightrunAPI):
-        lightrun_api.add_log_action(agent_id=agent_id,
+    def apply(self, agent_id: str, lightrun_api: LightrunAPI) -> str:
+        return lightrun_api.add_log_action(agent_id=agent_id,
                                     filename=self.filename,
                                     line_number=self.line_number,
                                     message=self.log_message,
                                     max_hit_count=self.max_hit_count,
                                     expire_seconds=self.expire_seconds)
 
+    def remove(self, lightrun_api: LightrunAPI, action_id: str) -> bool:
+        return lightrun_api.delete_log_action(action_id)
 
 
 @dataclass(frozen=True)
@@ -38,9 +44,12 @@ class BreakpointAction(LightrunAction):
     """Action to set a snapshot/breakpoint at a specific location."""
     name: str = "BreakpointAction"
 
-    def apply(self, agent_id: str, lightrun_api: LightrunAPI):
-        lightrun_api.add_snapshot(agent_id=agent_id,
+    def apply(self, agent_id: str, lightrun_api: LightrunAPI) -> str:
+        return lightrun_api.add_snapshot(agent_id=agent_id,
                                   filename=self.filename,
                                   line_number=self.line_number,
                                   max_hit_count=self.max_hit_count,
                                   expire_seconds=self.expire_seconds)
+
+    def remove(self, lightrun_api: LightrunAPI, action_id: str) -> bool:
+        return lightrun_api.delete_snapshot(action_id)
