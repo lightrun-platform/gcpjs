@@ -52,12 +52,13 @@ def _fetch_carbon_data():
 
 class RegionAllocator:
     """Allocates Cloud Functions to regions based on carbon intensity."""
+
+    REGIONS_BY_CARBON_INTENSITY = sorted(_fetch_carbon_data(), key=lambda r: r['intensity'])
     
     def __init__(self, max_allocations_per_region: int = 20):
         self.regions: List[Dict[str, str]] = []
         self.max_allocations_per_region = max_allocations_per_region
-        self.regions = sorted(_fetch_carbon_data(), key=lambda r: r['intensity'])
 
     def __iter__(self):
-        return itertools.chain(*[[region['name']] * self.max_allocations_per_region for region in self.regions])
+        return itertools.chain(*[[region['name']] * self.max_allocations_per_region for region in RegionAllocator.REGIONS_BY_CARBON_INTENSITY])
 
