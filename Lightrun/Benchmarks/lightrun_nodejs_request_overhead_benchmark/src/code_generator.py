@@ -4,6 +4,42 @@ import json
 from pathlib import Path
 from typing import Dict, Any
 
+
+def _generate_package_json(is_lightrun: bool) -> str:
+    """
+    Generate package.json content.
+
+    Args:
+        is_lightrun: Whether to include lightrun dependency
+
+    Returns:
+        JSON string content for package.json
+    """
+    deps = {
+        "@google-cloud/functions-framework": "^3.3.0"
+    }
+
+    if is_lightrun:
+        deps["lightrun"] = "1.76.0"
+        name = "hello-lightrun"
+        main = "helloLightrun.js"
+    else:
+        name = "hello-no-lightrun"
+        main = "helloNoLightrun.js"
+
+    package_data = {
+        "name": name,
+        "version": "1.0.0",
+        "main": main,
+        "engines": {
+            "node": ">=20"
+        },
+        "dependencies": deps
+    }
+
+    return json.dumps(package_data, indent=2)
+
+
 class CodeGenerator:
     """Generates function code and package.json for benchmark variants."""
 
@@ -15,40 +51,6 @@ class CodeGenerator:
             test_file_length: Number of dummy function calls to generate
         """
         self.test_file_length = test_file_length
-
-    def _generate_package_json(self, is_lightrun: bool) -> str:
-        """
-        Generate package.json content.
-        
-        Args:
-            is_lightrun: Whether to include lightrun dependency
-            
-        Returns:
-            JSON string content for package.json
-        """
-        deps = {
-            "@google-cloud/functions-framework": "^3.3.0"
-        }
-        
-        if is_lightrun:
-            deps["lightrun"] = "1.76.0"
-            name = "hello-lightrun"
-            main = "helloLightrun.js"
-        else:
-            name = "hello-no-lightrun"
-            main = "helloNoLightrun.js"
-            
-        package_data = {
-            "name": name,
-            "version": "1.0.0",
-            "main": main,
-            "engines": {
-                "node": ">=20"
-            },
-            "dependencies": deps
-        }
-        
-        return json.dumps(package_data, indent=2)
 
     def _generate_dummy_functions(self) -> str:
         """Generate N dummy functions."""
@@ -90,7 +92,7 @@ function function{i}() {{
             filename = "helloNoLightrun.js"
             
         # Generate package.json
-        package_json_content = self._generate_package_json(is_lightrun)
+        package_json_content = _generate_package_json(is_lightrun)
         with open(output_dir / "package.json", "w") as f:
             f.write(package_json_content)
             
