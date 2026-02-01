@@ -1,9 +1,7 @@
 """Code generator for Request Overhead Benchmark."""
 
 import json
-from abc import ABC
 from pathlib import Path
-from typing import Dict, Any
 
 from Lightrun.Benchmarks.shared_modules.source_code_generator import SourceCodeGenerator
 
@@ -49,34 +47,33 @@ def _generate_package_json(is_lightrun: bool, lightrun_version: str, node_versio
 class OverheadBenchmarkSourceCodeGenerator(SourceCodeGenerator):
     """Generates function code and package.json for benchmark variants."""
 
-    def __init__(self, test_file_length: int, lightrun_version: str = "1.76.0", node_version: str = ">=20", gcp_functions_version: str = "^3.3.0"):
+    def __init__(self, test_size: int, lightrun_version: str, node_version: str, gcp_functions_version: str):
         """
         Initialize code generator.
         
         Args:
-            test_file_length: Number of dummy function calls to generate
+            test_size: Number of dummy function calls to generate
             lightrun_version: Lightrun package version
             node_version: Node.js engine version
             gcp_functions_version: Google Cloud Functions Framework version
         """
-        self.test_file_length = test_file_length
+        self.test_size = test_size
         self.lightrun_version = lightrun_version
         self.node_version = node_version
         self.gcp_functions_version = gcp_functions_version
 
     def _generate_dummy_functions(self) -> str:
         """Generate N dummy functions."""
-        functions = []
-        functions.append(f"""
+        functions = [f"""
         let functionResult = 0;
         
         function calc(secret, salt) {{
             // Synthetic load using crypto to avoid V8 optimization
             return crypto.pbkdf2Sync(secret, salt, 1000, 64, 'sha512');
         }}
-        """)
+        """]
 
-        for i in range(1, self.test_file_length + 1):
+        for i in range(1, self.test_size + 1):
             functions.append(f"""
 function function{i}() {{
     // Synthetic load using crypto to avoid V8 optimization
@@ -90,7 +87,7 @@ function function{i}() {{
     def _generate_function_calls(self) -> str:
         """Generate sequential calls to dummy functions."""
         calls = []
-        for i in range(1, self.test_file_length + 1):
+        for i in range(1, self.test_size + 1):
             calls.append(f"    function{i}();")
         return "\n".join(calls)
 
@@ -189,5 +186,5 @@ functions.http('functionTest', func);
         with open(output_dir / filename, "w") as f:
             f.write(js_content)
             
-        print(f"Generated code in {output_dir} (Lightrun={is_lightrun}, n={self.test_file_length})")
+        print(f"Generated code in {output_dir} (Lightrun={is_lightrun}, n={self.test_size})")
         return output_dir

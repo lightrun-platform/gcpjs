@@ -196,12 +196,6 @@ class CLIParser:
             help='Number of functions to deploy and test per variant (default: 100)'
         )
         parser.add_argument(
-            '--test-file-length',
-            type=int,
-            default=10,
-            help='Length of generated test file (number of dummy functions) (default: 10)'
-        )
-        parser.add_argument(
             '--lightrun-action-type',
             type=str,
             default='snapshot',

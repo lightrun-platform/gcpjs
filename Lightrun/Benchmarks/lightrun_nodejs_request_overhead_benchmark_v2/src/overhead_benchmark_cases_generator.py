@@ -40,7 +40,7 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
             
             # Generate source code for this runtime
             generator = OverheadBenchmarkSourceCodeGenerator(
-                test_file_length=benchmark_config.test_file_length,
+                test_size=benchmark_config.test_size,
                 node_version=node_version
             )
             
