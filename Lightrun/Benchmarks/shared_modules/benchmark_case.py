@@ -23,7 +23,7 @@ class BenchmarkCase[T](ABC):
     @property
     def logger(self) -> logging.Logger:
         if self._logger is None:
-            logging.getLogger(BenchmarkCase.__class__.__name__ + "-" + self.name)
+            self._logger = logging.getLogger(self.__class__.__name__ + "-" + self.name)
         return self._logger
 
     def log_error(self, e: Union[str,Exception]) -> None:
@@ -56,7 +56,7 @@ class BenchmarkCase[T](ABC):
         try:
             self.deployment_result = self.gcp_function.deploy(self.env_vars)
             if not self.deployment_result.success:
-                raise self.deployment_result.error
+                raise Exception(self.deployment_result.error)
             self.benchmark_result = self.execute_benchmark()
 
         except Exception as e:

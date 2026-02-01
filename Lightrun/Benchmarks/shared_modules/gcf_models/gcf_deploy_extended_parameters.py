@@ -283,6 +283,8 @@ class GCFDeployCommandParameters(metaclass=NoPublicConstructor):
         # Basic configuration
         if self.gen2:
             cmd.append('--gen2')
+        else:
+            cmd.append('--no-gen2')
         if self.ignore_file:
             cmd.append(f'--ignore-file={self.ignore_file}')
 
@@ -304,7 +306,7 @@ class GCFDeployCommandParameters(metaclass=NoPublicConstructor):
             cmd.append(f'--ingress-settings={self.ingress_settings}')
         if self.egress_settings:
             cmd.append(f'--egress-settings={self.egress_settings}')
-        if self.security_level:
+        if self.security_level and not self.gen2:
             cmd.append(f'--security-level={self.security_level}')
 
         # Performance & Scaling

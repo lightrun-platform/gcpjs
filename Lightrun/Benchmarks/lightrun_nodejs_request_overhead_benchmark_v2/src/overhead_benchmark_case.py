@@ -48,7 +48,8 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
             cpu=cpu,
             timeout=timeout,
             deployment_timeout=deployment_timeout,
-            gen2=gen2
+            gen2=gen2,
+            env_vars=self.env_vars
         )
 
     @property
