@@ -1,12 +1,14 @@
 from abc import ABC, abstractmethod
 from typing import Any
-from pathlib import Path
+
+from Lightrun.Benchmarks.shared_modules.gcf_models.generated_source_attributes import GeneratedSourceAttributes
+
 
 class SourceCodeGenerator(ABC):
     """Abstract base class for generating source code directories."""
 
     @abstractmethod
-    def create_source_dir(self, *args: Any, **kwargs: Any) -> Path:
+    def create_source_dir(self, *args: Any, **kwargs: Any) -> GeneratedSourceAttributes:
         """
         Create a source code directory.
         

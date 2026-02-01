@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+from Lightrun.Benchmarks.shared_modules.gcf_models.generated_source_attributes import GeneratedSourceAttributes
 from Lightrun.Benchmarks.shared_modules.source_code_generator import SourceCodeGenerator
 
 
@@ -85,7 +86,7 @@ function function{i}() {{
             calls.append(f"    function{i}();")
         return "\n".join(calls)
 
-    def create_source_dir(self, output_dir: Path) -> Path:
+    def create_source_dir(self, output_dir: Path) -> GeneratedSourceAttributes:
         """
         Generate all necessary files for a variant.
         
@@ -98,7 +99,8 @@ function function{i}() {{
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Determine filenames
-        filename = "helloLightrun.js"
+        filename = "benchmarkLightrun.js"
+        entry_point = "benchmarkLightrunOverhead"
             
         # Generate package.json
         package_json_content = _generate_package_json(
@@ -149,11 +151,11 @@ let func = async (req, res) => {{
     }});
 }};
 
-functions.http('functionTest', lightrun.wrap(func));
+functions.http('{entry_point}', lightrun.wrap(func));
 """
 
         with open(output_dir / filename, "w") as f:
             f.write(js_content)
             
         print(f"Generated code in {output_dir} (n={self.test_size})")
-        return output_dir
+        return GeneratedSourceAttributes(path=output_dir, entry_point=entry_point)

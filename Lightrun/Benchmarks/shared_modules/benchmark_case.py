@@ -54,7 +54,7 @@ class BenchmarkCase[T](ABC):
     def run(self):
         self.log_info(f"Starting benchmark case: {self.name}")
         try:
-            self.deployment_result = self.gcp_function.deploy(self.env_vars)
+            self.deployment_result = self.gcp_function.deploy()
             if not self.deployment_result.success:
                 raise Exception(self.deployment_result.error)
             self.benchmark_result = self.execute_benchmark()

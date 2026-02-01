@@ -1,11 +1,11 @@
 """GCPFunction model."""
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, ClassVar
 from pathlib import Path
 
 from .deploy_function_result import DeploymentResult
 
-
+MAX_GCP_FUNCTION_NAME_LENGTH = 63
 
 @dataclass
 class GCPFunction:

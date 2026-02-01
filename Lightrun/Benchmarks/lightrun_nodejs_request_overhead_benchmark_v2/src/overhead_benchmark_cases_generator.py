@@ -47,7 +47,7 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
             )
             
             source_dir = build_dir / runtime
-            generated_path = generator.create_source_dir(source_dir)
+            generated_source = generator.create_source_dir(source_dir)
             
             for generation in benchmark_config.function_generations:
                 is_gen2 = (generation.lower() == 'gen2')
@@ -58,18 +58,12 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
                         for num_actions in range(benchmark_config.test_size + 1):
                             region = next(regions_allocation_order)
                             
-                            # Construct unique name
-                            # sanitized values for name
-                            sanitized_mem = memory.lower()
-                            sanitized_cpu = cpu.replace('.', 'p')
-                            
-                            case_name = f"{benchmark_name}-{runtime}-{generation}-{sanitized_mem}-{sanitized_cpu}-cpu-{num_actions}actions-{region}"
-                            
                             case = LightrunOverheadBenchmarkCase(
-                                name=case_name,
+                                benchmark_name=benchmark_name,
                                 runtime=runtime,
                                 region=region,
-                                source_code_dir=generated_path,
+                                source_code_dir=generated_source.path,
+                                entry_point=generated_source.entry_point,
                                 num_actions=num_actions,
                                 action_type=benchmark_config.lightrun_action_type,
                                 lightrun_secret=benchmark_config.lightrun_secret,
@@ -81,8 +75,7 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
                                 cpu=cpu,
                                 timeout=benchmark_config.request_timeout,
                                 deployment_timeout=benchmark_config.deployment_timeout,
-                                gen2=is_gen2
-                            )
+                                gen2=is_gen2)
                             cases.append(case)
                 
         return cases
