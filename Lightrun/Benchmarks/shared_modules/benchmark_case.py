@@ -4,7 +4,7 @@ from typing import Union, Optional, List
 
 from Lightrun.Benchmarks.shared_modules.gcf_models.delete_function_result import DeleteFunctionResult
 from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task import DeployFunctionTask
-from gcf_models.deploy_function_result import DeploymentResult
+from Lightrun.Benchmarks.shared_modules.gcf_models.deploy_function_result import DeploymentResult
 import logging
 
 class BenchmarkCase[T](ABC):

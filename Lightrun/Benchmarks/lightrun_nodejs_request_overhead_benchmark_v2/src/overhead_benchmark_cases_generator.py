@@ -1,20 +1,14 @@
 import tempfile
 import re
 from pathlib import Path
-from typing import List, Optional, Iterator
-from dataclasses import dataclass
+from typing import List, Iterator
 
 from Lightrun.Benchmarks.shared_modules.benchmark_cases_generator import BenchmarkCasesGenerator
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.cli_parser import ParsedCLIArguments
-from .overhead_benchmark_case import LightrunOverheadBenchmarkCase
 from .overhead_benchmark_source_code_generator import OverheadBenchmarkSourceCodeGenerator
-
-@dataclass
-class LightrunOverheadBenchmarkResult:
-    """Result of a single Lightrun overhead benchmark case."""
-    success: bool
-    error: Optional[Exception] = None
+from .overhead_benchmark_case import LightrunOverheadBenchmarkCase
+from .overhead_benchmark_result import LightrunOverheadBenchmarkResult
 
 class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOverheadBenchmarkResult]):
     """Generates benchmark cases for the Lightrun overhead benchmark."""
