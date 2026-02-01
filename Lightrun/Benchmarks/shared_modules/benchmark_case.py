@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
+from Lightrun.Benchmarks.shared_modules.logging_config import configure_logger
 from typing import Union, Optional, List
 
-from Lightrun.Benchmarks.shared_modules.gcf_models.delete_function_result import DeleteFunctionResult
+from Lightrun.Benchmarks.shared_modules.gcf_models.delete_function_result import DeleteFunctionResult, DeleteSuccess, DeleteFailure
 from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task import DeployFunctionTask
-from Lightrun.Benchmarks.shared_modules.gcf_models.deploy_function_result import DeploymentResult
+from Lightrun.Benchmarks.shared_modules.gcf_models.deploy_function_result import DeploymentResult, DeploymentSuccess, DeploymentFailure
 import logging
 
 class BenchmarkCase[T](ABC):
@@ -24,6 +25,7 @@ class BenchmarkCase[T](ABC):
     def logger(self) -> logging.Logger:
         if self._logger is None:
             self._logger = logging.getLogger(self.__class__.__name__ + "-" + self.name)
+            configure_logger(self._logger)
         return self._logger
 
     def log_error(self, e: Union[str,Exception]) -> None:
@@ -55,9 +57,14 @@ class BenchmarkCase[T](ABC):
         self.log_info(f"Starting benchmark case: {self.name}")
         try:
             self.deployment_result = self.gcp_function.deploy()
-            if not self.deployment_result.success:
-                raise Exception(self.deployment_result.error)
-            self.benchmark_result = self.execute_benchmark()
+            
+            match self.deployment_result:
+                case DeploymentFailure(error=error):
+                    raise Exception(error)
+                case DeploymentSuccess():
+                    self.benchmark_result = self.execute_benchmark()
+                case _:
+                    raise Exception(f"Unknown deployment result type: {type(self.deployment_result)}")
 
         except Exception as e:
             self.log_error(e)
@@ -67,14 +74,13 @@ class BenchmarkCase[T](ABC):
             
             summary = f"Finished benchmark case: {self.name}.\n"
 
-            if self.deployment_result is None:
-                summary += "Deployment result: deployment not attempted or info is missing"
-            else:
-                summary += "Deployment result: "
-                if not self.deployment_result.success:
+            match self.deployment_result:
+                case None:
+                     summary += "Deployment result: deployment not attempted or info is missing"
+                case DeploymentFailure(error=error):
                     summary += f"Failure\n"
-                    summary += f"Error: {self.deployment_result.error}\n"
-                else:
+                    summary += f"Error: {error}\n"
+                case DeploymentSuccess():
                     summary += f"Success\n"
                     # Only show benchmark result if deployment succeeded
                     if self.benchmark_result is None:
@@ -87,16 +93,15 @@ class BenchmarkCase[T](ABC):
                         else:
                             summary += f"Success\n"
                     # only check delete state if the function was deployed, hence its in this nested else
-                    if self.delete_result is None:
-                        summary += "Delete result: delete was not attempted or info is missing"
-                    else:
-                        summary += "Delete result: "
-                        if not self.delete_result.success:
-                            summary += f"Failure\n"
-                            summary += f"Error: {str(self.delete_result.error)}\n"
-                            summary += f"Stderr: {self.delete_result.stderr}\n"
-                        else:
-                            summary += f"Success\n"
+                    match self.delete_result:
+                        case None:
+                            summary += "Delete result: delete was not attempted or info is missing"
+                        case DeleteFailure(error=error, stderr=stderr):
+                            summary += f"Delete result: Failure\n"
+                            summary += f"Error: {error}\n"
+                            summary += f"Stderr: {stderr}\n"
+                        case DeleteSuccess():
+                            summary += f"Delete result: Success\n"
 
             self.summary = summary
             self.log_info(summary)

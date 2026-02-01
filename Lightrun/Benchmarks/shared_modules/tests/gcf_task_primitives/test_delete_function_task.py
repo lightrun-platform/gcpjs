@@ -14,7 +14,7 @@ sys.path.insert(0, str(benchmarks_dir))
 # We need root dir in path to import 'Lightrun.Benchmarks...'
 sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
-from ....shared_modules.gcf_task_primitives.delete_function_task import DeleteFunctionTask
+from ....shared_modules.gcf_task_primitives.delete_function_task import DeleteFunctionTask, DeleteSuccess, DeleteFailure
 from ....shared_modules.cli_parser import ParsedCLIArguments
 
 
@@ -55,9 +55,9 @@ class TestDeleteFunctionTask(unittest.TestCase):
         task = DeleteFunctionTask(self.function)
         result = task.execute(timeout=120)
         
-        self.assertTrue(result.success)
+        
+        self.assertIsInstance(result, DeleteSuccess)
         self.assertEqual(result.function_name, self.function_name)
-        self.assertIsNone(result.error)
     
     @patch('shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
     def test_execute_deletion_failure(self, mock_subprocess):
@@ -71,7 +71,7 @@ class TestDeleteFunctionTask(unittest.TestCase):
         task = DeleteFunctionTask(self.function)
         result = task.execute(timeout=120)
         
-        self.assertFalse(result.success)
+        self.assertIsInstance(result, DeleteFailure)
         self.assertEqual(result.function_name, self.function_name)
         self.assertIsNotNone(result.error)
         self.assertIn('Function not found', result.stderr)
@@ -85,7 +85,7 @@ class TestDeleteFunctionTask(unittest.TestCase):
         task = DeleteFunctionTask(self.function)
         result = task.execute(timeout=120)
         
-        self.assertFalse(result.success)
+        self.assertIsInstance(result, DeleteFailure)
         self.assertEqual(result.function_name, self.function_name)
         self.assertIsNotNone(result.error)
         self.assertEqual(str(result.error), 'Network error')
@@ -110,8 +110,8 @@ class TestDeleteFunctionTask(unittest.TestCase):
         self.assertEqual(delete_args[3], self.function_name)
         self.assertIn('--gen2', delete_args)
         self.assertIn('--quiet', delete_args)
-        self.assertIn(f'--region={self.config.region}', delete_args)
-        self.assertIn(f'--project={self.config.project}', delete_args)
+        self.assertIn(f'--region={self.function.region}', delete_args)
+        self.assertIn(f'--project={self.function.project}', delete_args)
     
     @patch('shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
     def test_execute_error_message_truncation(self, mock_subprocess):
@@ -139,7 +139,7 @@ class TestDeleteFunctionTask(unittest.TestCase):
         task = DeleteFunctionTask(self.function)
         result = task.execute(timeout=120)
         
-        self.assertFalse(result.success)
+        self.assertIsInstance(result, DeleteFailure)
         self.assertIsNotNone(result.error)
         # Check for timeout-related error message (could be "timeout", "timed out", or "expired")
         error_msg = str(result.error).lower()

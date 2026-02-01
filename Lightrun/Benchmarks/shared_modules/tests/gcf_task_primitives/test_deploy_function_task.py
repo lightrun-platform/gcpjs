@@ -15,6 +15,7 @@ sys.path.insert(0, str(benchmarks_dir))
 sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
 from ....shared_modules.gcf_task_primitives.deploy_function_task import DeployFunctionTask
+from ....shared_modules.gcf_models.deploy_function_result import DeploymentSuccess, DeploymentFailure
 from ....shared_modules.cli_parser import ParsedCLIArguments
 from ....shared_modules.gcf_models.gcp_function import GCPFunction
 
@@ -36,7 +37,10 @@ class TestDeployFunctionTask(unittest.TestCase):
         self.function_index = 1
         self.function = GCPFunction(
             region='us-central1',
-            name='testfunction-001'
+            name='testfunction-001',
+            runtime='nodejs20',
+            entry_point='testFunction',
+            function_source_code_dir=self.function_dir
         )
         
         # Patch sleep to prevent waiting during tests
@@ -79,9 +83,9 @@ class TestDeployFunctionTask(unittest.TestCase):
         )
         
         self.assertTrue(result.success)
+        self.assertIsInstance(result, DeploymentSuccess)
         self.assertEqual(result.url, 'https://test-function-001-abc123.run.app')
         self.assertIsNotNone(result.deploy_time)
-        self.assertIsNone(result.error)
     
     @patch('shared_modules.gcf_task_primitives.deploy_function_task.subprocess.run')
     def test_deploy_failure(self, mock_subprocess):
@@ -103,7 +107,7 @@ class TestDeployFunctionTask(unittest.TestCase):
         )
         
         self.assertFalse(result.success)
-        self.assertIsNone(result.url)
+        self.assertIsInstance(result, DeploymentFailure)
         self.assertIsNotNone(result.error)
         self.assertIn('Permission denied', result.error)
     
@@ -130,8 +134,8 @@ class TestDeployFunctionTask(unittest.TestCase):
         )
         
         self.assertFalse(result.success)
+        self.assertIsInstance(result, DeploymentFailure)
         self.assertEqual(result.error, 'Deployment timed out after 5 minutes')
-        self.assertIsNone(result.url)
     
     @patch('shared_modules.gcf_task_primitives.deploy_function_task.subprocess.run')
     def test_deploy_url_retrieval_failure(self, mock_subprocess):
@@ -157,6 +161,7 @@ class TestDeployFunctionTask(unittest.TestCase):
         )
         
         self.assertTrue(result.success)
+        self.assertIsInstance(result, DeploymentSuccess)
         self.assertIsNone(result.url)
     
     @patch('shared_modules.gcf_task_primitives.deploy_function_task.subprocess.run')
