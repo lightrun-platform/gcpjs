@@ -132,11 +132,15 @@ class DeployFunctionTask:
             except Exception as e:
                 if attempt < max_retries - 1:
                     retry_means = [30, 90, 120]
+                    import traceback
                     print(f"ERROR, retrying in ...", end=" ", flush=True)
+                    print(traceback.format_exc())
                     wait_time = wait_before_retry(attempt)
                     print(f"{wait_time}s (mean={retry_means[attempt]}s)...", end=" ", flush=True)
                     continue
+                import traceback
                 print(f"EXCEPTION: {str(e)}")
+                print(traceback.format_exc())
                 return DeploymentResult(
                     success=False,
                     error=str(e),
