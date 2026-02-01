@@ -82,8 +82,10 @@ class ParsedCLIArguments:
 
 class MetadataArgumentParser(argparse.ArgumentParser):
     """Argument parser that automatically tracks the source and other metadata of arguments."""
-    def __init__(self, *args, _metadata_schema={}, **kwargs):
+    def __init__(self, *args, _metadata_schema=None, **kwargs):
         # Initialize schema before super().__init__ because super().__init__ calls add_argument for --help
+        if _metadata_schema is None:
+            _metadata_schema = {}
         self._metadata_schema = _metadata_schema
         super().__init__(*args, **kwargs)
 
@@ -206,13 +208,6 @@ class CLIParser:
             choices=['snapshot', 'log'],
             help='Type of Lightrun action to insert (default: snapshot)'
         )
-
-        parser.add_argument(
-            '--region',
-            type=str,
-            default='europe-west3',
-            help='GCP region (default: europe-west3)'
-        )
         parser.add_argument(
             '--project',
             type=str,
@@ -220,10 +215,10 @@ class CLIParser:
             help='GCP project ID (default: lightrun-temp)'
         )
         parser.add_argument(
-            '--runtime',
-            type=str,
-            default='nodejs20',
-            help='Function runtime (default: nodejs20)'
+            '--runtimes',
+            type=lambda s: [item.strip() for item in s.split(',')],
+            default=['nodejs20'],
+            help='List of function runtimes (comma separated, default: nodejs20)'
         )
         parser.add_argument(
             '--results-file',
