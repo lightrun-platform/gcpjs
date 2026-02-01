@@ -45,36 +45,48 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
             node_version = match.group(1) if match else "20"
             
             # Generate source code for this runtime
-            # We generate ONE set of source code (Lightrun enabled) for use by all cases of this runtime
-            # regardless of num_actions.
-            
             generator = OverheadBenchmarkSourceCodeGenerator(
                 test_file_length=benchmark_config.test_file_length,
                 node_version=node_version
-                # lightrun_version and gcp_functions_version use defaults
             )
             
             source_dir = build_dir / runtime
             generated_path = generator.create_source_dir(source_dir, is_lightrun=True)
             
-            # Generate cases: 0 to test_size actions
-            for num_actions in range(benchmark_config.test_size + 1):
-                region = next(regions_allocation_order)
-                case_name = f"{benchmark_name}-{runtime}-{num_actions}actions-{region}"
+            for generation in benchmark_config.function_generations:
+                is_gen2 = (generation.lower() == 'gen2')
                 
-                case = LightrunOverheadBenchmarkCase(
-                    name=case_name,
-                    runtime=runtime,
-                    region=region,
-                    source_code_dir=generated_path,
-                    num_actions=num_actions,
-                    action_type=benchmark_config.lightrun_action_type,
-                    lightrun_secret=benchmark_config.lightrun_secret,
-                    lightrun_api_key=benchmark_config.lightrun_api_key,
-                    lightrun_company_id=benchmark_config.lightrun_company_id,
-                    lightrun_api_url=benchmark_config.lightrun_api_url,
-                    project=benchmark_config.project
-                )
-                cases.append(case)
+                for memory in benchmark_config.memory:
+                    for cpu in benchmark_config.cpus:
+                        # Generate cases: 0 to test_size actions
+                        for num_actions in range(benchmark_config.test_size + 1):
+                            region = next(regions_allocation_order)
+                            
+                            # Construct unique name
+                            # sanitized values for name
+                            sanitized_mem = memory.lower()
+                            sanitized_cpu = cpu.replace('.', 'p')
+                            
+                            case_name = f"{benchmark_name}-{runtime}-{generation}-{sanitized_mem}-{sanitized_cpu}-cpu-{num_actions}actions-{region}"
+                            
+                            case = LightrunOverheadBenchmarkCase(
+                                name=case_name,
+                                runtime=runtime,
+                                region=region,
+                                source_code_dir=generated_path,
+                                num_actions=num_actions,
+                                action_type=benchmark_config.lightrun_action_type,
+                                lightrun_secret=benchmark_config.lightrun_secret,
+                                lightrun_api_key=benchmark_config.lightrun_api_key,
+                                lightrun_company_id=benchmark_config.lightrun_company_id,
+                                lightrun_api_url=benchmark_config.lightrun_api_url,
+                                project=benchmark_config.project,
+                                memory=memory,
+                                cpu=cpu,
+                                timeout=benchmark_config.request_timeout,
+                                deployment_timeout=benchmark_config.deployment_timeout,
+                                gen2=is_gen2
+                            )
+                            cases.append(case)
                 
         return cases

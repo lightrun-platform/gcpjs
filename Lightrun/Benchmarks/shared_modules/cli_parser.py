@@ -221,6 +221,36 @@ class CLIParser:
             help='List of function runtimes (comma separated, default: nodejs20)'
         )
         parser.add_argument(
+            '--memory',
+            type=lambda s: [item.strip() for item in s.split(',')],
+            default=["256Mi", "512Mi"],
+            help='List of memory allocations (comma separated, default: 256Mi, 512Mi)'
+        )
+        parser.add_argument(
+            '--cpus',
+            type=lambda s: [item.strip() for item in s.split(',')],
+            default=["2"],
+            help='List of cpu allocations (comma separated, default: 2)'
+        )
+        parser.add_argument(
+            '--request-timeout',
+            type=int,
+            default=540,
+            help='Function request timeout in seconds (default: 540)'
+        )
+        parser.add_argument(
+            '--deployment-timeout',
+            type=int,
+            default=600,
+            help='Function deployment timeout in seconds (default: 600)'
+        )
+        parser.add_argument(
+            '--function-generations',
+            type=lambda s: [item.strip() for item in s.split(',')],
+            default=["gen1", "gen2"],
+            help='List of function generations (comma separated, default: gen1, gen2)'
+        )
+        parser.add_argument(
             '--results-file',
             type=str,
             default='benchmark_results.json',

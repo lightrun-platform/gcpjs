@@ -18,7 +18,12 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  lightrun_api_key: str,
                  lightrun_company_id: str,
                  lightrun_api_url: str,
-                 project: str):
+                 project: str,
+                 memory: str,
+                 cpu: str,
+                 timeout: int,
+                 deployment_timeout: int,
+                 gen2: bool):
         super().__init__()
         self._name = name
         self._runtime = runtime
@@ -33,12 +38,17 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
 
         # Initialize GCP function model
         self._gcp_function = GCPFunction(
-            function_name=name,
+            name=name,
             region=region,
             runtime=runtime,
             entry_point='functionTest',
-            source_code_dir=source_code_dir,
-            project=project
+            function_source_code_dir=source_code_dir,
+            project=project,
+            memory=memory,
+            cpu=cpu,
+            timeout=timeout,
+            deployment_timeout=deployment_timeout,
+            gen2=gen2
         )
 
     @property

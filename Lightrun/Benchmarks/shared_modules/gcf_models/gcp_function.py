@@ -1,5 +1,5 @@
 """GCPFunction model."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 from pathlib import Path
 
@@ -13,20 +13,9 @@ class GCPFunction:
 
     region: str
     name: str
-    is_lightrun_variant: bool = False
-    url: Optional[str] = None
-    deployment_duration_seconds: Optional[float] = None
-    deployment_duration_nanoseconds: Optional[int] = None
-    deploy_time: Optional[str] = None
-    time_to_cold_seconds: Optional[float] = None
-    time_to_cold_minutes: Optional[float] = None
-    test_result: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
-    deployment_result: Optional[DeploymentResult] = None,
-
-    runtime: str = None
-    function_source_code_dir: Path = None
-    entry_point = None
+    runtime: str
+    function_source_code_dir: Path
+    entry_point: str
 
     # commonly used parameters with sane defaults
     memory: str = "512Mi",
@@ -42,6 +31,17 @@ class GCPFunction:
     gen2: bool = True,
     env_vars: Dict[str, str] = None,
     kwargs: Dict[str, Any] = None,
+
+    # other properties
+    url: Optional[str] = None
+    deployment_duration_seconds: Optional[float] = None
+    deployment_duration_nanoseconds: Optional[int] = None
+    deploy_time: Optional[str] = None
+    time_to_cold_seconds: Optional[float] = None
+    time_to_cold_minutes: Optional[float] = None
+    test_result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    deployment_result: Optional[DeploymentResult] = None,
 
 
     @property
