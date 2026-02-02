@@ -11,6 +11,7 @@ from shared_modules.cli_parser import ParsedCLIArguments
 from shared_modules.gcf_models.gcp_function import GCPFunction
 from shared_modules.send_request import SendRequestTask
 from shared_modules.lightrun_api import LightrunAPI
+from shared_modules.authenticator import ApiKeyAuthenticator
 
 class IterativeOverheadTestTask:
     """Task to run iterative benchmark with incresing Lightrun actions."""
@@ -21,7 +22,11 @@ class IterativeOverheadTestTask:
         self.function_dir = function_dir
         self.total_actions = getattr(config, 'test_size', 0)
         self.action_type = getattr(config, 'lightrun_action_type', 'snapshot')
-        self.lightrun_api = LightrunAPI(config.lightrun_api_key, config.lightrun_company_id, config.lightrun_api_url)
+        self.lightrun_api = LightrunAPI(
+            api_url=config.lightrun_api_url,
+            company_id=config.lightrun_company_id,
+            authenticator=ApiKeyAuthenticator(config.lightrun_api_key)
+        )
         self.is_lightrun = function.is_lightrun_variant
 
     def execute(self) -> Dict[str, Any]:

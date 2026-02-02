@@ -114,7 +114,7 @@ class TestMetadataArgumentParser(unittest.TestCase):
         
         # Mock sys.argv
         original_argv = sys.argv
-        sys.argv = ['prog', '--lightrun-secret', 'topsecret', '--num-functions', '5']
+        sys.argv = ['prog', '--lightrun-secret', 'topsecret', '--num-functions', '5', '--authentication-type', 'API_KEY']
         # Also need to set required env vars for validation if not in CLI
         os.environ['LIGHTRUN_API_KEY'] = 'fake_key'
         os.environ['LIGHTRUN_COMPANY_ID'] = 'fake_id'

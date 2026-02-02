@@ -4,6 +4,7 @@ import time
 from typing import Dict, Any, Optional, List
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
 from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI
+from Lightrun.Benchmarks.shared_modules.authenticator import ApiKeyAuthenticator
 from .send_request_task import SendRequestTask
 
 
@@ -116,10 +117,10 @@ class CompoundRequestTask:
     def _add_lightrun_snapshot(self):
         """Add a Lightrun snapshot to the function's agent."""
         lightrun_api = LightrunAPI(
-            api_key=self.lightrun_api_key or '',
+            api_url=self.lightrun_api_url or '',
             company_id=self.lightrun_company_id or '',
-            api_url=self.lightrun_api_url,
-            logger_factory=self.logger_factory
+            authenticator=ApiKeyAuthenticator(self.lightrun_api_key or ''),
+            logger=self.logger
         )
 
         agent_id = lightrun_api.get_agent_id(self.function.display_name)

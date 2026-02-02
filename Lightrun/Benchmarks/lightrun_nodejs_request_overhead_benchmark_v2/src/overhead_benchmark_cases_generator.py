@@ -6,10 +6,12 @@ from typing import List, Iterator
 from Lightrun.Benchmarks.shared_modules.benchmark_cases_generator import BenchmarkCasesGenerator
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.cli_parser import ParsedCLIArguments
-from .overhead_benchmark_source_code_generator import OverheadBenchmarkSourceCodeGenerator
-from .overhead_benchmark_case import LightrunOverheadBenchmarkCase
-from .overhead_benchmark_result import LightrunOverheadBenchmarkResult
-from ...shared_modules.logger_factory import LoggerFactory
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_source_code_generator import OverheadBenchmarkSourceCodeGenerator
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_case import LightrunOverheadBenchmarkCase
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import LightrunOverheadBenchmarkResult
+from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
+
+from Benchmarks.shared_modules.authenticator import ApiKeyAuthenticator, InteractiveAuthenticator
 
 
 class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOverheadBenchmarkResult]):
@@ -32,6 +34,12 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
         logger = logger_factory.get_logger(self.__class__.__name__)
         source_dir = results_directory / 'source_code'
         logger.info(f"Generating source code in: {source_dir}")
+
+        authenticator = None
+        if benchmark_config.authentication_type == 'API_KEY':
+            authenticator = ApiKeyAuthenticator(self.lightrun_api_key)
+        elif benchmark_config.authentication_type == 'MANUAL':
+            authenticator = InteractiveAuthenticator(self.lightrun_api_url, self.lightrun_company_id, self.logger)
 
         for runtime in benchmark_config.runtimes:
             # Extract version from runtime string (e.g. 'nodejs20' -> '20')
@@ -79,6 +87,7 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
                                 gen2=is_gen2,
                                 deployment_timeout=benchmark_config.deployment_timeout,
                                 delete_timeout=benchmark_config.delete_timeout,
+                                authenticator=authenticator,
                                 logger_factory=logger_factory)
                             cases.append(case)
                 

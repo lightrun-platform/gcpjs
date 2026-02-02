@@ -1,13 +1,18 @@
-"""Lightrun API client for managing actions (snapshots, breakpoints)."""
-
-import os
 import requests
-import socket
 import logging
 from typing import Optional
 from urllib.parse import urlparse
-from urllib3.exceptions import NameResolutionError
-from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
+from Lightrun.Benchmarks.shared_modules.authenticator import Authenticator
+
+
+def _get_default_logger():
+    logger = logging.getLogger("LightrunAPI")
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+    return logger
 
 
 class LightrunAPI:
@@ -15,34 +20,31 @@ class LightrunAPI:
 
     def __init__(
         self,
-        api_url: Optional[str] = None,
-        api_key: Optional[str] = None,
-        company_id: Optional[str] = None,
-        logger_factory: Optional[LoggerFactory] = None,
+        api_url: str,
+        company_id: str,
+        authenticator: Authenticator,
+        logger: Optional[logging.Logger] = None,
     ):
         """
         Initialize the Lightrun API client.
-
-        Args:
-            api_url: Lightrun API URL (default: from LIGHTRUN_API_URL env var or https://app.lightrun.com)
-            api_key: Lightrun API key (default: from LIGHTRUN_API_KEY env var)
-            company_id: Lightrun Company ID (default: from LIGHTRUN_COMPANY_ID env var)
-            logger_factory: Factory to create loggers
-        """
-        self.api_url = api_url or os.environ.get("LIGHTRUN_API_URL", "https://app.lightrun.com")
-        self.api_key = api_key or os.environ.get("LIGHTRUN_API_KEY", "")
-        self.company_id = company_id or os.environ.get("LIGHTRUN_COMPANY_ID", "")
         
-        if logger_factory:
-            self.logger = logger_factory.get_logger(self.__class__.__name__)
+        Args:
+            api_url: Lightrun API URL.
+            company_id: Lightrun Company ID.
+            authenticator: Authenticator instance.
+            logger: Optional logger instance.
+        """
+        self.api_url = api_url
+        if self.api_url.endswith("/"):
+             self.api_url = self.api_url[:-1]
+             
+        self.company_id = company_id
+        self.authenticator = authenticator
+
+        if logger:
+            self.logger = logger
         else:
-            self.logger = logging.getLogger("LightrunAPI")
-            # If no factory, ensure we at least log to console if not configured
-            if not self.logger.handlers:
-                handler = logging.StreamHandler()
-                handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-                self.logger.addHandler(handler)
-                self.logger.setLevel(logging.INFO)
+            self.logger = _get_default_logger()
 
         self.session = requests.Session()
         # Add a simple retry adapter
@@ -52,30 +54,13 @@ class LightrunAPI:
         self.session.mount('https://', HTTPAdapter(max_retries=retries))
         self.session.mount('http://', HTTPAdapter(max_retries=retries))
 
-    def _get_headers(self) -> dict:
-        """Get the authorization headers for API requests."""
-        return {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
 
     def get_agent_id(self, display_name: str) -> Optional[str]:
-        """
-        Get the Lightrun agent ID for a function by its display name.
-
-        Args:
-            display_name: The display name of the function (set via DISPLAY_NAME env var).
-
-        Returns:
-            The agent ID if found, otherwise None.
-        """
-        if not self.api_key or not self.company_id:
-            self.logger.warning("Lightrun API credentials not configured, skipping agent lookup.")
-            return None
 
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/agents"
-            response = self.session.get(url, headers=self._get_headers(), timeout=30)
+            # Using send_authenticated_request instead of session.get
+            response = self.authenticator.send_authenticated_request(self.session, 'GET', url, timeout=30)
 
             if response.status_code == 200:
                 agents = response.json()
@@ -90,25 +75,16 @@ class LightrunAPI:
         return None
 
     def _handle_api_error(self, e: Exception, context: str):
-        """Handle and diagnose API errors, specifically DNS issues."""
         parsed = urlparse(self.api_url)
         hostname = parsed.hostname or "app.lightrun.com"
         
         if isinstance(e, requests.exceptions.ConnectionError) and "NameResolutionError" in str(e):
             self.logger.error(f"DNS RESOLUTION ERROR: Could not resolve '{hostname}'\n" +
-                              f"This error is occurring on your LOCAL MACHINE, not inside the Cloud Function.\n" +
                               f"Possible reasons:\n" +
                               f"1. No internet connection or DNS server is down.\n" +
                               f"2. A VPN or Firewall is blocking access to {hostname}.\n" +
                               f"3. You are on a network that doesn't resolve public DNS names correctly.\n" +
-                              f"4. The URL '{self.api_url}' is incorrect or missing the scheme (e.g., https://).\n" +
-                              f"Try running: 'ping {hostname}' or 'nslookup {hostname}' in your terminal.")
-            
-            # Additional socket-level check
-            try:
-                socket.getaddrinfo(hostname, 443)
-            except Exception as se:
-                 self.logger.error(f"(Socket diagnostic: {se})")
+                              f"4. The URL '{self.api_url}' is incorrect or missing the scheme (e.g., https://).\n")
         else:
             self.logger.warning(f"Could not {context}: {e}")
 
@@ -122,22 +98,6 @@ class LightrunAPI:
         max_hit_count: int,
         expire_seconds: int = 3600,
     ) -> Optional[str]:
-        """
-        Add a snapshot (breakpoint) to an agent.
-
-        Args:
-            agent_id: The ID of the agent to add the snapshot to.
-            filename: The source filename (e.g., 'helloLightrun.js').
-            line_number: The line number for the snapshot.
-            max_hit_count: Maximum number of times the snapshot should be hit.
-            expire_seconds: How long the snapshot should live (default: 3600 seconds / 1 hour).
-
-        Returns:
-            The snapshot ID if created successfully, otherwise None.
-        """
-        if not self.api_key or not self.company_id:
-            self.logger.warning("Lightrun API credentials not configured, skipping snapshot creation.")
-            return None
 
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots"
@@ -148,7 +108,7 @@ class LightrunAPI:
                 "maxHitCount": max_hit_count,
                 "expireSec": expire_seconds,
             }
-            response = self.session.post(url, json=snapshot_data, headers=self._get_headers(), timeout=30)
+            response = self.authenticator.send_authenticated_request(self.session, 'POST', url, json=snapshot_data, timeout=30)
 
             if response.status_code in [200, 201]:
                 snapshot_id = response.json().get("id")
@@ -170,23 +130,6 @@ class LightrunAPI:
         max_hit_count: int,
         expire_seconds: int = 3600,
     ) -> Optional[str]:
-        """
-        Add a log action to an agent.
-
-        Args:
-            agent_id: The ID of the agent to add the log to.
-            filename: The source filename (e.g., 'helloLightrun.js').
-            line_number: The line number for the log.
-            message: The message to log (format string).
-            max_hit_count: Maximum number of times the log should be hit.
-            expire_seconds: How long the log should live (default: 3600 seconds / 1 hour).
-
-        Returns:
-            The action ID if created successfully, otherwise None.
-        """
-        if not self.api_key or not self.company_id:
-            self.logger.warning("Lightrun API credentials not configured, skipping log creation.")
-            return None
 
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs"
@@ -198,7 +141,7 @@ class LightrunAPI:
                 "expireSec": expire_seconds,
                 "logMessage": message,
             }
-            response = self.session.post(url, json=log_data, headers=self._get_headers(), timeout=30)
+            response = self.authenticator.send_authenticated_request(self.session, 'POST', url, json=log_data, timeout=30)
 
             if response.status_code in [200, 201]:
                 action_id = response.json().get("id")
@@ -212,13 +155,10 @@ class LightrunAPI:
         return None
 
     def get_snapshot(self, snapshot_id: str) -> Optional[dict]:
-        """Get snapshot details."""
-        if not self.api_key or not self.company_id:
-            return None
             
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots/{snapshot_id}"
-            response = self.session.get(url, headers=self._get_headers(), timeout=10)
+            response = self.authenticator.send_authenticated_request(self.session, 'GET', url, timeout=10)
             if response.status_code == 200:
                 return response.json()
         except Exception as e:
@@ -226,13 +166,10 @@ class LightrunAPI:
         return None
 
     def get_log(self, log_id: str) -> Optional[dict]:
-        """Get log details."""
-        if not self.api_key or not self.company_id:
-            return None
             
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs/{log_id}"
-            response = self.session.get(url, headers=self._get_headers(), timeout=10)
+            response = self.authenticator.send_authenticated_request(self.session, 'GET', url, timeout=10)
             if response.status_code == 200:
                 return response.json()
         except Exception as e:
@@ -240,13 +177,10 @@ class LightrunAPI:
         return None
 
     def delete_snapshot(self, snapshot_id: str) -> bool:
-        """Delete a snapshot by ID."""
-        if not self.api_key or not self.company_id:
-            return False
 
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots/{snapshot_id}"
-            response = self.session.delete(url, headers=self._get_headers(), timeout=10)
+            response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, timeout=10)
             if response.status_code in [200, 204]:
                 self.logger.info(f"Snapshot deleted: {snapshot_id}")
                 return True
@@ -257,13 +191,10 @@ class LightrunAPI:
         return False
 
     def delete_log_action(self, log_id: str) -> bool:
-        """Delete a log action by ID."""
-        if not self.api_key or not self.company_id:
-            return False
 
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs/{log_id}"
-            response = self.session.delete(url, headers=self._get_headers(), timeout=10)
+            response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, timeout=10)
             if response.status_code in [200, 204]:
                 self.logger.info(f"Log action deleted: {log_id}")
                 return True

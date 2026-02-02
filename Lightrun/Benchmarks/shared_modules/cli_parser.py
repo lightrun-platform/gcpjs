@@ -304,6 +304,13 @@ class CLIParser:
             help='Lightrun Company ID (default: from LIGHTRUN_COMPANY_ID env var)'
         )
         parser.add_argument(
+            '--authentication-type',
+            type=str,
+            required=True,
+            choices=['API_KEY', 'MANUAL'],
+            help="Method of authentication to use. Options: ['API_KEY', 'MANUAL']. Option 'MANUAL' initiates an interactive login flow. Option 'API_KEY' must be used with the --lightrun-api-key option and uses the provided API key directly."
+        )
+        parser.add_argument(
             '--lightrun-api-url',
             type=str,
             default='https://app.lightrun.com',
@@ -355,8 +362,8 @@ class CLIParser:
             # 16 is a safe default to avoid hitting project-wide quotas too easily.
             args.num_workers = min(args.num_functions, 16)
 
-        if not args.lightrun_api_key:
-            parser.error("the following arguments are required: --lightrun-api-key (or set the LIGHTRUN_API_KEY environment variable)")
+        if args.authentication_type == 'API_KEY' and not args.lightrun_api_key:
+            parser.error("argument --lightrun-api-key is required when --authentication-type is 'API_KEY'")
         
         if not args.lightrun_company_id:
             parser.error("the following arguments are required: --lightrun-company-id (or set the LIGHTRUN_COMPANY_ID environment variable)")

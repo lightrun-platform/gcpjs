@@ -5,6 +5,9 @@ from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overh
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import MAX_GCP_FUNCTION_NAME_LENGTH
 from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 
+from Benchmarks.shared_modules.authenticator import Authenticator
+
+
 class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResult]):
     """Benchmark case for Lightrun overhead measurement."""
 
@@ -28,6 +31,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  gen2: bool,
                  deployment_timeout: int,
                  delete_timeout: int,
+                 authenticator: Authenticator,
                  logger_factory: LoggerFactory):
         super().__init__(deployment_timeout, delete_timeout, logger_factory)
         self.benchmark_name = benchmark_name
@@ -46,6 +50,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         self.cpu = cpu
         self.timeout = timeout
         self.gen2 = gen2
+        self.authenticator = authenticator
         self._gcp_function = None
 
 
@@ -140,16 +145,19 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
 
     def execute_benchmark(self) -> LightrunOverheadBenchmarkResult:
         """Execute the benchmark logic."""
-        import time
+
         from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI
+        from Lightrun.Benchmarks.shared_modules.authenticator import ApiKeyAuthenticator, InteractiveAuthenticator
         from Lightrun.Benchmarks.shared_modules.agent_models import BreakpointAction, LogAction
         from Lightrun.Benchmarks.shared_modules.agent_actions import AgentActions
         from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.send_request_task import SendRequestTask
 
         self.logger.info(f"Executing benchmark with {self.num_actions} {self.action_type} actions on {self.runtime}")
 
-        # 1. Initialize Lightrun API
-        api = LightrunAPI(self.lightrun_api_url, self.lightrun_api_key, self.lightrun_company_id)
+
+        # Initialize Lightrun API with correct authenticator
+        
+        api = LightrunAPI(self.lightrun_api_url, self.lightrun_company_id, self.authenticator, logger=self.logger)
         
         # 2. Identify Agent ID (DISPLAY_NAME)
         agent_id = self.name 

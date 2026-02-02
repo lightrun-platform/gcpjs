@@ -11,7 +11,7 @@ parent_dir = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(parent_dir))
 sys.path.insert(0, str(parent_dir.parent.parent))
 
-from ..src.overhead_benchmark_source_code_generator import OverheadBenchmarkSourceCodeGenerator
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_source_code_generator import OverheadBenchmarkSourceCodeGenerator
 
 class TestOverheadBenchmarkSourceCodeGenerator(unittest.TestCase):
     """Test OverheadBenchmarkSourceCodeGenerator class."""
@@ -34,11 +34,11 @@ class TestOverheadBenchmarkSourceCodeGenerator(unittest.TestCase):
             self.assertTrue(pkg_json.exists())
             with open(pkg_json) as f:
                 data = json.load(f)
-                self.assertEqual(data["name"], "hello-lightrun")
+                self.assertEqual(data["name"], "lightrun-overhead-benchmark")
                 self.assertIn("lightrun", data["dependencies"])
                 
             # Check JS file
-            js_file = tmp_path / "helloLightrun.js"
+            js_file = tmp_path / "lightrunOverheadBenchmark.js"
             self.assertTrue(js_file.exists())
             content = js_file.read_text()
             self.assertIn("require('lightrun/gcp')", content)
