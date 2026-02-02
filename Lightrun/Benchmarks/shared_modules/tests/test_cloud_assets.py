@@ -45,7 +45,7 @@ class TestGCSSourceObject(unittest.TestCase):
         self.assertTrue(self.asset.apply_labels({'a': 'b'}, self.logger))
         args = mock_run.call_args[0][0]
         self.assertIn('update', args)
-        self.assertIn('--add-labels=a=b', args)
+        self.assertIn('--update-custom-metadata=a=b', args)
 
 
 class TestArtifactRegistryImage(unittest.TestCase):

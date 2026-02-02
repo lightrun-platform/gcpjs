@@ -70,7 +70,7 @@ class GCSSourceObject(CloudAsset):
             label_str = ",".join([f"{k}={v}" for k, v in labels.items()])
             logger.info(f"Applying labels to {self.name}: {label_str}")
             result = subprocess.run(
-                ['gcloud', 'storage', 'objects', 'update', self.name, f'--add-labels={label_str}'],
+                ['gcloud', 'storage', 'objects', 'update', self.name, f'--update-custom-metadata={label_str}'],
                 capture_output=True, text=True, timeout=60
             )
             if result.returncode != 0:
