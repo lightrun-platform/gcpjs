@@ -62,7 +62,7 @@ class OverheadBenchmarkSourceCodeGenerator(SourceCodeGenerator):
         """Generate N dummy functions."""
         functions = [
 f"""
-let functionResult = 0;
+let functionResult = '0';
 
 function calc(secret, salt) {{
     // Synthetic load using crypto to avoid V8 optimization

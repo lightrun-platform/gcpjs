@@ -142,7 +142,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         """Execute the benchmark logic."""
         import time
         from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI
-        from Lightrun.Benchmarks.shared_modules.agent_models import Snapshot, Log, CaptureCondition
+        from Lightrun.Benchmarks.shared_modules.agent_models import BreakpointAction, LogAction
         from Lightrun.Benchmarks.shared_modules.agent_actions import AgentActions
         from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.send_request_task import SendRequestTask
 
@@ -168,9 +168,9 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         
         for line in action_lines:
             if self.action_type.lower() == 'snapshot':
-                actions.append(Snapshot(filename, line, "deployment-test-snapshot"))
+                actions.append(BreakpointAction(filename=filename, line_number=line, max_hit_count=1, expire_seconds=3600))
             elif self.action_type.lower() == 'log':
-                actions.append(Log(filename, line, "deployment-test-log: Hello from Lightrun!"))
+                actions.append(LogAction(filename=filename, line_number=line, max_hit_count=1, expire_seconds=3600, log_message="deployment-test-log: Hello from Lightrun!"))
             # Default/Fallback? Raise error? Assuming validated config.
 
         # 5. Execute with Actions Context
@@ -206,6 +206,17 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 actions_triggered = 0
                 missing_actions = []
                 
+                # First check if we successfully applied all actions
+                if len(active_actions.applied_actions) != self.num_actions:
+                    self.logger.error(f"Failed to apply all actions. Expected {self.num_actions}, applied {len(active_actions.applied_actions)}.")
+                    return LightrunOverheadBenchmarkResult(
+                         success=False,
+                         error=f"Action Application Failed: Expected {self.num_actions} actions, succeeded in applying {len(active_actions.applied_actions)}. Check credentials.",
+                         total_run_time_sec=end_time - start_time,
+                         handler_run_time_ns=handler_run_time_ns,
+                         actions_count=len(active_actions.applied_actions)
+                     )
+
                 # Allow a short buffer for async reporting from agent to server
                 max_retries = 3
                 for _ in range(max_retries):
@@ -216,12 +227,12 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                         status = None
                         is_hit = False
                         
-                        if isinstance(action, Snapshot):
+                        if isinstance(action, BreakpointAction):
                             info = api.get_snapshot(action_id)
                             # Check if CAPTURED or if hit count > 0 (snapshots might be consumable)
                             if info and (info.get('captureState') == 'CAPTURED' or info.get('hitCount', 0) > 0):
                                 is_hit = True
-                        elif isinstance(action, Log):
+                        elif isinstance(action, LogAction):
                             info = api.get_log(action_id)
                             if info and info.get('hitCount', 0) > 0:
                                 is_hit = True
@@ -236,14 +247,11 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                     
                     time.sleep(1) # Wait before retry
 
-                if actions_triggered < len(active_actions.applied_actions):
-                     self.logger.warning(f"Verification Failed: Only {actions_triggered}/{len(active_actions.applied_actions)} actions triggered. Missing: {missing_actions}")
-                     # Depending on strictness, we might want to fail the test. 
-                     # The prompt says "verify... because we need to see we aren't getting false positives".
-                     # So we should probably report this error or mark success=False.
+                if actions_triggered < self.num_actions:
+                     self.logger.warning(f"Verification Failed: Only {actions_triggered}/{self.num_actions} actions triggered. Missing: {missing_actions}")
                      return LightrunOverheadBenchmarkResult(
                          success=False,
-                         error=f"Partial action triggering: {actions_triggered}/{len(active_actions.applied_actions)} triggered. Potential throttling or agent lag.",
+                         error=f"Partial action triggering: {actions_triggered}/{self.num_actions} triggered. Potential throttling or agent lag.",
                          total_run_time_sec=end_time - start_time,
                          handler_run_time_ns=handler_run_time_ns,
                          actions_count=self.num_actions
