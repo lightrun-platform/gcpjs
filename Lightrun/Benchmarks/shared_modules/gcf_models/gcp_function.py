@@ -1,8 +1,11 @@
 """GCPFunction model."""
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, ClassVar
+from typing import Union, Dict, Optional, Any, List, ClassVar
 from pathlib import Path
+import subprocess
+import json
+from Lightrun.Benchmarks.shared_modules.cloud_assets import CloudAsset, GCSSourceObject, ArtifactRegistryImage
 
 from . import DeploymentResult
 from .delete_function_result import DeleteFunctionResult
@@ -31,22 +34,87 @@ class GCPFunction:
     allow_unauthenticated: bool = True
     quiet: bool = True
     gen2: bool = True
-    env_vars: Dict[str, str] = None
-    kwargs: Dict[str, Any] = None
-
-    logger: logging.Logger = None
-
-    # other properties - internal state, excluded from init
-    url: Optional[str] = field(init=False, default=None)
-    deployment_duration_seconds: Optional[float] = field(init=False, default=None)
-    deployment_duration_nanoseconds: Optional[int] = field(init=False, default=None)
-    deploy_time: Optional[str] = field(init=False, default=None)
-    time_to_cold_seconds: Optional[float] = field(init=False, default=None)
-    time_to_cold_minutes: Optional[float] = field(init=False, default=None)
+    env_vars: Dict[str, str] = field(default_factory=dict)
+    kwargs: Optional[Dict[str, Any]] = None
+    labels: Dict[str, str] = field(default_factory=dict)
+    
+    logger: Optional[logging.Logger] = field(default=None, compare=False, repr=False)
+    
     test_result: Optional[Dict[str, Any]] = field(init=False, default=None)
     error: Optional[str] = field(init=False, default=None)
     deployment_result: Optional[DeploymentResult] = field(init=False, default=None)
+    assets: Any = field(init=False, default_factory=list)  # List[CloudAsset]
 
+
+    @property
+    def url(self) -> Optional[str]:
+        """Returns the function URL if deployment was successful."""
+        if self.deployment_result and isinstance(self.deployment_result, DeploymentResult) and hasattr(self.deployment_result, 'url'):
+            return self.deployment_result.url
+        return None
+
+    def discover_associated_assets(self) -> List[CloudAsset]:
+        """
+        Discovers cloud assets associated with this function.
+        
+        Returns:
+            List of identified CloudAssets (GCS objects, AR images, etc.)
+        """
+        assets: List[CloudAsset] = []
+        if not self.logger:
+            # Fallback logger if not set
+            local_logger = logging.getLogger(self.name)
+        else:
+            local_logger = self.logger
+        
+        try:
+            cmd = ['gcloud', 'functions', 'describe', self.name,
+                   f'--region={self.region}',
+                   f'--project={self.project}',
+                   '--format=json']
+            if self.gen2:
+                cmd.append('--gen2')
+
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode != 0:
+                local_logger.warning(f"Could not describe function {self.name} to discover assets: {result.stderr.strip()}")
+                return assets
+            
+            data = json.loads(result.stdout)
+            
+            # 1. Discover GCS Source Object
+            source_url = None
+            if self.gen2:
+                try:
+                    storage_source = data.get('buildConfig', {}).get('source', {}).get('storageSource', {})
+                    bucket = storage_source.get('bucket')
+                    obj = storage_source.get('object')
+                    if bucket and obj:
+                        source_url = f"gs://{bucket}/{obj}"
+                except Exception:
+                    pass
+            else:
+                source_url = data.get('sourceArchiveUrl')
+
+            if source_url:
+                local_logger.debug(f"Discovered associated GCS object: {source_url}")
+                assets.append(GCSSourceObject(source_url))
+
+            # 2. Discover Artifact Registry Image
+            image_uri = None
+            if self.gen2:
+                image_uri = data.get('buildConfig', {}).get('imageUri')
+            
+            if image_uri:
+                 local_logger.debug(f"Discovered associated Container Image: {image_uri}")
+                 assets.append(ArtifactRegistryImage(image_uri))
+                 
+            return assets
+
+        except Exception as e:
+            local_logger.error(f"Exception discovering assets for {self.name}: {e}")
+            return assets
 
     @property
     def is_deployed(self) -> bool:

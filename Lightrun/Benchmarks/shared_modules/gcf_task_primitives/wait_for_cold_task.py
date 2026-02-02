@@ -225,7 +225,7 @@ class WaitForColdTask:
         # The Monitoring API NEVER reports 0 - it just omits timeSeries when cold.
         # We need multiple consecutive "no data" checks over 4 minutes, polling every 15 seconds.
         # This ensures metrics would have appeared if instances existed (accounting for 60-120s delay).
-        self.logger.info(f"[{self.function_name}] Verifying {self.function_name} is cold...")
+        self.logger.info(f"[{self.function_name}] Verifying {self.function_name} is cold.")
         
         start_time = time.time()
         max_wait_seconds = max_poll_minutes * 60
@@ -263,7 +263,7 @@ class WaitForColdTask:
                     return time_to_cold
                 else:
                     consecutive_duration = cold_confirmation_count * poll_interval
-                    self.logger.info(f"[{self.function_name}] [{elapsed_minutes}m] No instance data: {consecutive_duration}s/{required_cold_duration_seconds}s ({cold_confirmation_count}/{required_cold_confirmations} checks)...")
+                    self.logger.info(f"[{self.function_name}] [{elapsed_minutes}m] No instance data: {consecutive_duration}s/{required_cold_duration_seconds}s ({cold_confirmation_count}/{required_cold_confirmations} checks).")
             elif count > 1:
                 # We have explicit data showing instances exist - definitely warm
                 cold_confirmation_count = 0
@@ -273,7 +273,7 @@ class WaitForColdTask:
                 # count == 0 shouldn't happen, but handle it
                 cold_confirmation_count = 0
                 elapsed_minutes = int((time.time() - start_time) / 60)
-                self.logger.info(f"[{self.function_name}] [{elapsed_minutes}m] Unexpected count={count}, continuing...")
+                self.logger.info(f"[{self.function_name}] [{elapsed_minutes}m] Unexpected count={count}, continuing.")
             
             time.sleep(poll_interval)
         

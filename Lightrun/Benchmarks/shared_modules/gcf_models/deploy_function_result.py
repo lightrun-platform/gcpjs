@@ -1,9 +1,9 @@
 """DeploymentResult model."""
 from abc import ABC
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
-
+from Benchmarks.shared_modules.cloud_assets import CloudAsset
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -25,6 +25,7 @@ class DeploymentSuccess(DeploymentResult):
     deployment_duration_seconds: float
     deployment_duration_nanoseconds: int
     deploy_time: str
+    assets: List[CloudAsset] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         d = super().to_dict()
@@ -33,7 +34,8 @@ class DeploymentSuccess(DeploymentResult):
             'deployment_duration_seconds': self.deployment_duration_seconds,
             'deployment_duration_nanoseconds': self.deployment_duration_nanoseconds,
             'deploy_time': self.deploy_time,
-            'success': True
+            'success': True,
+            'assets': [a.name for a in self.assets]
         })
         return d
 
@@ -42,11 +44,13 @@ class DeploymentSuccess(DeploymentResult):
 class DeploymentFailure(DeploymentResult):
     """Failed deployment result."""
     error: str
+    partial_assets: List[Any] = field(default_factory=list)  # List[CloudAsset]
 
     def to_dict(self) -> Dict[str, Any]:
         d = super().to_dict()
         d.update({
             'error': self.error,
-            'success': False
+            'success': False,
+            'partial_assets': [a.name for a in self.partial_assets]
         })
         return d

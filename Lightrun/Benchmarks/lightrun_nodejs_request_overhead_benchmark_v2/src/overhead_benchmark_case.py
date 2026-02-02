@@ -86,6 +86,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
             timeout=self.timeout,
             gen2=self.gen2,
             env_vars=self.env_vars,
+            labels={'created-by': 'lightrun-benchmark', 'benchmark-name': self.benchmark_name},
             logger=self.logger
         )
         return self._gcp_function

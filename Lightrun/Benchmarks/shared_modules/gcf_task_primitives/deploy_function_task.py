@@ -4,12 +4,19 @@ import subprocess
 import time
 import random
 import traceback
+from abc import ABC
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
 from Lightrun.Benchmarks.shared_modules.gcf_models.deploy_function_result import DeploymentResult, DeploymentSuccess, DeploymentFailure
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcf_deploy_extended_parameters import GCFDeployCommandParameters
+from Lightrun.Benchmarks.shared_modules.cloud_assets import CloudAsset
+from typing import Optional
+
+
+class LabelClashException(Exception):
+    pass
 
 
 def wait_before_retry(attempt: int) -> int:
@@ -55,7 +62,7 @@ def _should_retry(retry_triggers, stderr: str) -> bool:
 def _handle_retry_wait(attempt: int, max_retries: int, reason: str, logger: logging.Logger) -> None:
     """Logs and waits before retry."""
     if attempt < max_retries - 1:
-        logger.warning(f"Deployment attempt {attempt + 1}/{max_retries} failed. Reason: {reason}. Retrying...")
+        logger.warning(f"Deployment attempt {attempt + 1}/{max_retries} failed. Reason: {reason}. Retrying.")
         wait_time = wait_before_retry(attempt)
         logger.info(f"Waited {wait_time} seconds.")
     else:
@@ -85,7 +92,8 @@ def _get_function_url(ep: GCFDeployCommandParameters, logger: logging.Logger) ->
         logger.warning(f"Failed to retrieve function URL: {e}")
         return None
 
-def deploy_with_extended_gcf_parameters(extended_parameters: GCFDeployCommandParameters, deployment_timeout_seconds: int, retry_triggers: List[str], logger: logging.Logger) -> DeploymentResult:
+
+def deploy_with_extended_gcf_parameters(extended_parameters: GCFDeployCommandParameters, deployment_timeout_seconds: int, retry_triggers: List[str], logger: logging.Logger, function_model: Optional[GCPFunction] = None) -> DeploymentResult:
     """Execute the deployment task with retry logic for rate limiting."""
     ep = extended_parameters
     logger.info(f"[{ep.function_name}] Deploying to {ep.region}")
@@ -108,7 +116,13 @@ def deploy_with_extended_gcf_parameters(extended_parameters: GCFDeployCommandPar
                     continue
 
                 logger.error(f"Deployment failed with non-retriable error: {result.stderr}")
-                return DeploymentFailure(error=result.stderr, used_region=ep.region)
+                
+                # Attempt to find partial assets even on failure
+                partial_assets = []
+                if function_model:
+                    partial_assets = function_model.discover_associated_assets()
+                
+                return DeploymentFailure(error=result.stderr, used_region=ep.region, partial_assets=partial_assets)
 
             # Success
             duration_sec = time.time() - attempt_start_time
@@ -116,21 +130,34 @@ def deploy_with_extended_gcf_parameters(extended_parameters: GCFDeployCommandPar
             deploy_time = datetime.now(timezone.utc).isoformat()
 
             url = _get_function_url(ep, logger)
+            
+            # Discover and label assets
+            assets = []
+            if function_model:
+                assets = function_model.discover_associated_assets()
+                if ep.update_labels:
+                     for asset in assets:
+                         asset.apply_labels(ep.update_labels, logger)
 
             return DeploymentSuccess(
                 url=url,
                 used_region=ep.region,
                 deployment_duration_seconds=duration_sec,
                 deployment_duration_nanoseconds=duration_ns,
-                deploy_time=deploy_time
+                deploy_time=deploy_time,
+                assets=assets
             )
 
         except subprocess.TimeoutExpired:
             _handle_retry_wait(attempt, max_retries, "TimeoutExpired", logger)
             if attempt == max_retries - 1:
+                partial_assets = []
+                if function_model:
+                    partial_assets = function_model.discover_associated_assets()
                 return DeploymentFailure(
                     error='Deployment timed out after 5 minutes',
-                    used_region=ep.region
+                    used_region=ep.region,
+                    partial_assets=partial_assets
                 )
 
         except Exception as e:
@@ -138,15 +165,23 @@ def deploy_with_extended_gcf_parameters(extended_parameters: GCFDeployCommandPar
             logger.debug(traceback.format_exc())
             _handle_retry_wait(attempt, max_retries, str(e), logger)
             if attempt == max_retries - 1:
+                partial_assets = []
+                if function_model:
+                    partial_assets = function_model.discover_associated_assets()
                 return DeploymentFailure(
                     error=str(e),
-                    used_region=ep.region
+                    used_region=ep.region,
+                    partial_assets=partial_assets
                 )
 
     # Should be unreachable if logic is correct, but safe fallback
+    partial_assets = []
+    if function_model:
+        partial_assets = function_model.discover_associated_assets()
     return DeploymentFailure(
         error="Max retries exceeded without specific error return",
-        used_region=ep.region
+        used_region=ep.region,
+         partial_assets=partial_assets
     )
 
 
@@ -165,8 +200,30 @@ class DeployFunctionTask:
         self.f = function
         self.logger = function.logger
 
+
     def deploy(self) -> DeploymentResult:
         kwargs = self.f.kwargs if self.f.kwargs is not None else {}
+
+        kwargs_build_labels = kwargs.get('update_build_env_vars', {})
+
+        common_keys = kwargs_build_labels & self.f.labels
+        for key in common_keys:
+            kw_value = kwargs_build_labels[key]
+            function_label_value = self.f.labels[key]
+            if kw_value != function_label_value:
+                raise LabelClashException(f"Label clash: key: {key}' exists in the function's labels list with value: '{function_label_value}', but was also sent via the keyword argument 'update_build_env_vars' with value: {kw_value}")
+
+        all_labels = {**kwargs_build_labels, **self.f.labels}
+        combined_labels_str = " ".join([f"{k}={v}" for k, v in all_labels])
+
+        update_build_env_vars = kwargs.get('update_build_env_vars', {}).copy()
+        update_build_env_vars['BP_IMAGE_LABELS'] = combined_labels_str
+        
+        # Prepare arguments, overriding update_build_env_vars from kwargs if we modified it
+        create_kwargs = kwargs.copy()
+        if update_build_env_vars:
+            create_kwargs['update_build_env_vars'] = update_build_env_vars
+        
         command_parameters = GCFDeployCommandParameters.create(function_name=self.f.name,
                                                                region=self.f.region,
                                                                runtime=self.f.runtime,
@@ -184,6 +241,7 @@ class DeployFunctionTask:
                                                                quiet=self.f.quiet,
                                                                gen2=self.f.gen2,
                                                                env_vars=self.f.env_vars,
-                                                               **kwargs)
+                                                               update_labels=self.f.labels,
+                                                               **create_kwargs)
 
-        return deploy_with_extended_gcf_parameters(command_parameters, self.deployment_timeout_seconds, DeployFunctionTask.RETRY_TRIGGERS, self.logger)
+        return deploy_with_extended_gcf_parameters(command_parameters, self.deployment_timeout_seconds, DeployFunctionTask.RETRY_TRIGGERS, self.logger, function_model=self.f)

@@ -46,7 +46,8 @@ class TestDeployFunctionTask(unittest.TestCase):
             function_source_code_dir=self.function_dir,
             project='test-project',
             env_vars={'LIGHTRUN_SECRET': 'secret', 'DISPLAY_NAME': 'disp'},
-            kwargs={}
+            kwargs={},
+            labels={'foo': 'bar'}
         )
         self.function.logger = self.mock_logger
         
@@ -79,12 +80,21 @@ class TestDeployFunctionTask(unittest.TestCase):
         # Mock successful URL retrieval
         mock_get_url.return_value = 'https://test-function-001-abc123.run.app'
         
-        result = self.task.deploy()
-        
-        self.assertIsInstance(result, DeploymentSuccess)
-        self.assertEqual(result.url, 'https://test-function-001-abc123.run.app')
-        self.assertIsNotNone(result.deploy_time)
-        mock_execute.assert_called_once()
+        # Mock asset discovery on the function object
+        mock_asset = Mock()
+        mock_asset.name = "test-asset"
+        # We need to ensure we patch the method on the class or instance.
+        # Since self.function is a real object, we can use patch.object or assign a Mock
+        with patch.object(self.function, 'discover_associated_assets', return_value=[mock_asset]) as mock_discover:
+            result = self.task.deploy()
+            
+            self.assertIsInstance(result, DeploymentSuccess)
+            self.assertEqual(result.url, 'https://test-function-001-abc123.run.app')
+            self.assertIsNotNone(result.deploy_time)
+            mock_execute.assert_called_once()
+            mock_discover.assert_called()
+            self.assertEqual(len(result.assets), 1)
+            mock_asset.apply_labels.assert_called_with({'foo': 'bar'}, self.mock_logger)
     
     @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task._execute_gcloud_command')
     def test_deploy_failure(self, mock_execute):
@@ -95,11 +105,14 @@ class TestDeployFunctionTask(unittest.TestCase):
         mock_deploy_result.stderr = 'Permission denied'
         mock_execute.return_value = mock_deploy_result
         
-        result = self.task.deploy()
-        
-        self.assertIsInstance(result, DeploymentFailure)
-        self.assertIsNotNone(result.error)
-        self.assertIn('Permission denied', result.error)
+        # Mock asset discovery return empty on failure
+        with patch.object(self.function, 'discover_associated_assets', return_value=[]) as mock_discover:
+            result = self.task.deploy()
+            
+            self.assertIsInstance(result, DeploymentFailure)
+            self.assertIsNotNone(result.error)
+            self.assertIn('Permission denied', result.error)
+            mock_discover.assert_called()
     
     @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task._execute_gcloud_command')
     def test_deploy_timeout(self, mock_execute):
@@ -108,10 +121,11 @@ class TestDeployFunctionTask(unittest.TestCase):
         # Make _execute_gcloud_command raise TimeoutExpired immediately
         mock_execute.side_effect = subprocess.TimeoutExpired('gcloud', 300)
         
-        result = self.task.deploy()
-        
-        self.assertIsInstance(result, DeploymentFailure)
-        self.assertEqual(result.error, 'Deployment timed out after 5 minutes')
+        with patch.object(self.function, 'discover_associated_assets', return_value=[]) as mock_discover:
+            result = self.task.deploy()
+            
+            self.assertIsInstance(result, DeploymentFailure)
+            self.assertEqual(result.error, 'Deployment timed out after 5 minutes')
     
     @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task._execute_gcloud_command')
     @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task._get_function_url')
@@ -125,10 +139,11 @@ class TestDeployFunctionTask(unittest.TestCase):
         # Mock failed URL retrieval
         mock_get_url.return_value = None
         
-        result = self.task.deploy()
-        
-        self.assertIsInstance(result, DeploymentSuccess)
-        self.assertIsNone(result.url)
+        with patch.object(self.function, 'discover_associated_assets', return_value=[]) as mock_discover:
+            result = self.task.deploy()
+            
+            self.assertIsInstance(result, DeploymentSuccess)
+            self.assertIsNone(result.url)
     
     @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task.GCFDeployCommandParameters.create')
     @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task.deploy_with_extended_gcf_parameters')
@@ -143,6 +158,12 @@ class TestDeployFunctionTask(unittest.TestCase):
         self.assertEqual(call_kwargs['runtime'], self.function.runtime)
         # Verify kwargs are passed
         self.assertEqual(call_kwargs['env_vars']['LIGHTRUN_SECRET'], 'secret')
+        self.assertEqual(call_kwargs['update_labels'], {'foo': 'bar'})
+        
+        # Verify BP_IMAGE_LABELS injection
+        self.assertIn('update_build_env_vars', call_kwargs)
+        self.assertIn('BP_IMAGE_LABELS', call_kwargs['update_build_env_vars'])
+        self.assertEqual(call_kwargs['update_build_env_vars']['BP_IMAGE_LABELS'], 'foo=bar')
 
 if __name__ == '__main__':
     unittest.main()
