@@ -166,6 +166,7 @@ class DeployFunctionTask:
         self.logger = function.logger
 
     def deploy(self) -> DeploymentResult:
+        kwargs = self.f.kwargs if self.f.kwargs is not None else {}
         command_parameters = GCFDeployCommandParameters.create(function_name=self.f.name,
                                                                region=self.f.region,
                                                                runtime=self.f.runtime,
@@ -183,6 +184,6 @@ class DeployFunctionTask:
                                                                quiet=self.f.quiet,
                                                                gen2=self.f.gen2,
                                                                env_vars=self.f.env_vars,
-                                                               **self.f.kwargs)
+                                                               **kwargs)
 
         return deploy_with_extended_gcf_parameters(command_parameters, self.deployment_timeout_seconds, DeployFunctionTask.RETRY_TRIGGERS, self.logger)
