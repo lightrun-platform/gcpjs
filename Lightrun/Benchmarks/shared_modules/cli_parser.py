@@ -245,6 +245,12 @@ class CLIParser:
             help='Function deployment timeout in seconds (default: 600)'
         )
         parser.add_argument(
+            '--delete-timeout',
+            type=int,
+            default=120,
+            help='maximum time in seconds to wait for function deletion to complete (default: 120)'
+        )
+        parser.add_argument(
             '--function-generations',
             type=lambda s: [item.strip() for item in s.split(',')],
             default=["gen1", "gen2"],

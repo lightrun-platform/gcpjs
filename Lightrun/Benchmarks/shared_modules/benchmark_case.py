@@ -11,7 +11,9 @@ import logging
 class BenchmarkCase[T](ABC):
     """A single unit of benchmark execution. self contains everything needed to run the benchmark case."""
 
-    def __init__(self, logger_factory: LoggerFactory):
+    def __init__(self, deployment_timeout_seconds: int, delete_timeout_seconds: int, logger_factory: LoggerFactory):
+        self.deployment_timeout_seconds = deployment_timeout_seconds
+        self.delete_timeout_seconds = delete_timeout_seconds
         self.logger_factory = logger_factory
         self._logger = None
         self.deploy_task: Optional[DeployFunctionTask] = None
@@ -56,7 +58,7 @@ class BenchmarkCase[T](ABC):
     def run(self):
         self.log_info(f"Starting benchmark case: {self.name}")
         try:
-            self.deployment_result = self.gcp_function.deploy(logger_factory=self.logger_factory)
+            self.deployment_result = self.gcp_function.deploy(self.deployment_timeout_seconds)
             
             match self.deployment_result:
                 case DeploymentFailure(error=error):
@@ -70,7 +72,7 @@ class BenchmarkCase[T](ABC):
             self.log_error(e)
             self.errors.append(e)
         finally:
-            self.delete_result = self.gcp_function.delete(logger_factory=self.logger_factory)
+            self.delete_result = self.gcp_function.delete(self.delete_timeout_seconds)
             
             summary = f"Finished benchmark case: {self.name}.\n"
 

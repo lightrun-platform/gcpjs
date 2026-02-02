@@ -126,7 +126,7 @@ class TestMetadataArgumentParser(unittest.TestCase):
             self.assertEqual(metadata['lightrun_secret']['source'], 'CLI')
             self.assertEqual(metadata['lightrun_secret']['is_secret'], True)
             self.assertEqual(metadata['num_functions']['source'], 'CLI')
-            self.assertEqual(metadata['region']['source'], 'Default')
+            self.assertEqual(metadata['delete_timeout']['source'], 'Default')
             self.assertEqual(metadata['lightrun_api_key']['source'], 'Env')
         finally:
             sys.argv = original_argv

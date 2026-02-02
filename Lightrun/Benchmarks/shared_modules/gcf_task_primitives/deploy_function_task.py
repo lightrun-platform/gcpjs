@@ -5,12 +5,11 @@ import time
 import random
 import traceback
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 
+from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
 from Lightrun.Benchmarks.shared_modules.gcf_models.deploy_function_result import DeploymentResult, DeploymentSuccess, DeploymentFailure
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcf_deploy_extended_parameters import GCFDeployCommandParameters
-from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 
 
 def wait_before_retry(attempt: int) -> int:
@@ -39,6 +38,117 @@ def wait_before_retry(attempt: int) -> int:
     time.sleep(wait_time)
     return wait_time
 
+def _execute_gcloud_command(cmd: List[str], deployment_timeout_seconds: int) -> subprocess.CompletedProcess:
+    """Executes the gcloud command."""
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=deployment_timeout_seconds
+    )
+
+def _should_retry(retry_triggers, stderr: str) -> bool:
+    """Determines if the error warrants a retry."""
+    error_msg_lower = stderr.lower()
+    return any(trigger in error_msg_lower for trigger in retry_triggers)
+
+def _handle_retry_wait(attempt: int, max_retries: int, reason: str, logger: logging.Logger) -> None:
+    """Logs and waits before retry."""
+    if attempt < max_retries - 1:
+        logger.warning(f"Deployment attempt {attempt + 1}/{max_retries} failed. Reason: {reason}. Retrying...")
+        wait_time = wait_before_retry(attempt)
+        logger.info(f"Waited {wait_time} seconds.")
+    else:
+        logger.error(f"Deployment attempt {attempt + 1}/{max_retries} failed. Reason: {reason}. Max retries reached.")
+
+def _get_function_url(ep: GCFDeployCommandParameters, logger: logging.Logger) -> Optional[str]:
+    """Retrieves the deployed function's URL."""
+    try:
+        url_result = subprocess.run(
+            [
+                'gcloud', 'functions', 'describe', ep.function_name,
+                f'--region={ep.region}',
+                f'--gen2',
+                f'--project={ep.project}',
+                '--format=value(serviceConfig.uri)'
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if url_result.returncode == 0:
+            url = url_result.stdout.strip()
+            logger.info(f"Function URL retrieved: {url}")
+            return url
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to retrieve function URL: {e}")
+        return None
+
+def deploy_with_extended_gcf_parameters(extended_parameters: GCFDeployCommandParameters, deployment_timeout_seconds: int, retry_triggers: List[str], logger: logging.Logger) -> DeploymentResult:
+    """Execute the deployment task with retry logic for rate limiting."""
+    ep = extended_parameters
+    logger.info(f"[{ep.function_name}] Deploying to {ep.region}")
+
+    # Stagger deployments to avoid rate limits
+    time.sleep(hash(ep.function_name) % 30)
+
+    max_retries = 3
+
+    for attempt in range(max_retries):
+        attempt_start_time = time.time()
+        try:
+            cmd = ep.build_gcloud_command()
+            result = _execute_gcloud_command(cmd, deployment_timeout_seconds)
+
+            if result.returncode != 0:
+                if _should_retry(retry_triggers, result.stderr):
+                    clean_error = result.stderr.replace('\n', ' ').strip()
+                    _handle_retry_wait(attempt, max_retries, clean_error, logger)
+                    continue
+
+                logger.error(f"Deployment failed with non-retriable error: {result.stderr}")
+                return DeploymentFailure(error=result.stderr, used_region=ep.region)
+
+            # Success
+            duration_sec = time.time() - attempt_start_time
+            duration_ns = int(duration_sec * 1_000_000_000)
+            deploy_time = datetime.now(timezone.utc).isoformat()
+
+            url = _get_function_url(ep, logger)
+
+            return DeploymentSuccess(
+                url=url,
+                used_region=ep.region,
+                deployment_duration_seconds=duration_sec,
+                deployment_duration_nanoseconds=duration_ns,
+                deploy_time=deploy_time
+            )
+
+        except subprocess.TimeoutExpired:
+            _handle_retry_wait(attempt, max_retries, "TimeoutExpired")
+            if attempt == max_retries - 1:
+                return DeploymentFailure(
+                    error='Deployment timed out after 5 minutes',
+                    used_region=ep.region
+                )
+
+        except Exception as e:
+            logger.error(f"Exception during deployment: {e}")
+            logger.debug(traceback.format_exc())
+            _handle_retry_wait(attempt, max_retries, str(e), logger)
+            if attempt == max_retries - 1:
+                return DeploymentFailure(
+                    error=str(e),
+                    used_region=ep.region
+                )
+
+    # Should be unreachable if logic is correct, but safe fallback
+    return DeploymentFailure(
+        error="Max retries exceeded without specific error return",
+        used_region=ep.region
+    )
+
 
 class DeployFunctionTask:
     """Task to deploy a single Cloud Function."""
@@ -50,167 +160,29 @@ class DeployFunctionTask:
         'failed to initialize'
     ]
 
-    def __init__(self, logger_factory: LoggerFactory, deployment_timeout_seconds: int = 600):
+    def __init__(self, function: GCPFunction, deployment_timeout_seconds: int = 600):
         self.deployment_timeout_seconds = deployment_timeout_seconds
-        self.logger = logger_factory.get_logger(self.__class__.__name__)
+        self.f = function
+        self.logger = function.logger
 
-    def _execute_gcloud_command(self, cmd: List[str]) -> subprocess.CompletedProcess:
-        """Executes the gcloud command."""
-        return subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=self.deployment_timeout_seconds
-        )
+    def deploy(self) -> DeploymentResult:
+        command_parameters = GCFDeployCommandParameters.create(function_name=self.f.name,
+                                                               region=self.f.region,
+                                                               runtime=self.f.runtime,
+                                                               entry_point=self.f.entry_point,
+                                                               source_code_dir=self.f.source_code_dir,
+                                                               memory=self.f.memory,
+                                                               cpu=self.f.cpu,
+                                                               concurrency=self.f.concurrency,
+                                                               max_instances=self.f.max_instances,
+                                                               min_instances=self.f.min_instances,
+                                                               timeout=self.f.timeout,
+                                                               project=self.f.project,
+                                                               allow_unauthenticated=self.f.allow_unauthenticated,
+                                                               deployment_timeout=self.f.deployment_timeout,
+                                                               quiet=self.f.quiet,
+                                                               gen2=self.f.gen2,
+                                                               env_vars=self.f.env_vars,
+                                                               **self.f.kwargs)
 
-    def _should_retry(self, stderr: str) -> bool:
-        """Determines if the error warrants a retry."""
-        error_msg_lower = stderr.lower()
-        return any(trigger in error_msg_lower for trigger in self.RETRY_TRIGGERS)
-
-    def _handle_retry_wait(self, attempt: int, max_retries: int, reason: str):
-        """Logs and waits before retry."""
-        if attempt < max_retries - 1:
-            self.logger.warning(f"Deployment attempt {attempt + 1}/{max_retries} failed. Reason: {reason}. Retrying...")
-            wait_time = wait_before_retry(attempt)
-            self.logger.info(f"Waited {wait_time} seconds.")
-        else:
-            self.logger.error(f"Deployment attempt {attempt + 1}/{max_retries} failed. Reason: {reason}. Max retries reached.")
-
-    def _get_function_url(self, ep: GCFDeployCommandParameters) -> Optional[str]:
-        """Retrieves the deployed function's URL."""
-        try:
-            url_result = subprocess.run(
-                [
-                    'gcloud', 'functions', 'describe', ep.function_name,
-                    f'--region={ep.region}',
-                    f'--gen2',
-                    f'--project={ep.project}',
-                    '--format=value(serviceConfig.uri)'
-                ],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-            if url_result.returncode == 0:
-                url = url_result.stdout.strip()
-                self.logger.info(f"Function URL retrieved: {url}")
-                return url
-            return None
-        except Exception as e:
-            self.logger.warning(f"Failed to retrieve function URL: {e}")
-            return None
-
-    def deploy_with_extended_gcf_parameters(self, extended_parameters: GCFDeployCommandParameters) -> DeploymentResult:
-        """Execute the deployment task with retry logic for rate limiting."""
-        ep = extended_parameters
-        self.logger.info(f"[{ep.function_name}] Deploying to {ep.region}")
-
-        # Stagger deployments to avoid rate limits
-        time.sleep(hash(ep.function_name) % 30)
-
-        max_retries = 3
-        
-        for attempt in range(max_retries):
-            attempt_start_time = time.time()
-            try:
-                cmd = ep.build_gcloud_command()
-                result = self._execute_gcloud_command(cmd)
-
-                if result.returncode != 0:
-                    if self._should_retry(result.stderr):
-                        clean_error = result.stderr.replace('\n', ' ').strip()
-                        self._handle_retry_wait(attempt, max_retries, clean_error)
-                        continue
-                    
-                    self.logger.error(f"Deployment failed with non-retriable error: {result.stderr}")
-                    return DeploymentFailure(
-                        error=result.stderr,
-                        used_region=ep.region
-                    )
-
-                # Success
-                duration_sec = time.time() - attempt_start_time
-                duration_ns = int(duration_sec * 1_000_000_000)
-                deploy_time = datetime.now(timezone.utc).isoformat()
-                
-                url = self._get_function_url(ep)
-                
-                return DeploymentSuccess(
-                    url=url,
-                    used_region=ep.region,
-                    deployment_duration_seconds=duration_sec,
-                    deployment_duration_nanoseconds=duration_ns,
-                    deploy_time=deploy_time
-                )
-
-            except subprocess.TimeoutExpired:
-                self._handle_retry_wait(attempt, max_retries, "TimeoutExpired")
-                if attempt == max_retries - 1:
-                    return DeploymentFailure(
-                        error='Deployment timed out after 5 minutes',
-                        used_region=ep.region
-                    )
-
-            except Exception as e:
-                self.logger.error(f"Exception during deployment: {e}")
-                self.logger.debug(traceback.format_exc())
-                self._handle_retry_wait(attempt, max_retries, str(e))
-                if attempt == max_retries - 1:
-                     return DeploymentFailure(
-                        error=str(e),
-                        used_region=ep.region
-                    )
-
-        # Should be unreachable if logic is correct, but safe fallback
-        return DeploymentFailure(
-            error="Max retries exceeded without specific error return",
-            used_region=ep.region
-        )
-
-    def deploy_gcp_function(
-            self,
-            # only commonly used parameters listed here, but **kwargs allows passing all possible arguments down the chain
-            # the entire (long) list of possible arguments can be found in GCFDeployCommandExtendedParameters
-            # p.s the * syntax in next line enforces named parameters only
-            *,
-            function_name: str,
-            region: str,
-            runtime: str,
-            entry_point: str,
-            source_code_dir: Path,
-
-            # commonly used parameters with sane defaults
-            memory: str = "512Mi",
-            cpu: str = "2",
-            concurrency: int = 80,
-            max_instances: int = 1,
-            min_instances: int = 0,
-            timeout: int = 540,
-            project: str = "lightrun-temp",
-            allow_unauthenticated: bool = True,
-            deployment_timeout: int = 600,
-            quiet: bool = True,
-            gen2: bool = True,
-            env_vars: Dict[str, str] = None,
-            **kwargs
-    ) -> DeploymentResult:
-
-        return self.deploy_with_extended_gcf_parameters(GCFDeployCommandParameters.create(function_name=function_name,
-                                                                                          region=region,
-                                                                                          runtime=runtime,
-                                                                                          entry_point=entry_point,
-                                                                                          source_code_dir=source_code_dir,
-                                                                                          memory=memory,
-                                                                                          cpu=cpu,
-                                                                                          concurrency=concurrency,
-                                                                                          max_instances=max_instances,
-                                                                                          min_instances=min_instances,
-                                                                                          timeout=timeout,
-                                                                                          project=project,
-                                                                                          allow_unauthenticated=allow_unauthenticated,
-                                                                                          deployment_timeout=deployment_timeout,
-                                                                                          quiet=quiet,
-                                                                                          gen2=gen2,
-                                                                                          env_vars=env_vars,
-                                                                                          **kwargs))
+        return deploy_with_extended_gcf_parameters(command_parameters, self.deployment_timeout_seconds, DeployFunctionTask.RETRY_TRIGGERS, self.logger)

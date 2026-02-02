@@ -1,4 +1,3 @@
-from typing import Any
 from pathlib import Path
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
@@ -26,10 +25,11 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  memory: str,
                  cpu: str,
                  timeout: int,
-                 deployment_timeout: int,
                  gen2: bool,
+                 deployment_timeout: int,
+                 delete_timeout: int,
                  logger_factory: LoggerFactory):
-        super().__init__(logger_factory)
+        super().__init__(deployment_timeout, delete_timeout, logger_factory)
         self.benchmark_name = benchmark_name
         self.runtime = runtime
         self.region = region
@@ -45,7 +45,6 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         self.memory = memory
         self.cpu = cpu
         self.timeout = timeout
-        self.deployment_timeout = deployment_timeout
         self.gen2 = gen2
         self._gcp_function = None
 
@@ -85,7 +84,6 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
             memory=self.memory,
             cpu=self.cpu,
             timeout=self.timeout,
-            deployment_timeout=self.deployment_timeout,
             gen2=self.gen2,
             env_vars=self.env_vars
         )

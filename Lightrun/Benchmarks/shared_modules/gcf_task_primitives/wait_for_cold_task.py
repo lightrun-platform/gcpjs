@@ -8,43 +8,36 @@ import requests
 from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 
+from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
+
 
 class ColdStartDetectionError(Exception):
     """Raised when we cannot confirm a function is cold within the timeout period."""
     pass
-
-
-from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 
 class WaitForColdTask:
     """Task to wait for a single Cloud Function to become cold."""
     
     def __init__(
         self, 
-        function_name: str, 
-        region: str, 
-        project: str,
+        function: GCPFunction,
         cold_check_delay: int,
         consecutive_cold_checks: int,
-        logger_factory: LoggerFactory
     ):
         """
         Initialize wait for cold task for a single function.
         
         Args:
-            function_name: Name of the function in GCP format
-            region: Region where function is deployed
-            project: GCP project ID
+            function (GCPFunction): GCP Function object.
             cold_check_delay: Seconds to wait between cold checks
             consecutive_cold_checks: Number of consecutive cold checks required
-            logger_factory: Factory to create loggers
         """
-        self.function_name = function_name
-        self.region = region
-        self.project = project
+        self.function_name = function.name
+        self.region = function.region
+        self.project = function.project
         self.cold_check_delay = cold_check_delay
         self.consecutive_cold_checks = consecutive_cold_checks
-        self.logger = logger_factory.get_logger(f"WaitForColdTask_{function_name}")
+        self.logger = function.logger
     
     def check_function_instances(self) -> int:
         """
