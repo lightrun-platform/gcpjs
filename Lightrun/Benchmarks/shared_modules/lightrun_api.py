@@ -3,9 +3,11 @@
 import os
 import requests
 import socket
+import logging
 from typing import Optional
 from urllib.parse import urlparse
 from urllib3.exceptions import NameResolutionError
+from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 
 
 class LightrunAPI:
@@ -16,6 +18,7 @@ class LightrunAPI:
         api_url: Optional[str] = None,
         api_key: Optional[str] = None,
         company_id: Optional[str] = None,
+        logger_factory: Optional[LoggerFactory] = None,
     ):
         """
         Initialize the Lightrun API client.
@@ -24,10 +27,23 @@ class LightrunAPI:
             api_url: Lightrun API URL (default: from LIGHTRUN_API_URL env var or https://app.lightrun.com)
             api_key: Lightrun API key (default: from LIGHTRUN_API_KEY env var)
             company_id: Lightrun Company ID (default: from LIGHTRUN_COMPANY_ID env var)
+            logger_factory: Factory to create loggers
         """
         self.api_url = api_url or os.environ.get("LIGHTRUN_API_URL", "https://app.lightrun.com")
         self.api_key = api_key or os.environ.get("LIGHTRUN_API_KEY", "")
         self.company_id = company_id or os.environ.get("LIGHTRUN_COMPANY_ID", "")
+        
+        if logger_factory:
+            self.logger = logger_factory.get_logger(self.__class__.__name__)
+        else:
+            self.logger = logging.getLogger("LightrunAPI")
+            # If no factory, ensure we at least log to console if not configured
+            if not self.logger.handlers:
+                handler = logging.StreamHandler()
+                handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+                self.logger.addHandler(handler)
+                self.logger.setLevel(logging.INFO)
+
         self.session = requests.Session()
         # Add a simple retry adapter
         from urllib3.util.retry import Retry
@@ -54,7 +70,7 @@ class LightrunAPI:
             The agent ID if found, otherwise None.
         """
         if not self.api_key or not self.company_id:
-            print("    Warning: Lightrun API credentials not configured, skipping agent lookup.")
+            self.logger.warning("Lightrun API credentials not configured, skipping agent lookup.")
             return None
 
         try:
@@ -66,9 +82,9 @@ class LightrunAPI:
                 for agent in agents:
                     if display_name in agent.get("displayName", ""):
                         return agent.get("id")
-                print(f"    Warning: No agent found matching display name '{display_name}'")
+                self.logger.warning(f"No agent found matching display name '{display_name}'")
             else:
-                print(f"    Warning: Failed to fetch agents: {response.status_code} - {response.text}")
+                self.logger.warning(f"Failed to fetch agents: {response.status_code} - {response.text}")
         except Exception as e:
             self._handle_api_error(e, "get agent ID")
         return None
@@ -79,22 +95,22 @@ class LightrunAPI:
         hostname = parsed.hostname or "app.lightrun.com"
         
         if isinstance(e, requests.exceptions.ConnectionError) and "NameResolutionError" in str(e):
-            print(f"    ❌ DNS RESOLUTION ERROR: Could not resolve '{hostname}'")
-            print(f"    This error is occurring on your LOCAL MACHINE, not inside the Cloud Function.")
-            print(f"    Possible reasons:")
-            print(f"    1. No internet connection or DNS server is down.")
-            print(f"    2. A VPN or Firewall is blocking access to {hostname}.")
-            print(f"    3. You are on a network that doesn't resolve public DNS names correctly.")
-            print(f"    4. The URL '{self.api_url}' is incorrect or missing the scheme (e.g., https://).")
-            print(f"    Try running: 'ping {hostname}' or 'nslookup {hostname}' in your terminal.")
+            self.logger.error(f"DNS RESOLUTION ERROR: Could not resolve '{hostname}'\n" +
+                              f"This error is occurring on your LOCAL MACHINE, not inside the Cloud Function.\n" +
+                              f"Possible reasons:\n" +
+                              f"1. No internet connection or DNS server is down.\n" +
+                              f"2. A VPN or Firewall is blocking access to {hostname}.\n" +
+                              f"3. You are on a network that doesn't resolve public DNS names correctly.\n" +
+                              f"4. The URL '{self.api_url}' is incorrect or missing the scheme (e.g., https://).\n" +
+                              f"Try running: 'ping {hostname}' or 'nslookup {hostname}' in your terminal.")
             
             # Additional socket-level check
             try:
                 socket.getaddrinfo(hostname, 443)
             except Exception as se:
-                 print(f"    (Socket diagnostic: {se})")
+                 self.logger.error(f"(Socket diagnostic: {se})")
         else:
-            print(f"    Warning: Could not {context}: {e}")
+            self.logger.warning(f"Could not {context}: {e}")
 
         return None
 
@@ -120,7 +136,7 @@ class LightrunAPI:
             The snapshot ID if created successfully, otherwise None.
         """
         if not self.api_key or not self.company_id:
-            print("    Warning: Lightrun API credentials not configured, skipping snapshot creation.")
+            self.logger.warning("Lightrun API credentials not configured, skipping snapshot creation.")
             return None
 
         try:
@@ -136,10 +152,10 @@ class LightrunAPI:
 
             if response.status_code in [200, 201]:
                 snapshot_id = response.json().get("id")
-                print(f"    ✓ Snapshot created: {snapshot_id} at {filename}:{line_number} (maxHits={max_hit_count})")
+                self.logger.info(f"Snapshot created: {snapshot_id} at {filename}:{line_number} (maxHits={max_hit_count})")
                 return snapshot_id
             else:
-                print(f"    Warning: Failed to create snapshot: {response.status_code} - {response.text}")
+                self.logger.warning(f"Failed to create snapshot: {response.status_code} - {response.text}")
         except Exception as e:
             self._handle_api_error(e, "create snapshot")
 
@@ -169,7 +185,7 @@ class LightrunAPI:
             The action ID if created successfully, otherwise None.
         """
         if not self.api_key or not self.company_id:
-            print("    Warning: Lightrun API credentials not configured, skipping log creation.")
+            self.logger.warning("Lightrun API credentials not configured, skipping log creation.")
             return None
 
         try:
@@ -186,10 +202,10 @@ class LightrunAPI:
 
             if response.status_code in [200, 201]:
                 action_id = response.json().get("id")
-                print(f"    ✓ Log created: {action_id} at {filename}:{line_number} (maxHits={max_hit_count})")
+                self.logger.info(f"Log created: {action_id} at {filename}:{line_number} (maxHits={max_hit_count})")
                 return action_id
             else:
-                print(f"    Warning: Failed to create log: {response.status_code} - {response.text}")
+                self.logger.warning(f"Failed to create log: {response.status_code} - {response.text}")
         except Exception as e:
             self._handle_api_error(e, "create log")
 
@@ -206,7 +222,7 @@ class LightrunAPI:
             if response.status_code == 200:
                 return response.json()
         except Exception as e:
-            print(f"Error fetching snapshot: {e}")
+            self.logger.error(f"Error fetching snapshot: {e}")
         return None
 
     def get_log(self, log_id: str) -> Optional[dict]:
@@ -220,7 +236,7 @@ class LightrunAPI:
             if response.status_code == 200:
                 return response.json()
         except Exception as e:
-            print(f"Error fetching log: {e}")
+            self.logger.error(f"Error fetching log: {e}")
         return None
 
     def delete_snapshot(self, snapshot_id: str) -> bool:
@@ -232,10 +248,10 @@ class LightrunAPI:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots/{snapshot_id}"
             response = self.session.delete(url, headers=self._get_headers(), timeout=10)
             if response.status_code in [200, 204]:
-                print(f"    ✓ Snapshot deleted: {snapshot_id}")
+                self.logger.info(f"Snapshot deleted: {snapshot_id}")
                 return True
             else:
-                print(f"    Warning: Failed to delete snapshot {snapshot_id}: {response.status_code} - {response.text}")
+                self.logger.warning(f"Failed to delete snapshot {snapshot_id}: {response.status_code} - {response.text}")
         except Exception as e:
             self._handle_api_error(e, "delete snapshot")
         return False
@@ -249,10 +265,10 @@ class LightrunAPI:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs/{log_id}"
             response = self.session.delete(url, headers=self._get_headers(), timeout=10)
             if response.status_code in [200, 204]:
-                print(f"    ✓ Log action deleted: {log_id}")
+                self.logger.info(f"Log action deleted: {log_id}")
                 return True
             else:
-                print(f"    Warning: Failed to delete log {log_id}: {response.status_code} - {response.text}")
+                self.logger.warning(f"Failed to delete log {log_id}: {response.status_code} - {response.text}")
         except Exception as e:
             self._handle_api_error(e, "delete log")
         return False

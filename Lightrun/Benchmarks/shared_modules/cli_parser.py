@@ -1,8 +1,8 @@
 import argparse
 import os
-import sys
 import copy
 import math
+import logging
 
 
 def _mask_secret(value: str) -> str:
@@ -39,13 +39,19 @@ class ParsedCLIArguments:
     #     ns = self._ns
     #     ns.__setstate__(state)
 
-    def print_configuration(self, table_header: str = None):
+    def print_configuration(self, table_header: str = None, logger: logging.Logger = None):
         """Print the entire benchmark configuration with sources and masked secrets."""
 
+        def log_or_print(msg=""):
+            if logger:
+                logger.info(msg)
+            else:
+                print(msg)
+        
         if table_header:
-            print("=" * 80)
-            print(table_header)
-            print("=" * 80)
+            log_or_print("=" * 80)
+            log_or_print(table_header)
+            log_or_print("=" * 80)
         
         # Determine column widths
         config_dict = {k: v for k, v in vars(self._ns).items() if not k.startswith('_')}
@@ -56,8 +62,8 @@ class ParsedCLIArguments:
         source_width = 8 # "Default", "CLI", "Env"
         
         # Print headers
-        print(f"{'NAME':<{name_width}}  {'SOURCE':<{source_width}}  {'VALUE'}")
-        print(f"{'-' * name_width}  {'-' * source_width}  {'-' * 20}")
+        log_or_print(f"{'NAME':<{name_width}}  {'SOURCE':<{source_width}}  {'VALUE'}")
+        log_or_print(f"{'-' * name_width}  {'-' * source_width}  {'-' * 20}")
         
         # Sort keys for consistent output
         sorted_keys = sorted(config_dict.keys())
@@ -74,10 +80,10 @@ class ParsedCLIArguments:
                 display_val = _mask_secret(display_val)
             
             # Print row
-            print(f"{key:<{name_width}}  {source:<{source_width}}  {display_val}")
+            log_or_print(f"{key:<{name_width}}  {source:<{source_width}}  {display_val}")
         
-        print("=" * 80)
-        print()
+        log_or_print("=" * 80)
+        log_or_print("")
 
 
 class MetadataArgumentParser(argparse.ArgumentParser):

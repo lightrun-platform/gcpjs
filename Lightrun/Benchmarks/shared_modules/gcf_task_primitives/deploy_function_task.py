@@ -52,7 +52,7 @@ class DeployFunctionTask:
 
     def __init__(self, logger_factory: LoggerFactory, deployment_timeout_seconds: int = 600):
         self.deployment_timeout_seconds = deployment_timeout_seconds
-        self.logger = logger_factory.get_logger(__name__)
+        self.logger = logger_factory.get_logger(self.__class__.__name__)
 
     def _execute_gcloud_command(self, cmd: List[str]) -> subprocess.CompletedProcess:
         """Executes the gcloud command."""

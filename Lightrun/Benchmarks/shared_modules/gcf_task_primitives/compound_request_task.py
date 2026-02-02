@@ -7,6 +7,8 @@ from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI
 from .send_request_task import SendRequestTask
 
 
+from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
+
 class CompoundRequestTask:
     """Task to send multiple requests to a Cloud Function sequentially."""
 
@@ -16,6 +18,7 @@ class CompoundRequestTask:
         delay_between_requests: int,
         num_requests: int,
         skip_lightrun_action_setup: bool,
+        logger_factory: LoggerFactory,
         lightrun_api_key: Optional[str] = None,
         lightrun_company_id: Optional[str] = None,
         lightrun_api_url: Optional[str] = None,
@@ -28,6 +31,7 @@ class CompoundRequestTask:
             delay_between_requests: Seconds to wait between requests
             num_requests: Number of requests to send
             skip_lightrun_action_setup: If True, skip setting up Lightrun actions
+            logger_factory: Factory to create loggers
             lightrun_api_key: API key for Lightrun API
             lightrun_company_id: Company ID for Lightrun API
             lightrun_api_url: Optional custom API URL for Lightrun
@@ -36,6 +40,8 @@ class CompoundRequestTask:
         self.delay_between_requests = delay_between_requests
         self.num_requests = num_requests
         self.skip_lightrun_action_setup = skip_lightrun_action_setup
+        self.logger_factory = logger_factory
+        self.logger = logger_factory.get_logger(f"CompoundRequestTask_{function.index}")
         self.lightrun_api_key = lightrun_api_key
         self.lightrun_company_id = lightrun_company_id
         self.lightrun_api_url = lightrun_api_url
@@ -71,9 +77,9 @@ class CompoundRequestTask:
                     # Use higher precision if duration is small
                     duration_s = duration / 1e9
                     if duration_s < 0.1:
-                        print(f"[{self.function.index:3d}] Request 1/{self.num_requests}: Cold={is_cold}, Duration={duration/1e6:.3f}ms")
+                        self.logger.info(f"[{self.function.index:3d}] Request 1/{self.num_requests}: Cold={is_cold}, Duration={duration/1e6:.3f}ms")
                     else:
-                        print(f"[{self.function.index:3d}] Request 1/{self.num_requests}: Cold={is_cold}, Duration={duration_s:.3f}s")
+                        self.logger.info(f"[{self.function.index:3d}] Request 1/{self.num_requests}: Cold={is_cold}, Duration={duration_s:.3f}s")
 
                     if self.is_lightrun and not self.skip_lightrun_action_setup:
                         self._add_lightrun_snapshot()
@@ -82,11 +88,11 @@ class CompoundRequestTask:
                     if self.num_requests <= 5 or i % 5 == 0 or i == self.num_requests: # Reduce log noise for many requests
                         duration_s = duration / 1e9
                         if duration_s < 0.1:
-                            print(f"[{self.function.index:3d}] Request {i}/{self.num_requests}: Duration={duration/1e6:.3f}ms")
+                            self.logger.info(f"[{self.function.index:3d}] Request {i}/{self.num_requests}: Duration={duration/1e6:.3f}ms")
                         else:
-                            print(f"[{self.function.index:3d}] Request {i}/{self.num_requests}: Duration={duration_s:.3f}s")
+                            self.logger.info(f"[{self.function.index:3d}] Request {i}/{self.num_requests}: Duration={duration_s:.3f}s")
             else:
-                print(f"[{self.function.index:3d}] Request {i}/{self.num_requests}: FAILED")
+                self.logger.info(f"[{self.function.index:3d}] Request {i}/{self.num_requests}: FAILED")
 
             # Wait between requests (except after the last one)
             if i < self.num_requests:
@@ -112,7 +118,8 @@ class CompoundRequestTask:
         lightrun_api = LightrunAPI(
             api_key=self.lightrun_api_key or '',
             company_id=self.lightrun_company_id or '',
-            api_url=self.lightrun_api_url
+            api_url=self.lightrun_api_url,
+            logger_factory=self.logger_factory
         )
 
         agent_id = lightrun_api.get_agent_id(self.function.display_name)

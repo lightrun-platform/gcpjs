@@ -94,7 +94,7 @@ class GCPFunction:
         from ..gcf_task_primitives.delete_function_task import DeleteFunctionTask
         return DeleteFunctionTask(self, logger_factory).execute(delete_timeout_seconds)
 
-    def wait_for_cold(self, deployment_start_time, cold_check_delay, consecutive_cold_checks):
+    def wait_for_cold(self, deployment_start_time, cold_check_delay, consecutive_cold_checks, logger_factory: LoggerFactory):
         """Wait for the function to become cold."""
         # Import here to avoid circular import
         from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.wait_for_cold_task import WaitForColdTask
@@ -104,4 +104,5 @@ class GCPFunction:
             project=self.project,
             cold_check_delay=cold_check_delay,
             consecutive_cold_checks=consecutive_cold_checks,
+            logger_factory=logger_factory
         ).execute(deployment_start_time)

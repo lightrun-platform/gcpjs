@@ -25,7 +25,7 @@ class BenchmarkCase[T](ABC):
     @property
     def logger(self) -> logging.Logger:
         if self._logger is None:
-            self._logger = self.logger_factory.get_logger(self.__class__.__name__ + "-" + self.name)
+            self._logger = self.logger_factory.get_logger(self.name)
         return self._logger
 
     def log_error(self, e: Union[str,Exception]) -> None:

@@ -7,7 +7,7 @@ class LightrunOverheadReportVisualizer(BenchmarkResultsVisualizer[LightrunOverhe
 
     def display(self) -> None:
         """Display the visualizations file."""
-        print("Displaying visualizations (stub).")
+        pass
 
     def create_visualizations(self, benchmark_report: Path, save_path: Path) -> Path:
         """Creates the visualizations and saves them in save_path."""

@@ -36,7 +36,7 @@ class LightrunBenchmark[T]:
         self.test_results_dir = test_root_dir / 'benchmark_results' / self.benchmark_name / datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
         self.per_thread_logs_dir = self.test_results_dir / 'logs'
         self.logger_factory = LoggerFactory(self.per_thread_logs_dir)
-        self.logger = self.logger_factory.get_logger(__name__)
+        self.logger = self.logger_factory.get_logger(self.__class__.__name__)
         self.benchmark_manager = None
         self.benchmark_cases = None
         self.benchmark_results = None
@@ -47,11 +47,11 @@ class LightrunBenchmark[T]:
 
     def run(self):
         self.test_results_dir.mkdir(parents=True, exist_ok=True)
-        self.benchmark_parameters.print_configuration(table_header="Lightrun Request Overhead Benchmark Configuration")
+        self.benchmark_parameters.print_configuration(table_header="Lightrun Request Overhead Benchmark Configuration", logger=self.logger)
         self.logger.info(f"Benchmark results directory: {self.test_results_dir}")
 
         self.benchmark_cases = self.benchmark_cases_generator.generate_benchmark_cases(self.benchmark_name, self.benchmark_parameters, self.logger_factory)
-        self.benchmark_manager = BenchmarkManager(self.benchmark_parameters.num_workers)
+        self.benchmark_manager = BenchmarkManager(self.benchmark_parameters.num_workers, self.logger_factory)
         self.benchmark_manager.run(self.benchmark_cases)
         self.benchmark_report = self.benchmark_report_generator.generate_report(self.benchmark_cases, self.test_results_dir)
         self.benchmark_report_visualizations = self.benchmark_report_visualizer.create_visualizations(self.benchmark_report, self.test_results_dir)

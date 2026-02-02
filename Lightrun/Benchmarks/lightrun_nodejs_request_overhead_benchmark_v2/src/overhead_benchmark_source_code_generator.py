@@ -159,5 +159,4 @@ functions.http('{entry_point}', lightrun.wrap(func));
         with open(output_dir / filename, "w") as f:
             f.write(js_content)
             
-        print(f"Generated code in {output_dir} (n={self.test_size})")
         return GeneratedSourceAttributes(path=output_dir, entry_point=entry_point)

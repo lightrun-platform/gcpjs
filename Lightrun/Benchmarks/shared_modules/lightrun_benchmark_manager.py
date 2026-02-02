@@ -6,11 +6,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 
 
+from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
+
 class BenchmarkManager[T]:
 
-    def __init__(self, num_workers: int):
+    def __init__(self, num_workers: int, logger_factory: LoggerFactory):
         self.num_workers = num_workers
-        self.logger = logging.getLogger(__name__)
+        self.logger = logger_factory.get_logger(self.__class__.__name__)
 
     def run(self, benchmark_cases: List[BenchmarkCase[T]]) -> None:
         """Run the complete test workflow. results are saved inside the benchmark case object."""

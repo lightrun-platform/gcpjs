@@ -33,7 +33,8 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
         # Ideally this should be persistent for the duration of the run. we use mkdtemp.
         # Note: This directory is not automatically cleaned up.
         build_dir = Path(tempfile.mkdtemp(prefix=f"lightrun_benchmark_{benchmark_name}_"))
-        print(f"Generating source code in: {build_dir}")
+        logger = logger_factory.get_logger(self.__class__.__name__)
+        logger.info(f"Generating source code in: {build_dir}")
 
         for runtime in benchmark_config.runtimes:
             # Extract version from runtime string (e.g. 'nodejs20' -> '20')

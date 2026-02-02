@@ -14,6 +14,8 @@ class ColdStartDetectionError(Exception):
     pass
 
 
+from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
+
 class WaitForColdTask:
     """Task to wait for a single Cloud Function to become cold."""
     
@@ -24,6 +26,7 @@ class WaitForColdTask:
         project: str,
         cold_check_delay: int,
         consecutive_cold_checks: int,
+        logger_factory: LoggerFactory
     ):
         """
         Initialize wait for cold task for a single function.
@@ -34,12 +37,14 @@ class WaitForColdTask:
             project: GCP project ID
             cold_check_delay: Seconds to wait between cold checks
             consecutive_cold_checks: Number of consecutive cold checks required
+            logger_factory: Factory to create loggers
         """
         self.function_name = function_name
         self.region = region
         self.project = project
         self.cold_check_delay = cold_check_delay
         self.consecutive_cold_checks = consecutive_cold_checks
+        self.logger = logger_factory.get_logger(f"WaitForColdTask_{function_name}")
     
     def check_function_instances(self) -> int:
         """
@@ -220,14 +225,14 @@ class WaitForColdTask:
             ColdStartDetectionError: If function cannot be confirmed cold within timeout
         """
         # Initial wait period (10 seconds grace)
-        print(f"[{self.function_name}] Waiting 10s grace period...", end='\r')
+        self.logger.info(f"[{self.function_name}] Waiting 10s grace period...")
         time.sleep(10)
         
         # Poll to confirm function is actually cold
         # The Monitoring API NEVER reports 0 - it just omits timeSeries when cold.
         # We need multiple consecutive "no data" checks over 4 minutes, polling every 15 seconds.
         # This ensures metrics would have appeared if instances existed (accounting for 60-120s delay).
-        print(f"[{self.function_name}] Verifying {self.function_name} is cold...")
+        self.logger.info(f"[{self.function_name}] Verifying {self.function_name} is cold...")
         
         start_time = time.time()
         max_wait_seconds = max_poll_minutes * 60
@@ -260,22 +265,22 @@ class WaitForColdTask:
                     current_time = time.time()
                     time_to_cold = current_time - deployment_start_time
                     duration_mins = required_cold_duration_seconds / 60
-                    print(f"[{self.function_name}] ✓ {self.function_name} confirmed cold after {time_to_cold/60:.1f} minutes ({cold_confirmation_count} consecutive 'no data' checks over {duration_mins:.1f} minutes)")
+                    self.logger.info(f"[{self.function_name}] ✓ {self.function_name} confirmed cold after {time_to_cold/60:.1f} minutes ({cold_confirmation_count} consecutive 'no data' checks over {duration_mins:.1f} minutes)")
                     
                     return time_to_cold
                 else:
                     consecutive_duration = cold_confirmation_count * poll_interval
-                    print(f"[{self.function_name}] [{elapsed_minutes}m] No instance data: {consecutive_duration}s/{required_cold_duration_seconds}s ({cold_confirmation_count}/{required_cold_confirmations} checks)...", end='\r')
+                    self.logger.info(f"[{self.function_name}] [{elapsed_minutes}m] No instance data: {consecutive_duration}s/{required_cold_duration_seconds}s ({cold_confirmation_count}/{required_cold_confirmations} checks)...")
             elif count > 1:
                 # We have explicit data showing instances exist - definitely warm
                 cold_confirmation_count = 0
                 elapsed_minutes = int((time.time() - start_time) / 60)
-                print(f"[{self.function_name}] [{elapsed_minutes}m] Still warm (instances: {count})", end='\r')
+                self.logger.info(f"[{self.function_name}] [{elapsed_minutes}m] Still warm (instances: {count})")
             else:
                 # count == 0 shouldn't happen, but handle it
                 cold_confirmation_count = 0
                 elapsed_minutes = int((time.time() - start_time) / 60)
-                print(f"[{self.function_name}] [{elapsed_minutes}m] Unexpected count={count}, continuing...", end='\r')
+                self.logger.info(f"[{self.function_name}] [{elapsed_minutes}m] Unexpected count={count}, continuing...")
             
             time.sleep(poll_interval)
         
