@@ -14,7 +14,7 @@ sys.path.insert(0, str(benchmarks_dir))
 # We need root dir in path to import 'Lightrun.Benchmarks...'
 sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
-from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task import DeployFunctionTask
+from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task import DeployFunctionTask, LabelClashException
 from Lightrun.Benchmarks.shared_modules.gcf_models.deploy_function_result import DeploymentSuccess, DeploymentFailure
 from Lightrun.Benchmarks.shared_modules.cli_parser import ParsedCLIArguments
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
@@ -164,6 +164,35 @@ class TestDeployFunctionTask(unittest.TestCase):
         self.assertIn('update_build_env_vars', call_kwargs)
         self.assertIn('BP_IMAGE_LABELS', call_kwargs['update_build_env_vars'])
         self.assertEqual(call_kwargs['update_build_env_vars']['BP_IMAGE_LABELS'], 'foo=bar')
+
+    def test_deploy_label_clash(self):
+        """Test that conflicting labels raise LabelClashException."""
+        # Setup conflicting labels
+        self.function.labels = {'app': 'v1'}
+        self.function.kwargs = {'update_build_env_vars': {'app': 'v2'}}
+        
+        with self.assertRaises(LabelClashException):
+            self.task.deploy()
+
+    def test_deploy_label_merge_success(self):
+        """Test that same labels merge successfully."""
+        # Setup matching labels
+        self.function.labels = {'app': 'v1'}
+        self.function.kwargs = {'update_build_env_vars': {'app': 'v1', 'env': 'prod'}}
+        
+        # We need to mock the helpers that deploy() calls after label check
+        with patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task.GCFDeployCommandParameters.create') as mock_create, \
+             patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task.deploy_with_extended_gcf_parameters') as mock_deploy_helper:
+             
+            self.task.deploy()
+            
+            mock_create.assert_called_once()
+            call_kwargs = mock_create.call_args[1]
+            
+            # Check combined BP_IMAGE_LABELS
+            bp_labels = call_kwargs['update_build_env_vars']['BP_IMAGE_LABELS']
+            self.assertIn('app=v1', bp_labels)
+            self.assertIn('env=prod', bp_labels)
 
 if __name__ == '__main__':
     unittest.main()

@@ -206,15 +206,15 @@ class DeployFunctionTask:
 
         kwargs_build_labels = kwargs.get('update_build_env_vars', {})
 
-        common_keys = kwargs_build_labels & self.f.labels
+        common_keys = kwargs_build_labels.keys() & self.f.labels.keys()
         for key in common_keys:
             kw_value = kwargs_build_labels[key]
             function_label_value = self.f.labels[key]
             if kw_value != function_label_value:
-                raise LabelClashException(f"Label clash: key: {key}' exists in the function's labels list with value: '{function_label_value}', but was also sent via the keyword argument 'update_build_env_vars' with value: {kw_value}")
+                raise LabelClashException(f"Label clash: key: '{key}' exists in the function's labels list with value: '{function_label_value}', but was also sent via the keyword argument 'update_build_env_vars' with value: '{kw_value}'")
 
         all_labels = {**kwargs_build_labels, **self.f.labels}
-        combined_labels_str = " ".join([f"{k}={v}" for k, v in all_labels])
+        combined_labels_str = " ".join([f"{k}={v}" for k, v in all_labels.items()])
 
         update_build_env_vars = kwargs.get('update_build_env_vars', {}).copy()
         update_build_env_vars['BP_IMAGE_LABELS'] = combined_labels_str

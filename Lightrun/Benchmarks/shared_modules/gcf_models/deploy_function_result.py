@@ -3,7 +3,7 @@ from abc import ABC
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 
-from Benchmarks.shared_modules.cloud_assets import CloudAsset
+from Lightrun.Benchmarks.shared_modules.cloud_assets import CloudAsset
 
 
 @dataclass(frozen=True, kw_only=True)
