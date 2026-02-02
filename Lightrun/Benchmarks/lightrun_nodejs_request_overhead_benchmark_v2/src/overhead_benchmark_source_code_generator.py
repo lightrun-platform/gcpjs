@@ -6,6 +6,10 @@ from pathlib import Path
 from Lightrun.Benchmarks.shared_modules.gcf_models.generated_source_attributes import GeneratedSourceAttributes
 from Lightrun.Benchmarks.shared_modules.source_code_generator import SourceCodeGenerator
 
+package_name = "lightrun-overhead-benchmark"
+main = "lightrunOverheadBenchmark.js"
+entry_point = "run"
+
 
 def _generate_package_json(lightrun_version: str, node_version: str, gcp_functions_version: str) -> str:
     """
@@ -23,11 +27,8 @@ def _generate_package_json(lightrun_version: str, node_version: str, gcp_functio
         "lightrun": lightrun_version
     }
 
-    name = "hello-lightrun"
-    main = "helloLightrun.js"
-
     package_data = {
-        "name": name,
+        "name": package_name,
         "version": "1.0.0",
         "main": main,
         "engines": {
@@ -99,10 +100,6 @@ function function{i}() {{
             Path to the generated source directory
         """
         output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Determine filenames
-        filename = "benchmarkLightrun.js"
-        entry_point = "benchmarkLightrunOverhead"
             
         # Generate package.json
         package_json_content = _generate_package_json(
@@ -156,7 +153,7 @@ let func = async (req, res) => {{
 functions.http('{entry_point}', lightrun.wrap(func));
 """
 
-        with open(output_dir / filename, "w") as f:
+        with open(output_dir / main, "w") as f:
             f.write(js_content)
             
         return GeneratedSourceAttributes(path=output_dir, entry_point=entry_point)
