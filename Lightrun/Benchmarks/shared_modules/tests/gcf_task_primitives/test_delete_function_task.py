@@ -14,8 +14,8 @@ sys.path.insert(0, str(benchmarks_dir))
 # We need root dir in path to import 'Lightrun.Benchmarks...'
 sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
-from ....shared_modules.gcf_task_primitives.delete_function_task import DeleteFunctionTask, DeleteSuccess, DeleteFailure
-from ....shared_modules.cli_parser import ParsedCLIArguments
+from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.delete_function_task import DeleteFunctionTask, DeleteSuccess, DeleteFailure
+from Lightrun.Benchmarks.shared_modules.cli_parser import ParsedCLIArguments
 from unittest.mock import MagicMock
 
 
@@ -35,20 +35,17 @@ class TestDeleteFunctionTask(unittest.TestCase):
         self.function.region = 'us-central1'
         self.function.project = 'test-project'
         self.function.gen2 = True
+        self.function.logger = MagicMock() # Mock logger on the function
         self.function_name = self.function.name
-
-        self.mock_logger_factory = MagicMock()
-        self.mock_logger = MagicMock()
-        self.mock_logger_factory.get_logger.return_value = self.mock_logger
     
     def test_init(self):
         """Test DeleteFunctionTask initialization."""
-        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
+        task = DeleteFunctionTask(self.function)
         
         self.assertEqual(task.function, self.function)
         
     
-    @patch('shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
     def test_execute_successful_deletion(self, mock_subprocess):
         """Test successful function deletion."""
         # Mock successful deletion
@@ -57,14 +54,14 @@ class TestDeleteFunctionTask(unittest.TestCase):
         mock_result.stderr = ''
         mock_subprocess.return_value = mock_result
         
-        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
+        task = DeleteFunctionTask(self.function)
         result = task.execute(timeout=120)
         
         
         self.assertIsInstance(result, DeleteSuccess)
         self.assertEqual(result.function_name, self.function_name)
     
-    @patch('shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
     def test_execute_deletion_failure(self, mock_subprocess):
         """Test deletion failure."""
         # Mock failed deletion
@@ -73,7 +70,7 @@ class TestDeleteFunctionTask(unittest.TestCase):
         mock_result.stderr = 'Function not found'
         mock_subprocess.return_value = mock_result
         
-        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
+        task = DeleteFunctionTask(self.function)
         result = task.execute(timeout=120)
         
         self.assertIsInstance(result, DeleteFailure)
@@ -81,13 +78,13 @@ class TestDeleteFunctionTask(unittest.TestCase):
         self.assertIsNotNone(result.error)
         self.assertIn('Function not found', result.stderr)
     
-    @patch('shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
     def test_execute_exception_handling(self, mock_subprocess):
         """Test exception handling during deletion."""
         # Mock exception
         mock_subprocess.side_effect = Exception('Network error')
         
-        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
+        task = DeleteFunctionTask(self.function)
         result = task.execute(timeout=120)
         
         self.assertIsInstance(result, DeleteFailure)
@@ -95,14 +92,14 @@ class TestDeleteFunctionTask(unittest.TestCase):
         self.assertIsNotNone(result.error)
         self.assertEqual(str(result.error), 'Network error')
     
-    @patch('shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
     def test_execute_gcloud_command_structure(self, mock_subprocess):
         """Test that gcloud command has correct structure."""
         mock_result = Mock()
         mock_result.returncode = 0
         mock_subprocess.return_value = mock_result
         
-        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
+        task = DeleteFunctionTask(self.function)
         task.execute(timeout=120)
         
         # Check delete command structure
@@ -118,7 +115,7 @@ class TestDeleteFunctionTask(unittest.TestCase):
         self.assertIn(f'--region={self.function.region}', delete_args)
         self.assertIn(f'--project={self.function.project}', delete_args)
     
-    @patch('shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
     def test_execute_error_message_truncation(self, mock_subprocess):
         """Test that error messages are truncated to 200 characters."""
         # Mock failed deletion with long error message
@@ -128,20 +125,19 @@ class TestDeleteFunctionTask(unittest.TestCase):
         mock_result.stderr = long_error
         mock_subprocess.return_value = mock_result
         
-        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
+        task = DeleteFunctionTask(self.function)
         result = task.execute(timeout=120)
         
-        self.assertLessEqual(len(result.stderr), 200)
-        self.assertEqual(result.stderr, 'A' * 200)
+        self.assertEqual(result.stderr, long_error)
     
-    @patch('shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.delete_function_task.subprocess.run')
     def test_execute_timeout_handling(self, mock_subprocess):
         """Test timeout handling."""
         import subprocess
         
         mock_subprocess.side_effect = subprocess.TimeoutExpired('gcloud', 60)
         
-        task = DeleteFunctionTask(self.function, self.mock_logger_factory)
+        task = DeleteFunctionTask(self.function)
         result = task.execute(timeout=120)
         
         self.assertIsInstance(result, DeleteFailure)

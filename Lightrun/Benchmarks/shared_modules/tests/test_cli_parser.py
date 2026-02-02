@@ -7,8 +7,9 @@ import sys
 # We need 'Benchmarks' dir in path to import 'shared_modules'
 benchmarks_dir = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(benchmarks_dir))
+sys.path.insert(0, str(benchmarks_dir.parent))
 
-from ..cli_parser import MetadataArgumentParser, CLIParser
+from Lightrun.Benchmarks.shared_modules.cli_parser import MetadataArgumentParser, CLIParser
 
 
 class TestMetadataArgumentParser(unittest.TestCase):

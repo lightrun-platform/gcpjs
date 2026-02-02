@@ -2,17 +2,17 @@
 
 import unittest
 from unittest.mock import Mock, patch, MagicMock
+from pathlib import Path
 import argparse
 import sys
-from pathlib import Path
 
 # Add parent directory to path so we can import as a package
-# We need 'Benchmarks' dir in path to import 'shared_modules'
 benchmarks_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(benchmarks_dir))
 sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
-from ....shared_modules.gcf_task_primitives.wait_for_cold_task import WaitForColdTask
+from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.wait_for_cold_task import WaitForColdTask
+from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
 
 
 class TestWaitForColdTask(unittest.TestCase):
@@ -20,28 +20,29 @@ class TestWaitForColdTask(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.function_name = 'testfunction-001'
-        self.function_index = 1
-        self.region = 'us-central1'
-        self.project = 'test-project'
+        self.mock_logger = MagicMock()
+        self.function = Mock(spec=GCPFunction)
+        self.function.name = 'testfunction-001'
+        self.function.region = 'us-central1'
+        self.function.project = 'test-project'
+        self.function.logger = self.mock_logger
     
     def test_init(self):
         """Test WaitForColdTask initialization."""
         task = WaitForColdTask(
-            function_name=self.function_name,
-            region=self.region,
-            project=self.project,
+            function=self.function,
             cold_check_delay=15,
             consecutive_cold_checks=3
         )
         
-        self.assertEqual(task.function_name, self.function_name)
-        self.assertEqual(task.region, self.region)
-        self.assertEqual(task.project, self.project)
+        self.assertEqual(task.function_name, self.function.name)
+        self.assertEqual(task.region, self.function.region)
+        self.assertEqual(task.project, self.function.project)
         self.assertEqual(task.cold_check_delay, 15)
+        self.assertEqual(task.logger, self.mock_logger)
     
-    @patch('shared_modules.gcf_task_primitives.wait_for_cold_task.time.sleep')
-    @patch('shared_modules.gcf_task_primitives.wait_for_cold_task.time.time')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.wait_for_cold_task.time.sleep')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.wait_for_cold_task.time.time')
     @patch.object(WaitForColdTask, 'check_function_instances')
     def test_execute_successful(self, mock_check, mock_time, mock_sleep):
         """Test successful cold wait."""
@@ -55,9 +56,7 @@ class TestWaitForColdTask(unittest.TestCase):
         mock_check.return_value = 1
         
         task = WaitForColdTask(
-            function_name=self.function_name,
-            region=self.region,
-            project=self.project,
+            function=self.function,
             cold_check_delay=0, # fast
             consecutive_cold_checks=2
         )

@@ -11,8 +11,8 @@ benchmarks_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(benchmarks_dir))
 sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
-from shared_modules.gcf_task_primitives.send_request_task import SendRequestTask
-from shared_modules.gcf_models.gcp_function import GCPFunction
+from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.send_request_task import SendRequestTask
+from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
 
 
 class TestSendRequestTask(unittest.TestCase):
@@ -28,8 +28,8 @@ class TestSendRequestTask(unittest.TestCase):
         task = SendRequestTask(function=self.function)
         self.assertEqual(task.url, self.function.url)
     
-    @patch('shared_modules.gcf_task_primitives.send_request_task.requests.get')
-    @patch('shared_modules.gcf_task_primitives.send_request_task.time.perf_counter')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.send_request_task.requests.get')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.send_request_task.time.perf_counter')
     def test_execute_successful_request(self, mock_perf_counter, mock_get):
         """Test successful HTTP request."""
         # Mock time for latency: start, end
@@ -53,7 +53,7 @@ class TestSendRequestTask(unittest.TestCase):
         self.assertEqual(result['isColdStart'], True)
         self.assertEqual(result['_url'], self.function.url)
     
-    @patch('shared_modules.gcf_task_primitives.send_request_task.requests.get')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.send_request_task.requests.get')
     def test_execute_http_error(self, mock_get):
         """Test HTTP error response."""
         mock_response = Mock()
@@ -69,7 +69,7 @@ class TestSendRequestTask(unittest.TestCase):
         self.assertEqual(result['status_code'], 500)
         self.assertEqual(result['message'], 'Internal Server Error')
     
-    @patch('shared_modules.gcf_task_primitives.send_request_task.requests.get')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.send_request_task.requests.get')
     def test_execute_exception(self, mock_get):
         """Test exception during request."""
         mock_get.side_effect = Exception("Connection refused")

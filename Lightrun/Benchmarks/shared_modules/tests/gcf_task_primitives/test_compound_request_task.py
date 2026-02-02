@@ -1,7 +1,7 @@
 """Unit tests for CompoundRequestTask class."""
 
 import unittest
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, patch, call, MagicMock
 import sys
 from pathlib import Path
 
@@ -10,8 +10,8 @@ benchmarks_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(benchmarks_dir))
 sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
-from shared_modules.gcf_task_primitives.compound_request_task import CompoundRequestTask
-from shared_modules.gcf_models.gcp_function import GCPFunction
+from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.compound_request_task import CompoundRequestTask
+from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
 
 
 class TestCompoundRequestTask(unittest.TestCase):
@@ -24,6 +24,10 @@ class TestCompoundRequestTask(unittest.TestCase):
         self.function.index = 1
         self.function.display_name = 'testFunction-001'
         self.function.is_lightrun_variant = True
+        
+        self.mock_logger_factory = MagicMock()
+        self.mock_logger = MagicMock()
+        self.mock_logger_factory.get_logger.return_value = self.mock_logger
     
     def test_init(self):
         """Test initialization."""
@@ -32,7 +36,8 @@ class TestCompoundRequestTask(unittest.TestCase):
             delay_between_requests=1,
             num_requests=5,
             skip_lightrun_action_setup=False,
-            lightrun_api_key='key'
+            lightrun_api_key='key',
+            logger_factory=self.mock_logger_factory
         )
         
         self.assertEqual(task.function, self.function)
@@ -40,9 +45,9 @@ class TestCompoundRequestTask(unittest.TestCase):
         self.assertEqual(task.num_requests, 5)
         self.assertEqual(task.lightrun_api_key, 'key')
     
-    @patch('shared_modules.gcf_task_primitives.compound_request_task.SendRequestTask')
-    @patch('shared_modules.gcf_task_primitives.compound_request_task.time.sleep')
-    @patch('shared_modules.gcf_task_primitives.compound_request_task.LightrunAPI') # Mock the API class
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.compound_request_task.SendRequestTask')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.compound_request_task.time.sleep')
+    @patch('Lightrun.Benchmarks.shared_modules.gcf_task_primitives.compound_request_task.LightrunAPI') # Mock the API class
     def test_execute_flow(self, mock_lightrun_api_cls, mock_sleep, mock_send_task_cls):
         """Test execution flow including looping and lightrun setup."""
         
@@ -64,7 +69,8 @@ class TestCompoundRequestTask(unittest.TestCase):
             delay_between_requests=0.1,
             num_requests=2,
             skip_lightrun_action_setup=False,
-            lightrun_api_key='key'
+            lightrun_api_key='key',
+            logger_factory=self.mock_logger_factory
         )
         
         result = task.execute()

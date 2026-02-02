@@ -126,7 +126,7 @@ def deploy_with_extended_gcf_parameters(extended_parameters: GCFDeployCommandPar
             )
 
         except subprocess.TimeoutExpired:
-            _handle_retry_wait(attempt, max_retries, "TimeoutExpired")
+            _handle_retry_wait(attempt, max_retries, "TimeoutExpired", logger)
             if attempt == max_retries - 1:
                 return DeploymentFailure(
                     error='Deployment timed out after 5 minutes',
@@ -170,7 +170,7 @@ class DeployFunctionTask:
                                                                region=self.f.region,
                                                                runtime=self.f.runtime,
                                                                entry_point=self.f.entry_point,
-                                                               source_code_dir=self.f.source_code_dir,
+                                                               source_code_dir=self.f.function_source_code_dir,
                                                                memory=self.f.memory,
                                                                cpu=self.f.cpu,
                                                                concurrency=self.f.concurrency,
@@ -179,7 +179,7 @@ class DeployFunctionTask:
                                                                timeout=self.f.timeout,
                                                                project=self.f.project,
                                                                allow_unauthenticated=self.f.allow_unauthenticated,
-                                                               deployment_timeout=self.f.deployment_timeout,
+                                                               deployment_timeout=self.deployment_timeout_seconds,
                                                                quiet=self.f.quiet,
                                                                gen2=self.f.gen2,
                                                                env_vars=self.f.env_vars,

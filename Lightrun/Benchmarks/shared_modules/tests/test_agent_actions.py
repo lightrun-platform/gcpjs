@@ -8,9 +8,9 @@ benchmarks_dir = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(benchmarks_dir))
 sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
-from shared_modules.agent_actions import AgentActions
-from shared_modules.agent_models import LogAction, BreakpointAction
-from shared_modules.lightrun_api import LightrunAPI
+from Lightrun.Benchmarks.shared_modules.agent_actions import AgentActions
+from Lightrun.Benchmarks.shared_modules.agent_models import LogAction, BreakpointAction
+from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI
 
 class TestAgentActions(unittest.TestCase):
     def setUp(self):
