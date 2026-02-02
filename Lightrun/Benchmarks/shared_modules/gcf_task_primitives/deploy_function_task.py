@@ -224,6 +224,10 @@ class DeployFunctionTask:
         if update_build_env_vars:
             create_kwargs['update_build_env_vars'] = update_build_env_vars
         
+        # Explicitly set docker repository to avoid gcloud crash (AttributeError: 'NoneType' object has no attribute 'service')
+        if 'docker_repository' not in create_kwargs:
+            create_kwargs['docker_repository'] = f'projects/{self.f.project}/locations/{self.f.region}/repositories/gcf-artifacts'
+
         command_parameters = GCFDeployCommandParameters.create(function_name=self.f.name,
                                                                region=self.f.region,
                                                                runtime=self.f.runtime,

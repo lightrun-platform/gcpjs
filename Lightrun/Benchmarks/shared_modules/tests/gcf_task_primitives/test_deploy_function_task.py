@@ -165,6 +165,10 @@ class TestDeployFunctionTask(unittest.TestCase):
         self.assertIn('BP_IMAGE_LABELS', call_kwargs['update_build_env_vars'])
         self.assertEqual(call_kwargs['update_build_env_vars']['BP_IMAGE_LABELS'], 'foo=bar')
 
+        # Verify docker_repository injection to bypass gcloud crash
+        self.assertIn('docker_repository', call_kwargs)
+        self.assertEqual(call_kwargs['docker_repository'], 'projects/test-project/locations/us-central1/repositories/gcf-artifacts')
+
     def test_deploy_label_clash(self):
         """Test that conflicting labels raise LabelClashException."""
         # Setup conflicting labels
