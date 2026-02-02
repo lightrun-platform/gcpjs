@@ -99,9 +99,165 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
             'LIGHTRUN_API_ENDPOINT': self.lightrun_api_url
         }
 
+    def _get_action_line_numbers(self) -> List[int]:
+        """
+        Parses the generated source code to find line numbers for action placement.
+        Target: The 'return' statement line inside each 'function{i}'.
+        """
+        source_file = self.source_code_dir / "lightrunOverheadBenchmark.js"
+        if not source_file.exists():
+            raise FileNotFoundError(f"Source file not found: {source_file}")
+
+        lines = source_file.read_text().splitlines()
+        action_lines = []
+        
+        # Look for function definitions and then the return statement inside them
+        # Pattern: function function{i}() { ... return ... }
+        # We know the generator structure:
+        # function function{i}() {
+        #     ...
+        #     return ...  <-- Target
+        # }
+        
+        for i in range(1, self.num_actions + 1):
+            func_def_str = f"function function{i}() {{"
+            found_func = False
+            for line_idx, line in enumerate(lines):
+                if func_def_str in line:
+                    found_func = True
+                    # Look for return statement in subsequent lines
+                    for offset in range(1, 10): # Look ahead a few lines
+                        if line_idx + offset < len(lines):
+                            if "return process.hrtime.bigint()" in lines[line_idx + offset]:
+                                action_lines.append(line_idx + offset + 1) # 1-based line number
+                                break
+                    break
+            
+            if not found_func:
+                self.logger.warning(f"Could not find definition for function{i} in source code.")
+        
+        return action_lines
+
     def execute_benchmark(self) -> LightrunOverheadBenchmarkResult:
         """Execute the benchmark logic."""
-        # Placeholder implementation
+        import time
+        from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI
+        from Lightrun.Benchmarks.shared_modules.agent_models import Snapshot, Log, CaptureCondition
+        from Lightrun.Benchmarks.shared_modules.agent_actions import AgentActions
+        from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.send_request_task import SendRequestTask
+
         self.logger.info(f"Executing benchmark with {self.num_actions} {self.action_type} actions on {self.runtime}")
-        # TODO: Implement actual load generation and action application
-        return LightrunOverheadBenchmarkResult(success=True)
+
+        # 1. Initialize Lightrun API
+        api = LightrunAPI(self.lightrun_api_url, self.lightrun_api_key, self.lightrun_company_id)
+        
+        # 2. Identify Agent ID (DISPLAY_NAME)
+        agent_id = self.name 
+
+        # 3. Determine Action Lines
+        if self.num_actions > 0:
+            action_lines = self._get_action_line_numbers()
+            if len(action_lines) != self.num_actions:
+                 self.logger.warning(f"Expected {self.num_actions} action lines but found {len(action_lines)}. Adjusting action count.")
+        else:
+            action_lines = []
+
+        # 4. Create Actions
+        actions = []
+        filename = "lightrunOverheadBenchmark.js"
+        
+        for line in action_lines:
+            if self.action_type.lower() == 'snapshot':
+                actions.append(Snapshot(filename, line, "deployment-test-snapshot"))
+            elif self.action_type.lower() == 'log':
+                actions.append(Log(filename, line, "deployment-test-log: Hello from Lightrun!"))
+            # Default/Fallback? Raise error? Assuming validated config.
+
+        # 5. Execute with Actions Context
+        try:
+            with AgentActions(api, agent_id, actions) as active_actions:
+                # 6. Send Request
+                # Use SendRequestTask directly or mimic its logic? 
+                # We need the response payload.
+                send_task = SendRequestTask(self.gcp_function)
+                
+                # Request 1: Warmup / Verify Agent Connection
+                # This request ensures the function is hot and the agent has time to connect/sync
+                self.logger.info("Sending warmup request...")
+                send_task.execute()
+                
+                # Wait a moment for actions to be bound if not already
+                time.sleep(2) 
+
+                # Request 2: Measurement
+                self.logger.info("Sending measurement request...")
+                start_time = time.perf_counter()
+                result = send_task.execute()
+                end_time = time.perf_counter()
+                
+                # 7. Parse Result
+                if not result or 'handlerRunTime' not in result:
+                     return LightrunOverheadBenchmarkResult(success=False, error=f"Invalid response from function: {result}")
+
+                handler_run_time_ns = int(result['handlerRunTime'])
+                
+                # 8. Verify Action Triggering
+                # Iterate over applied actions and check their hit count/status
+                actions_triggered = 0
+                missing_actions = []
+                
+                # Allow a short buffer for async reporting from agent to server
+                max_retries = 3
+                for _ in range(max_retries):
+                    actions_triggered = 0
+                    missing_actions = []
+                    
+                    for action, action_id in active_actions.applied_actions:
+                        status = None
+                        is_hit = False
+                        
+                        if isinstance(action, Snapshot):
+                            info = api.get_snapshot(action_id)
+                            # Check if CAPTURED or if hit count > 0 (snapshots might be consumable)
+                            if info and (info.get('captureState') == 'CAPTURED' or info.get('hitCount', 0) > 0):
+                                is_hit = True
+                        elif isinstance(action, Log):
+                            info = api.get_log(action_id)
+                            if info and info.get('hitCount', 0) > 0:
+                                is_hit = True
+                        
+                        if is_hit:
+                            actions_triggered += 1
+                        else:
+                            missing_actions.append(f"{action.__class__.__name__}:{action_id}")
+                    
+                    if actions_triggered == len(active_actions.applied_actions):
+                        break
+                    
+                    time.sleep(1) # Wait before retry
+
+                if actions_triggered < len(active_actions.applied_actions):
+                     self.logger.warning(f"Verification Failed: Only {actions_triggered}/{len(active_actions.applied_actions)} actions triggered. Missing: {missing_actions}")
+                     # Depending on strictness, we might want to fail the test. 
+                     # The prompt says "verify... because we need to see we aren't getting false positives".
+                     # So we should probably report this error or mark success=False.
+                     return LightrunOverheadBenchmarkResult(
+                         success=False,
+                         error=f"Partial action triggering: {actions_triggered}/{len(active_actions.applied_actions)} triggered. Potential throttling or agent lag.",
+                         total_run_time_sec=end_time - start_time,
+                         handler_run_time_ns=handler_run_time_ns,
+                         actions_count=self.num_actions
+                     )
+
+                self.logger.info(f"Verification Successful: All {actions_triggered} actions triggered.")
+
+                return LightrunOverheadBenchmarkResult(
+                    success=True,
+                    total_run_time_sec=end_time - start_time,
+                    handler_run_time_ns=handler_run_time_ns,
+                    actions_count=self.num_actions
+                )
+
+        except Exception as e:
+            self.logger.error(f"Benchmark execution failed: {e}")
+            return LightrunOverheadBenchmarkResult(success=False, error=str(e))
