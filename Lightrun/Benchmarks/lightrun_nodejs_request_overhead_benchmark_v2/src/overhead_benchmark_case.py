@@ -101,6 +101,6 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
     def execute_benchmark(self) -> LightrunOverheadBenchmarkResult:
         """Execute the benchmark logic."""
         # Placeholder implementation
-        self.log_info(f"Executing benchmark with {self.num_actions} {self.action_type} actions on {self.runtime}")
+        self.logger.info(f"Executing benchmark with {self.num_actions} {self.action_type} actions on {self.runtime}")
         # TODO: Implement actual load generation and action application
         return LightrunOverheadBenchmarkResult(success=True)
