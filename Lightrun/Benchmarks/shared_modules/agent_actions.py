@@ -1,6 +1,6 @@
 import logging
 from typing import Iterable, List, Tuple
-from .lightrun_api import LightrunAPI
+from Benchmarks.shared_modules.api.lightrun_api import LightrunAPI
 from .agent_models import LightrunAction
 
 class AgentActions:

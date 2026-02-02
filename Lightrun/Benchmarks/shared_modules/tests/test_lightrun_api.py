@@ -5,6 +5,8 @@ from pathlib import Path
 import json
 import base64
 
+from Benchmarks.shared_modules.api.lightrun_plugin_api import get_client_info_header
+
 # Add parent directory to path
 benchmarks_dir = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(benchmarks_dir))
@@ -81,7 +83,7 @@ class TestLightrunPluginAPI(unittest.TestCase):
         self.api = LightrunPluginAPI(self.api_url, self.company_id, self.mock_auth)
 
     def test_get_client_info_header(self):
-        header = self.api._get_client_info_header("1.78")
+        header = get_client_info_header("1.78")
         decoded = base64.b64decode(header).decode('utf-8')
         info = json.loads(decoded)
         self.assertEqual(info['ideInfoDTO']['pluginVersion'], "1.78.0")
