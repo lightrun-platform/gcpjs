@@ -15,7 +15,7 @@ from ...shared_modules.logger_factory import LoggerFactory
 class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOverheadBenchmarkResult]):
     """Generates benchmark cases for the Lightrun overhead benchmark."""
 
-    def _generate_benchmark_cases(self, benchmark_name: str, benchmark_config: ParsedCLIArguments, regions_allocation_order: Iterator[str], logger_factory: LoggerFactory) -> List[BenchmarkCase[LightrunOverheadBenchmarkResult]]:
+    def _generate_benchmark_cases(self, benchmark_name: str, benchmark_config: ParsedCLIArguments, regions_allocation_order: Iterator[str], logger_factory: LoggerFactory, results_directory: Path) -> List[BenchmarkCase[LightrunOverheadBenchmarkResult]]:
         """
         Generate benchmark cases based on configuration.
         
@@ -28,18 +28,17 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
             List of generated benchmark cases
         """
         cases = []
-        
-        # Determine build/temp directory for generated source code
-        # Ideally this should be persistent for the duration of the run. we use mkdtemp.
-        # Note: This directory is not automatically cleaned up.
-        build_dir = Path(tempfile.mkdtemp(prefix=f"lightrun_benchmark_{benchmark_name}_"))
+
         logger = logger_factory.get_logger(self.__class__.__name__)
-        logger.info(f"Generating source code in: {build_dir}")
+        source_dir = results_directory / 'source_code'
+        logger.info(f"Generating source code in: {source_dir}")
 
         for runtime in benchmark_config.runtimes:
             # Extract version from runtime string (e.g. 'nodejs20' -> '20')
             match = re.search(r'nodejs(\d+)', runtime)
-            node_version = match.group(1) if match else "20"
+            if not match:
+                raise Exception(f"Could not extract node version from runtime name: {runtime}")
+            node_version = match.group(1)
             
             # Generate source code for this runtime
             generator = OverheadBenchmarkSourceCodeGenerator(
@@ -48,9 +47,9 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
                 lightrun_version=benchmark_config.lightrun_version,
                 gcp_functions_version=benchmark_config.google_library_version
             )
-            
-            source_dir = build_dir / runtime
-            generated_source = generator.create_source_dir(source_dir)
+
+            sources_dir_for_runtime = results_directory / 'source_code' / runtime
+            generated_source = generator.create_source_dir(sources_dir_for_runtime)
             
             for generation in benchmark_config.function_generations:
                 is_gen2 = (generation.lower() == 'gen2')
