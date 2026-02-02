@@ -30,12 +30,6 @@ class BenchmarkCase[T](ABC):
             self._logger = self.logger_factory.get_logger(self.name)
         return self._logger
 
-    def log_error(self, e: Union[str,Exception]) -> None:
-        self.logger.error(e)
-
-    def log_info(self, e: Union[str,Exception]) -> None:
-        self.logger.info(e)
-
     @property
     @abstractmethod
     def name(self) -> str:
@@ -56,7 +50,7 @@ class BenchmarkCase[T](ABC):
         pass
 
     def run(self):
-        self.log_info(f"Starting benchmark case: {self.name}")
+        self.logger.info(f"Starting benchmark case: {self.name}")
         try:
             self.deployment_result = self.gcp_function.deploy(self.deployment_timeout_seconds)
             
@@ -69,7 +63,7 @@ class BenchmarkCase[T](ABC):
                     raise Exception(f"Unknown deployment result type: {type(self.deployment_result)}")
 
         except Exception as e:
-            self.log_error(e)
+            self.logger.error(e)
             self.errors.append(e)
         finally:
             self.delete_result = self.gcp_function.delete(self.delete_timeout_seconds)
@@ -106,7 +100,7 @@ class BenchmarkCase[T](ABC):
                             summary += f"Delete result: Success\n"
 
             self.summary = summary
-            self.log_info(summary)
+            self.logger.info(summary)
 
 
 

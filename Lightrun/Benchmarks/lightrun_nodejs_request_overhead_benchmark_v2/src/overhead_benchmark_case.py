@@ -85,7 +85,8 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
             cpu=self.cpu,
             timeout=self.timeout,
             gen2=self.gen2,
-            env_vars=self.env_vars
+            env_vars=self.env_vars,
+            logger=self.logger
         )
         return self._gcp_function
 

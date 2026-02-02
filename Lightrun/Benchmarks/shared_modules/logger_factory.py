@@ -12,6 +12,8 @@ class InfoFilter(logging.Filter):
 class LoggerFactory:
     """Factory for creating configured loggers."""
 
+    FORMAT = '%(asctime)s - %(name)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s'
+
     def __init__(self, log_dir: Path):
         """
         Initialize the factory.
@@ -24,7 +26,7 @@ class LoggerFactory:
         
         # Setup global log file handler
         self.global_log_file = self.log_dir / "benchmark_run.log"
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter(LoggerFactory.FORMAT)
         self.global_file_handler = logging.FileHandler(self.global_log_file, mode='a')
         self.global_file_handler.setLevel(logging.INFO)
         self.global_file_handler.setFormatter(formatter)
@@ -50,7 +52,7 @@ class LoggerFactory:
         logger.setLevel(logging.INFO)
         logger.propagate = False
         
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter(LoggerFactory.FORMAT)
         
         # stdout handler for INFO (and DEBUG if enabled)
         stdout_handler = logging.StreamHandler(sys.stdout)
