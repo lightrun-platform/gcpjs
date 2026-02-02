@@ -10,7 +10,7 @@ sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
 from Lightrun.Benchmarks.shared_modules.agent_actions import AgentActions
 from Lightrun.Benchmarks.shared_modules.agent_models import LogAction, BreakpointAction
-from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI
+from Lightrun.Benchmarks.shared_modules.api import LightrunAPI
 
 class TestAgentActions(unittest.TestCase):
     def setUp(self):

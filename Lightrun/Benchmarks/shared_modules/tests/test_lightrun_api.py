@@ -5,14 +5,12 @@ from pathlib import Path
 import json
 import base64
 
-from Benchmarks.shared_modules.api.lightrun_plugin_api import get_client_info_header
-
 # Add parent directory to path
 benchmarks_dir = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(benchmarks_dir))
 sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
-from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI, LightrunPublicAPI, LightrunPluginAPI
+from Lightrun.Benchmarks.shared_modules.api import LightrunAPI, LightrunPublicAPI, LightrunPluginAPI, get_client_info_header
 from Lightrun.Benchmarks.shared_modules.authenticator import Authenticator, InteractiveAuthenticator
 
 class TestLightrunAPI(unittest.TestCase):

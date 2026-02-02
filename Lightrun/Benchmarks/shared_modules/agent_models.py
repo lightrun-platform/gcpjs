@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
-from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI
+from Lightrun.Benchmarks.shared_modules.api import LightrunAPI
 
 
 @dataclass(frozen=True)

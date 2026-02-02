@@ -146,7 +146,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
     def execute_benchmark(self) -> LightrunOverheadBenchmarkResult:
         """Execute the benchmark logic."""
 
-        from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI, LightrunPublicAPI, LightrunPluginAPI
+        from Lightrun.Benchmarks.shared_modules.api import LightrunAPI, LightrunPublicAPI, LightrunPluginAPI
         import time
         from Lightrun.Benchmarks.shared_modules.authenticator import ApiKeyAuthenticator, InteractiveAuthenticator
         from Lightrun.Benchmarks.shared_modules.agent_models import BreakpointAction, LogAction

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from Benchmarks.shared_modules.api.lightrun_api import LightrunAPI
+from .lightrun_api import LightrunAPI
 
 
 class LightrunPublicAPI(LightrunAPI):

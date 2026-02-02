@@ -1,4 +1,4 @@
-from Benchmarks.shared_modules.api.lightrun_api import LightrunAPI
+from .lightrun_api import LightrunAPI
 import json
 import base64
 from typing import Optional
