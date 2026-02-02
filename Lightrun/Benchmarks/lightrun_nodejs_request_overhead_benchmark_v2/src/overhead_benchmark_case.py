@@ -147,6 +147,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         """Execute the benchmark logic."""
 
         from Lightrun.Benchmarks.shared_modules.lightrun_api import LightrunAPI
+        import time
         from Lightrun.Benchmarks.shared_modules.authenticator import ApiKeyAuthenticator, InteractiveAuthenticator
         from Lightrun.Benchmarks.shared_modules.agent_models import BreakpointAction, LogAction
         from Lightrun.Benchmarks.shared_modules.agent_actions import AgentActions
@@ -156,7 +157,6 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
 
 
         # Initialize Lightrun API with correct authenticator
-        
         api = LightrunAPI(self.lightrun_api_url, self.lightrun_company_id, self.authenticator, logger=self.logger)
         
         # 2. Identify Agent ID (DISPLAY_NAME)

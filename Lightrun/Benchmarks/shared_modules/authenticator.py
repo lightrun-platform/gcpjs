@@ -186,16 +186,17 @@ class InteractiveAuthenticator(Authenticator):
             user_code = auth_info.get("userCode")
             device_code = auth_info.get("deviceCode")
             polling_interval = auth_info.get("pollingIntervalMillis", 2000) / 1000.0
-            
-            if not verification_uri or not user_code or not device_code:
-                self.logger.error("Invalid response from auth info endpoint")
+
+            if not verification_uri or not device_code:
+                self.logger.error(f"Invalid response from auth info endpoint. Keys found: {list(auth_info.keys())}. Content: {auth_info}")
                 return None
                 
             print("\n" + "="*60)
             print("Action Required: Lightrun Authentication")
             print("="*60)
             print(f"Please visit: {verification_uri}")
-            print(f"And enter code: {user_code}")
+            if user_code:
+                print(f"And enter code: {user_code}")
             print("="*60 + "\n")
             
             # Auto-open browser
@@ -212,14 +213,21 @@ class InteractiveAuthenticator(Authenticator):
                 resp = self.session.get(token_url)
                 
                 if resp.status_code == 200:
-                    token_data = resp.json()
-                    access_token = token_data.get("id_token")
-                    refresh_token = token_data.get("refresh_token")
-                    
-                    if access_token:
-                        self.logger.info("Successfully authenticated!")
-                        self._save_to_cache(access_token, refresh_token)
-                        return access_token
+                    if not resp.text.strip():
+                        # Empty response means pending
+                        pass
+                    else:
+                        try:
+                            token_data = resp.json()
+                            access_token = token_data.get("id_token")
+                            refresh_token = token_data.get("refresh_token")
+                            
+                            if access_token:
+                                self.logger.info("Successfully authenticated!")
+                                self._save_to_cache(access_token, refresh_token)
+                                return access_token
+                        except json.JSONDecodeError:
+                            self.logger.warning(f"Failed to decode JSON from 200 response: {resp.text}")
                         
                 elif resp.status_code != 202: 
                      pass

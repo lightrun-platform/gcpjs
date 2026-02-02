@@ -37,9 +37,9 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
 
         authenticator = None
         if benchmark_config.authentication_type == 'API_KEY':
-            authenticator = ApiKeyAuthenticator(self.lightrun_api_key)
+            authenticator = ApiKeyAuthenticator(benchmark_config.lightrun_api_key)
         elif benchmark_config.authentication_type == 'MANUAL':
-            authenticator = InteractiveAuthenticator(self.lightrun_api_url, self.lightrun_company_id, self.logger)
+            authenticator = InteractiveAuthenticator(benchmark_config.lightrun_api_url, benchmark_config.lightrun_company_id, logger)
 
         for runtime in benchmark_config.runtimes:
             # Extract version from runtime string (e.g. 'nodejs20' -> '20')
