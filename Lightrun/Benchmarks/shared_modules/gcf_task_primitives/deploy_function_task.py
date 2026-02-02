@@ -119,13 +119,13 @@ class DeployFunctionTask:
 
                 if result.returncode != 0:
                     if self._should_retry(result.stderr):
-                        clean_error = result.stderr.replace('\n', ' ').strip()[:100]
+                        clean_error = result.stderr.replace('\n', ' ').strip()
                         self._handle_retry_wait(attempt, max_retries, clean_error)
                         continue
                     
-                    self.logger.error(f"Deployment failed with non-retriable error: {result.stderr[:200]}")
+                    self.logger.error(f"Deployment failed with non-retriable error: {result.stderr}")
                     return DeploymentFailure(
-                        error=result.stderr[:500],
+                        error=result.stderr,
                         used_region=ep.region
                     )
 

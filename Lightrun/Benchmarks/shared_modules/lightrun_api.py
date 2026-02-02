@@ -68,7 +68,7 @@ class LightrunAPI:
                         return agent.get("id")
                 print(f"    Warning: No agent found matching display name '{display_name}'")
             else:
-                print(f"    Warning: Failed to fetch agents: {response.status_code} - {response.text[:100]}")
+                print(f"    Warning: Failed to fetch agents: {response.status_code} - {response.text}")
         except Exception as e:
             self._handle_api_error(e, "get agent ID")
         return None
@@ -139,7 +139,7 @@ class LightrunAPI:
                 print(f"    ✓ Snapshot created: {snapshot_id} at {filename}:{line_number} (maxHits={max_hit_count})")
                 return snapshot_id
             else:
-                print(f"    Warning: Failed to create snapshot: {response.status_code} - {response.text[:100]}")
+                print(f"    Warning: Failed to create snapshot: {response.status_code} - {response.text}")
         except Exception as e:
             self._handle_api_error(e, "create snapshot")
 
@@ -189,7 +189,7 @@ class LightrunAPI:
                 print(f"    ✓ Log created: {action_id} at {filename}:{line_number} (maxHits={max_hit_count})")
                 return action_id
             else:
-                print(f"    Warning: Failed to create log: {response.status_code} - {response.text[:100]}")
+                print(f"    Warning: Failed to create log: {response.status_code} - {response.text}")
         except Exception as e:
             self._handle_api_error(e, "create log")
 
@@ -235,7 +235,7 @@ class LightrunAPI:
                 print(f"    ✓ Snapshot deleted: {snapshot_id}")
                 return True
             else:
-                print(f"    Warning: Failed to delete snapshot {snapshot_id}: {response.status_code} - {response.text[:100]}")
+                print(f"    Warning: Failed to delete snapshot {snapshot_id}: {response.status_code} - {response.text}")
         except Exception as e:
             self._handle_api_error(e, "delete snapshot")
         return False
@@ -252,7 +252,7 @@ class LightrunAPI:
                 print(f"    ✓ Log action deleted: {log_id}")
                 return True
             else:
-                print(f"    Warning: Failed to delete log {log_id}: {response.status_code} - {response.text[:100]}")
+                print(f"    Warning: Failed to delete log {log_id}: {response.status_code} - {response.text}")
         except Exception as e:
             self._handle_api_error(e, "delete log")
         return False

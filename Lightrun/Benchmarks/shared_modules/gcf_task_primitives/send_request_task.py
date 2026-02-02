@@ -45,7 +45,7 @@ class SendRequestTask:
                     'error': True,
                     '_request_number': request_number,
                     'status_code': response.status_code,
-                    'message': response.text[:200],
+                    'message': response.text,
                     '_timestamp': datetime.now(timezone.utc).isoformat(),
                     '_url': self.url
                 }

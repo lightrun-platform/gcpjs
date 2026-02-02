@@ -1,7 +1,6 @@
 """Delete task for Cloud Functions."""
 
 import subprocess
-import logging
 from typing import Optional
 
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
@@ -26,7 +25,7 @@ class DeleteFunctionTask:
 
     @property
     def stderr(self) -> Optional[str]:
-        return self.result.stderr[:200] if self.result and self.result.stderr else None
+        return self.result.stderr if self.result and self.result.stderr else None
 
     def execute(self, timeout: int) -> DeleteFunctionResult:
         """Execute the deletion task."""
@@ -48,7 +47,7 @@ class DeleteFunctionTask:
                 self.logger.info(f"Function {self.function.name} deleted successfully.")
                 return DeleteSuccess(function_name=self.function.name)
 
-            self.logger.warning(f"Failed to delete function {self.function.name}: {self.result.stderr[:200]}")
+            self.logger.warning(f"Failed to delete function {self.function.name}: {self.result.stderr}")
             return DeleteFailure(
                 function_name=self.function.name,
                 error=Exception(f"Failed to delete function: {self.function.name}"),
