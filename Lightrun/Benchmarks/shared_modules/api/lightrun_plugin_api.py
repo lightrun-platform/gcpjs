@@ -2,7 +2,7 @@ from .lightrun_api import LightrunAPI
 import json
 import base64
 from typing import Optional
-from Lightrun.Benchmarks.shared_modules.authenticator import Authenticator, InteractiveAuthenticator
+from Lightrun.Benchmarks.shared_modules.authentication import Authenticator, InteractiveAuthenticator
 
 
 def get_client_info_header(api_version="1.78"):

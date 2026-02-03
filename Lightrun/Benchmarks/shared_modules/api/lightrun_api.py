@@ -3,7 +3,7 @@ import logging
 from typing import Optional
 from abc import ABC, abstractmethod
 from urllib.parse import urlparse
-from Lightrun.Benchmarks.shared_modules.authenticator import Authenticator, InteractiveAuthenticator
+from Lightrun.Benchmarks.shared_modules.authentication import Authenticator, InteractiveAuthenticator
 
 
 def _get_default_logger():

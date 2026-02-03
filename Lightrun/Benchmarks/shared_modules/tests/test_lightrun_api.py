@@ -11,7 +11,7 @@ sys.path.insert(0, str(benchmarks_dir))
 sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
 from Lightrun.Benchmarks.shared_modules.api import LightrunAPI, LightrunPublicAPI, LightrunPluginAPI, get_client_info_header
-from Lightrun.Benchmarks.shared_modules.authenticator import Authenticator, InteractiveAuthenticator
+from Lightrun.Benchmarks.shared_modules.authentication import Authenticator, InteractiveAuthenticator
 
 class TestLightrunAPI(unittest.TestCase):
     
