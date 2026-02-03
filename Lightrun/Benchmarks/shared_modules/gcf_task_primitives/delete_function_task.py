@@ -60,7 +60,7 @@ class DeleteFunctionTask:
                 except NoSuchAsset:
                      self.logger.info(f"Asset {asset.name} already gone (verified by exist check).")
                 except Exception as e:
-                     self.logger.error(f"Failed to clean up asset {asset.name}: {e}")
+                     self.logger.exception(f"Failed to clean up asset {asset.name}. Exception: {e}")
 
             if self.result.returncode == 0:
                 self.logger.info(f"Function {self.function.name} deleted successfully.")
@@ -79,7 +79,7 @@ class DeleteFunctionTask:
             )
 
         except Exception as e:
-            self.logger.error(f"Exception during deletion of {self.function.name}: {e}")
+            self.logger.exception(f"Exception during deletion of {self.function.name}: {e}")
             return DeleteFailure(
                 function_name=self.function.name,
                 error=e,

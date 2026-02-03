@@ -161,8 +161,7 @@ def deploy_with_extended_gcf_parameters(extended_parameters: GCFDeployCommandPar
                 )
 
         except Exception as e:
-            logger.error(f"Exception during deployment: {e}")
-            logger.debug(traceback.format_exc())
+            logger.exception(f"Encountered an exception during deployment: {e}")
             _handle_retry_wait(attempt, max_retries, str(e), logger)
             if attempt == max_retries - 1:
                 partial_assets = []

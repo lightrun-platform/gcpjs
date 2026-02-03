@@ -15,7 +15,9 @@ class LightrunPublicAPI(LightrunAPI):
                 agents = response.json()
                 for agent in agents:
                     if display_name in agent.get("displayName", ""):
-                        return agent.get("id")
+                        selected_agent_id = agent.get("id")
+                        self.logger.debug(f"Found agent matching display name '{display_name}', agent id: '{selected_agent_id}'. full agents list: '{agents}'. ")
+                        return selected_agent_id
                 self.logger.warning(f"No agent found matching display name '{display_name}'")
             else:
                 self.logger.warning(f"Failed to fetch agents: {response.status_code} - {response.text}")
@@ -90,7 +92,7 @@ class LightrunPublicAPI(LightrunAPI):
             if response.status_code == 200:
                 return response.json()
         except Exception as e:
-            self.logger.error(f"Error fetching snapshot: {e}")
+            self.logger.exception(f"Error fetching snapshot: {e}")
         return None
 
     def get_log(self, log_id: str) -> Optional[dict]:
@@ -100,7 +102,7 @@ class LightrunPublicAPI(LightrunAPI):
             if response.status_code == 200:
                 return response.json()
         except Exception as e:
-            self.logger.error(f"Error fetching log: {e}")
+            self.logger.exception(f"Error fetching log: {e}")
         return None
 
     def delete_snapshot(self, snapshot_id: str) -> bool:

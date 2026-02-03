@@ -17,11 +17,20 @@ class InteractiveAuthenticator(Authenticator):
     TOKEN_CACHE_DIR = Path.home() / ".lightrun_benchmark"
     TOKEN_CACHE_FILE = TOKEN_CACHE_DIR / "token.json"
 
-    def __init__(self, api_url: str, company_id: str, logger: logging.Logger):
+    def __init__(self, api_url: str, company_id: str, logger: logging.Logger, no_cache: bool = False):
         self.api_url = api_url
         self.company_id = company_id
         self.logger = logger
         self.session = requests.Session()
+        self.no_cache = no_cache
+        
+        # Delete token cache if no_cache is enabled
+        if self.no_cache and self.TOKEN_CACHE_FILE.exists():
+            try:
+                self.TOKEN_CACHE_FILE.unlink()
+                self.logger.info(f"Deleted token cache file: {self.TOKEN_CACHE_FILE}")
+            except Exception as e:
+                self.logger.warning(f"Failed to delete token cache file: {e}")
 
     def get_headers(self) -> Dict[str, str]:
         # NOTE: This method is now secondary to send_authenticated_request but kept for interface compatibility
@@ -93,6 +102,10 @@ class InteractiveAuthenticator(Authenticator):
         return self._perform_device_login()
 
     def _load_from_cache_raw(self) -> Optional[dict]:
+        # Skip cache loading if no_cache is enabled
+        if self.no_cache:
+            return None
+            
         if not self.TOKEN_CACHE_FILE.exists():
             return None
         try:
@@ -128,7 +141,7 @@ class InteractiveAuthenticator(Authenticator):
             else:
                 self.logger.warning(f"Refresh failed: {resp.status_code} - {resp.text}")
         except Exception as e:
-            self.logger.error(f"Error refreshing token: {e}")
+            self.logger.exception(f"Error refreshing token: {e}")
 
         return None
 
@@ -202,10 +215,15 @@ class InteractiveAuthenticator(Authenticator):
             return None
 
         except Exception as e:
-            self.logger.error(f"Device login failed: {e}")
+            self.logger.exception(f"Device login failed: {e}")
             return None
 
     def _save_to_cache(self, access_token: str, refresh_token: Optional[str] = None):
+        # Skip cache saving if no_cache is enabled
+        if self.no_cache:
+            self.logger.debug("Token caching disabled (--no-token-cache flag set)")
+            return
+            
         try:
             self.TOKEN_CACHE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
 

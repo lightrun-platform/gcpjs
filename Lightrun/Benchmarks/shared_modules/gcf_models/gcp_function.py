@@ -113,7 +113,7 @@ class GCPFunction:
             return assets
 
         except Exception as e:
-            local_logger.error(f"Exception discovering assets for {self.name}: {e}")
+            local_logger.exception(f"Exception raised while discovering assets for '{self.name}': {e}")
             return assets
 
     @property

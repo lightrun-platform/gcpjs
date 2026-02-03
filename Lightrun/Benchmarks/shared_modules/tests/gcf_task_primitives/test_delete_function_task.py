@@ -134,8 +134,8 @@ class TestDeleteFunctionTask(unittest.TestCase):
         task.execute(timeout=120)
         
         mock_asset.delete.assert_called()
-        # Should have logged error
-        self.function.logger.error.assert_any_call(f"Failed to clean up asset stubborn-asset: Simulated deletion error")
+        # Should have logged exception (for stack trace)
+        self.function.logger.exception.assert_any_call(f"Failed to clean up asset stubborn-asset. Exception: Simulated deletion error")
 
 if __name__ == '__main__':
     unittest.main()

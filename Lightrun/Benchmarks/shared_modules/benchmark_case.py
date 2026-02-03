@@ -63,7 +63,7 @@ class BenchmarkCase[T](ABC):
                     raise Exception(f"Unknown deployment result type: {type(self.deployment_result)}")
 
         except Exception as e:
-            self.logger.error(e)
+            self.logger.exception(f"Benchmark case execution failed with exception: {e}")
             self.errors.append(e)
         finally:
             self.delete_result = self.gcp_function.delete(self.delete_timeout_seconds)

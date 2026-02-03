@@ -129,14 +129,19 @@ if (!displayName || displayName.trim() === '') {{
   throw new Error('DISPLAY_NAME environment variable is required and cannot be empty');
 }}
 
-lightrun.init({{
+const initArguments = {{
   lightrunSecret: lightrunSecret,
   metadata: {{
     registration: {{
       displayName: displayName
     }}
   }}
-}});
+}};
+
+lightrun.init(initArguments);
+
+
+console.log('Called lightrun.init with the following arguments:', initArguments);
 
 {dummy_functions}
 
@@ -146,7 +151,8 @@ let func = async (req, res) => {{
     const handlerEndTime = process.hrtime.bigint();
     res.send({{ 
         handlerRunTime: (handlerEndTime - handlerStartTime).toString(),
-        message: 'Function execution complete'
+        message: 'Function execution complete',
+        initArguments: initArguments
     }});
 }};
 

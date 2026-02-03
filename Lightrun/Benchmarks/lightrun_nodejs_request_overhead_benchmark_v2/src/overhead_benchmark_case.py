@@ -164,8 +164,8 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
              self.logger.info("Using Public API for API Key authentication.")
              api: LightrunAPI = LightrunPublicAPI(self.lightrun_api_url, self.lightrun_company_id, self.authenticator, logger=self.logger)
         
-        # 2. Identify Agent ID (DISPLAY_NAME)
-        agent_id = self.name 
+        # 2. Agent Display Name (used to identify the agent on the server)
+        agent_display_name = self.name
 
         # 3. Determine Action Lines
         if self.num_actions > 0:
@@ -188,21 +188,35 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
 
         # 5. Execute with Actions Context
         try:
-            with AgentActions(api, agent_id, actions) as active_actions:
-                # 6. Send Request
-                # Use SendRequestTask directly or mimic its logic? 
-                # We need the response payload.
-                send_task = SendRequestTask(self.gcp_function)
+            send_task = SendRequestTask(self.gcp_function)
+            
+            # Step 1: Warmup request - triggers agent startup and registration
+            # The agent registers with the server during the first request execution.
+            # Once this request completes, the agent is already registered (sends "isLambda: true" header).
+            self.logger.info("Sending warmup request to trigger agent registration...")
+            warmup_result = send_task.execute()
+            
+            # Validate that the agent initialized with the correct display name
+            if warmup_result and 'initArguments' in warmup_result:
+                init_args = warmup_result['initArguments']
+                returned_display_name = init_args.get('metadata', {}).get('registration', {}).get('displayName')
                 
-                # Request 1: Warmup / Verify Agent Connection
-                # This request ensures the function is hot and the agent has time to connect/sync
-                self.logger.info("Sending warmup request...")
-                send_task.execute()
-                
-                # Wait a moment for actions to be bound if not already
-                time.sleep(2) 
+                if returned_display_name != agent_display_name:
+                    raise ValueError(
+                        f"Agent initialized with incorrect display name. "
+                        f"Expected: '{agent_display_name}', Got: '{returned_display_name}'. "
+                        f"Full initArguments: {init_args}"
+                    )
+                self.logger.info(f"Agent registered with display name: '{returned_display_name}'")
+            else:
+                self.logger.warning(f"Warmup response did not contain initArguments. Response: {warmup_result}")
+            
+            # Step 2: Apply actions now that agent is registered
+            with AgentActions.create(api, agent_display_name, actions) as active_actions:
+                # Wait a moment for actions to be bound to the agent
+                time.sleep(2)
 
-                # Request 2: Measurement
+                # Step 4: Measurement request
                 self.logger.info("Sending measurement request...")
                 start_time = time.perf_counter()
                 result = send_task.execute()
@@ -280,5 +294,5 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 )
 
         except Exception as e:
-            self.logger.error(f"Benchmark execution failed: {e}")
+            self.logger.exception(f"Benchmark execution failed with an exception: {e}")
             return LightrunOverheadBenchmarkResult(success=False, error=str(e))

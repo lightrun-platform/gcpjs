@@ -341,6 +341,12 @@ class CLIParser:
             action='store_true',
             help='Skip waiting for functions to become cold (default: False)'
         )
+        
+        parser.add_argument(
+            '--no-token-cache',
+            action='store_true',
+            help='Disable token caching - delete existing cache and do not save new tokens (default: False)'
+        )
 
         parser.add_argument(
             '--lightrun-version',

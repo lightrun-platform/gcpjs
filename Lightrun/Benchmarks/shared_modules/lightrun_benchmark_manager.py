@@ -28,6 +28,6 @@ class BenchmarkManager[T]:
                 try:
                     future.result()
                 except Exception as e:
-                    benchmark_case.logger.error(e)
+                    benchmark_case.logger.exception(f"Benchmark case failed with an exception: {e}")
 
             self.logger.info("Finished execution.")

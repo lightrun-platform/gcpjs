@@ -40,7 +40,7 @@ class LightrunPluginAPI(LightrunAPI):
                     if pools:
                         return pools[0]['id']
         except Exception as e:
-            self.logger.error(f"Error getting default agent pool: {e}")
+            self.logger.exception(f"Error getting default agent pool: {e}")
         return None
 
     def _list_agents_flat(self, pool_id: str, api_version="1.78") -> list:
@@ -59,7 +59,7 @@ class LightrunPluginAPI(LightrunAPI):
             else:
                 self.logger.warning(f"Failed to list agents flat: {response.status_code}")
         except Exception as e:
-            self.logger.error(f"Error listing agents flat: {e}")
+            self.logger.exception(f"Error listing agents flat: {e}")
         return agents
 
     def get_agent_id(self, display_name: str) -> Optional[str]:
@@ -181,7 +181,7 @@ class LightrunPluginAPI(LightrunAPI):
             else:
                 self.logger.warning(f"Failed to get snapshot (Internal): {response.status_code}")
         except Exception as e:
-            self.logger.error(f"Error fetching snapshot: {e}")
+            self.logger.exception(f"Error fetching snapshot: {e}")
         return None
 
     def get_log(self, log_id: str) -> Optional[dict]:
