@@ -6,15 +6,6 @@ from urllib.parse import urlparse
 from Lightrun.Benchmarks.shared_modules.authentication import Authenticator, InteractiveAuthenticator
 
 
-def _get_default_logger():
-    logger = logging.getLogger("LightrunAPI")
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-    return logger
-
 
 class LightrunAPI(ABC):
     """Abstract Base Client for interacting with the Lightrun API."""
@@ -24,7 +15,7 @@ class LightrunAPI(ABC):
         api_url: str,
         company_id: str,
         authenticator: Authenticator,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger,
     ):
         """
         Initialize the Lightrun API client.
@@ -41,12 +32,7 @@ class LightrunAPI(ABC):
              
         self.company_id = company_id
         self.authenticator = authenticator
-
-        if logger:
-            self.logger = logger
-        else:
-            self.logger = _get_default_logger()
-
+        self.logger = logger
         self.session = requests.Session()
         # Add a simple retry adapter
         from urllib3.util.retry import Retry

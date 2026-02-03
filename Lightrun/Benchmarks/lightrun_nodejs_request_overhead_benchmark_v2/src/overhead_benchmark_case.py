@@ -32,7 +32,9 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  deployment_timeout: int,
                  delete_timeout: int,
                  authenticator: Authenticator,
-                 logger_factory: LoggerFactory):
+                 logger_factory: LoggerFactory,
+                 lightrun_version: str
+    ):
         super().__init__(deployment_timeout, delete_timeout, logger_factory)
         self.benchmark_name = benchmark_name
         self.runtime = runtime
@@ -51,6 +53,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         self.timeout = timeout
         self.gen2 = gen2
         self.authenticator = authenticator
+        self.lightrun_version = lightrun_version
         self._gcp_function = None
 
 
@@ -159,7 +162,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         # Initialize Lightrun API with correct authenticator
         if isinstance(self.authenticator, InteractiveAuthenticator):
             self.logger.info("Using internal Plugin API for User Token authentication.")
-            api: LightrunAPI = LightrunPluginAPI(self.lightrun_api_url, self.lightrun_company_id, self.authenticator, logger=self.logger)
+            api: LightrunAPI = LightrunPluginAPI(self.lightrun_api_url, self.lightrun_company_id, self.authenticator, logger=self.logger, api_version=self.lightrun_version)
         else:
              self.logger.info("Using Public API for API Key authentication.")
              api: LightrunAPI = LightrunPublicAPI(self.lightrun_api_url, self.lightrun_company_id, self.authenticator, logger=self.logger)

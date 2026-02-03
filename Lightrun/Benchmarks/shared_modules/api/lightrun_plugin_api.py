@@ -5,7 +5,7 @@ from typing import Optional
 from Lightrun.Benchmarks.shared_modules.authentication import Authenticator, InteractiveAuthenticator
 
 
-def get_client_info_header(api_version="1.78"):
+def get_client_info_header(api_version: str):
     info = {
         "eventSource": "IDE",
         "os": "darwin",
@@ -23,6 +23,10 @@ def get_client_info_header(api_version="1.78"):
 
 class LightrunPluginAPI(LightrunAPI):
     """Client for the Lightrun Internal/Plugin API (using User Tokens via Device Flow)."""
+    
+    def __init__(self, api_url, company_id, authenticator, api_version, logger):
+        super().__init__(api_url, company_id, authenticator, logger)
+        self.api_version = api_version
 
     def _get_default_agent_pool(self) -> Optional[str]:
         try:
@@ -43,11 +47,11 @@ class LightrunPluginAPI(LightrunAPI):
             self.logger.exception(f"Error getting default agent pool: {e}")
         return None
 
-    def _list_agents_flat(self, pool_id: str, api_version="1.78") -> list:
+    def _list_agents_flat(self, pool_id: str) -> list:
         agents = []
         try:
-            url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{pool_id}/{api_version}/agentsFlat"
-            headers = {"client-info": get_client_info_header(api_version)}
+            url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{pool_id}/{self.api_version}/agentsFlat"
+            headers = {"client-info": get_client_info_header(self.api_version)}
             response = self.authenticator.send_authenticated_request(self.session, 'GET', url, headers=headers)
 
             if response.status_code == 200:
@@ -75,11 +79,20 @@ class LightrunPluginAPI(LightrunAPI):
     def get_agent_id(self, display_name: str) -> Optional[str]:
         try:
             agents = self.list_agents()
-            for agent in agents:
-                agent_name = agent.get("name") or agent.get("displayName") or ""
-                if display_name in agent_name:
-                    return agent.get("id") or agent.get("agentId")
-            self.logger.warning(f"No agent found matching display name '{display_name}' via Plugin API. all agents: {agents}")
+            if agents:
+                for agent in agents:
+                    # Strict extraction: matched displayName -> return id
+                    # We expect 'id' and 'displayName' based on AgentDTO
+                    current_name = agent.get("displayName")
+                    current_id = agent.get("id")
+                    
+                    if current_name and display_name in current_name:
+                        if current_id:
+                            return current_id
+                        else:
+                            raise ValueError(f"Found agent matching '{display_name}' but it has no 'id' field: {agent}")
+                
+            self.logger.warning(f"No agent found matching display name '{display_name}' via Plugin API. Agents count: {len(agents) if agents else 0}")
         except Exception as e:
             self._handle_api_error_or_raise(e, "get agent ID (Internal)")
         return None
@@ -93,11 +106,10 @@ class LightrunPluginAPI(LightrunAPI):
             expire_seconds: int = 3600,
     ) -> Optional[str]:
         try:
-            api_version = "1.78"
             pool_id = self._get_default_agent_pool()
             if pool_id:
-                url = f"{self.api_url}/athena/company/{self.company_id}/{api_version}/insertCapture/**"
-                headers = {"client-info": get_client_info_header(api_version)}
+                url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/insertCapture/**"
+                headers = {"client-info": get_client_info_header(self.api_version)}
                 snapshot_data = {
                     "actionType": "CAPTURE",
                     "agentId": agent_id,
@@ -137,11 +149,10 @@ class LightrunPluginAPI(LightrunAPI):
             expire_seconds: int = 3600,
     ) -> Optional[str]:
         try:
-            api_version = "1.78"
             pool_id = self._get_default_agent_pool()
             if pool_id:
-                url = f"{self.api_url}/athena/company/{self.company_id}/{api_version}/insertLog/**"
-                headers = {"client-info": get_client_info_header(api_version)}
+                url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/insertLog/**"
+                headers = {"client-info": get_client_info_header(self.api_version)}
 
                 log_data = {
                     "actionType": "LOG",
@@ -180,9 +191,8 @@ class LightrunPluginAPI(LightrunAPI):
             # So we likely need internal GET endpoints.
             # Plugin uses: getAction or getActions.
             # getAction: /athena/company/{company}/{apiVersion}/getAction/{actionId}
-            api_version = "1.78"
-            url = f"{self.api_url}/athena/company/{self.company_id}/{api_version}/getAction/{snapshot_id}"
-            headers = {"client-info": get_client_info_header(api_version)}
+            url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/getAction/{snapshot_id}"
+            headers = {"client-info": get_client_info_header(self.api_version)}
             response = self.authenticator.send_authenticated_request(self.session, 'GET', url, headers=headers, timeout=10)
             if response.status_code == 200:
                 return response.json()
@@ -199,9 +209,8 @@ class LightrunPluginAPI(LightrunAPI):
     def delete_snapshot(self, snapshot_id: str) -> bool:
         try:
             # deleteAction: /athena/company/{company}/{apiVersion}/deleteAction/{actionId}
-            api_version = "1.78"
-            url = f"{self.api_url}/athena/company/{self.company_id}/{api_version}/deleteAction/{snapshot_id}"
-            headers = {"client-info": get_client_info_header(api_version)}
+            url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/deleteAction/{snapshot_id}"
+            headers = {"client-info": get_client_info_header(self.api_version)}
             response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, headers=headers, timeout=10)
             if response.status_code in [200, 204]:
                 self.logger.info(f"Snapshot deleted (Internal): {snapshot_id}")

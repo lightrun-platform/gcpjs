@@ -1,3 +1,4 @@
+
 import unittest
 from unittest.mock import Mock, patch, ANY
 import sys
@@ -22,7 +23,7 @@ class TestLightrunAPI(unittest.TestCase):
     
     def test_abc_instantiation_fails(self):
         with self.assertRaises(TypeError):
-            LightrunAPI(self.api_url, self.company_id, self.mock_auth)
+            LightrunAPI(self.api_url, self.company_id, self.mock_auth, Mock())
 
 class TestLightrunPublicAPI(unittest.TestCase):
     
@@ -30,7 +31,8 @@ class TestLightrunPublicAPI(unittest.TestCase):
         self.api_url = "https://app.lightrun.com"
         self.company_id = "test-company"
         self.mock_auth = Mock(spec=Authenticator)
-        self.api = LightrunPublicAPI(self.api_url, self.company_id, self.mock_auth)
+        self.mock_logger = Mock()
+        self.api = LightrunPublicAPI(self.api_url, self.company_id, self.mock_auth, logger=self.mock_logger)
         self.mock_session = self.api.session # Actually we mock session passed to send_authenticated_request
 
     def test_get_agent_id_success(self):
@@ -78,7 +80,8 @@ class TestLightrunPluginAPI(unittest.TestCase):
         self.api_url = "https://app.lightrun.com"
         self.company_id = "test-company"
         self.mock_auth = Mock(spec=InteractiveAuthenticator)
-        self.api = LightrunPluginAPI(self.api_url, self.company_id, self.mock_auth)
+        self.mock_logger = Mock()
+        self.api = LightrunPluginAPI(self.api_url, self.company_id, self.mock_auth, api_version="1.78", logger=self.mock_logger)
 
     def test_get_client_info_header(self):
         header = get_client_info_header("1.78")
@@ -86,6 +89,28 @@ class TestLightrunPluginAPI(unittest.TestCase):
         info = json.loads(decoded)
         self.assertEqual(info['ideInfoDTO']['pluginVersion'], "1.78.0")
         self.assertEqual(info['eventSource'], "IDE")
+
+    def test_custom_api_version(self):
+        api = LightrunPluginAPI(self.api_url, self.company_id, self.mock_auth, api_version="2.0", logger=self.mock_logger)
+        self.assertEqual(api.api_version, "2.0")
+        
+        # Test usage in get_client_info_header via a method call (e.g. implicitly used in list_agents)
+        mock_resp = Mock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [{"id": "a1", "name": "foo"}]
+        self.mock_auth.send_authenticated_request.return_value = mock_resp
+        
+        # Mock default pool to avoid its call
+        with patch.object(api, '_get_default_agent_pool', return_value="pool-1"):
+            api.list_agents()
+            
+        call_args = self.mock_auth.send_authenticated_request.call_args
+        headers = call_args.kwargs.get('headers', {})
+        client_info = headers.get('client-info')
+        decoded = base64.b64decode(client_info).decode('utf-8')
+        info = json.loads(decoded)
+        # Should reflect 2.0
+        self.assertEqual(info['ideInfoDTO']['pluginVersion'], "2.0.0")
 
     def test_get_default_agent_pool(self):
         mock_resp = Mock()
@@ -115,6 +140,25 @@ class TestLightrunPluginAPI(unittest.TestCase):
         headers = call_args.kwargs.get('headers', {})
         self.assertIn('client-info', headers)
 
+    def test_get_agent_id_strict_success(self):
+        mock_agents = [
+            {"id": "id-1", "displayName": "my-func-gen1"},
+            {"id": "id-2", "displayName": "other-func"}
+        ]
+        with patch.object(self.api, 'list_agents', return_value=mock_agents):
+            agent_id = self.api.get_agent_id("my-func")
+            self.assertEqual(agent_id, "id-1")
+
+    def test_get_agent_id_strict_missing_id(self):
+        # Case where displayName matches but 'id' is missing
+        mock_agents = [
+            {"displayName": "my-func-gen1"} # No id
+        ]
+        with patch.object(self.api, 'list_agents', return_value=mock_agents):
+            with self.assertRaises(ValueError) as cm:
+                self.api.get_agent_id("my-func")
+            self.assertIn("has no 'id' field", str(cm.exception))
+
     def test_add_snapshot_internal(self):
         # Mock sequence: get_default_pool -> send POST
         
@@ -140,6 +184,7 @@ class TestLightrunPluginAPI(unittest.TestCase):
         args, kwargs = post_call
         url = args[2]
         self.assertIn("/insertCapture/**", url)
+        self.assertIn(f"/{self.api.api_version}/insertCapture", url) # Should use default 1.78
         self.assertIn("agentPoolId", kwargs['json'])
         self.assertEqual(kwargs['json']['agentPoolId'], "pool-1")
         self.assertIn('client-info', kwargs['headers'])
