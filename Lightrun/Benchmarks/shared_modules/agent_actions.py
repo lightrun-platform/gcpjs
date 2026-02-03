@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Iterable, List, Tuple
 from Lightrun.Benchmarks.shared_modules.api import LightrunAPI
 from .agent_models import LightrunAction
@@ -20,33 +21,55 @@ class AgentActions(metaclass=NoPublicConstructor):
         actions: The actions to apply to the agent
     """
 
-    def __init__(self, lightrun_api: LightrunAPI, agent_display_name: str, agent_id: str, actions: Iterable[LightrunAction]):
-        self.logger = logging.getLogger(type(self).__name__)
+    RETRY_DELAY = 1
+
+    def __init__(self, lightrun_api: LightrunAPI, agent_display_name: str, agent_id: str, actions: Iterable[LightrunAction], logger: logging.Logger):
         self.lightrun_api = lightrun_api
         self._agent_display_name = agent_display_name
         self._agent_id = agent_id
         self.actions = list(actions)
         self.applied_actions: List[Tuple[LightrunAction, str]] = []
+        self.logger = logger
 
     @classmethod
-    def create(cls, lightrun_api: LightrunAPI, agent_display_name: str, actions: Iterable[LightrunAction]) -> 'AgentActions':
-        """Factory method that resolves agent_id from display name.
+    def create(cls, logger: logging.Logger, lightrun_api: LightrunAPI, agent_display_name: str, actions: Iterable[LightrunAction], retries: int = 10) -> 'AgentActions':
+        f"""Factory method that resolves agent_id from display name.
         
         Args:
+            logger: the logging.Logger that the created instance should use
             lightrun_api: The Lightrun API client
             agent_display_name: The friendly display name of the agent (shown in UI)
             actions: The actions to apply to the agent
+            retries: Number of times to retry finding the agent, with {AgentActions.RETRY_DELAY} between them.
             
         Returns:
             AgentActions instance with resolved agent_id
             
         Raises:
-            AgentNotFoundError: If the agent cannot be found by display name
+            AgentNotFoundError: If the agent cannot be found by display name after retries
         """
-        agent_id = lightrun_api.get_agent_id(agent_display_name)
+
+        assert retries > 0
+
+        agent_id = None
+        successful_attempt_id = None
+        for attempt in range(retries + 1):
+            agent_id = lightrun_api.get_agent_id(agent_display_name)
+            if agent_id:
+                successful_attempt_id = attempt
+                break
+            
+            if attempt < retries:
+                logger.info(f"Agent '{agent_display_name}' not found, retrying in {AgentActions.RETRY_DELAY}s... ({attempt + 1}/{retries})")
+                time.sleep(AgentActions.RETRY_DELAY)
+                
         if not agent_id:
-            raise AgentNotFoundError(f"Could not find agent with display name '{agent_display_name}'")
-        return cls._create(lightrun_api, agent_display_name, agent_id, actions)
+            raise AgentNotFoundError(f"Timed out after looking for the agent for {retries * AgentActions.RETRY_DELAY} seconds. Could not find agent with display name '{agent_display_name}' for {retries} retries with {AgentActions.RETRY_DELAY} seconds break between them. All agents: {lightrun_api.list_agents()}")
+        
+        if retries > 0 and successful_attempt_id > 0:
+             logger.info(f"Agent '{agent_display_name}' found after {successful_attempt_id} retries")
+
+        return cls._create(lightrun_api, agent_display_name, agent_id, actions, logger)
 
     @property
     def agent_display_name(self) -> str:

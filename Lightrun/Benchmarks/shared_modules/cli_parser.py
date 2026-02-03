@@ -351,7 +351,7 @@ class CLIParser:
         parser.add_argument(
             '--lightrun-version',
             type=str,
-            help='Lightrun package version'
+            help='Lightrun library version to use in the test'
         )
         parser.add_argument(
             '--google-library-version',

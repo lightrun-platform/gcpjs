@@ -212,7 +212,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 self.logger.warning(f"Warmup response did not contain initArguments. Response: {warmup_result}")
             
             # Step 2: Apply actions now that agent is registered
-            with AgentActions.create(api, agent_display_name, actions) as active_actions:
+            with AgentActions.create(self.logger, api, agent_display_name, actions) as active_actions:
                 # Wait a moment for actions to be bound to the agent
                 time.sleep(2)
 

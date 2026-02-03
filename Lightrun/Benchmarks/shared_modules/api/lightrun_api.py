@@ -55,7 +55,7 @@ class LightrunAPI(ABC):
         self.session.mount('https://', HTTPAdapter(max_retries=retries))
         self.session.mount('http://', HTTPAdapter(max_retries=retries))
 
-    def _handle_api_error(self, e: Exception, context: str):
+    def _handle_api_error_or_raise(self, e: Exception, context: str):
         parsed = urlparse(self.api_url)
         hostname = parsed.hostname or "app.lightrun.com"
         
@@ -68,8 +68,11 @@ class LightrunAPI(ABC):
                               f"4. The URL '{self.api_url}' is incorrect or missing the scheme (e.g., https://).\n")
         else:
             self.logger.warning(f"Could not {context}: {e}")
+            raise e
 
-        return None
+    @abstractmethod
+    def list_agents(self):
+        pass
 
     @abstractmethod
     def get_agent_id(self, display_name: str) -> Optional[str]:

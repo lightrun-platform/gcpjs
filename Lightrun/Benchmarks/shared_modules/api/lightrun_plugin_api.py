@@ -62,18 +62,26 @@ class LightrunPluginAPI(LightrunAPI):
             self.logger.exception(f"Error listing agents flat: {e}")
         return agents
 
-    def get_agent_id(self, display_name: str) -> Optional[str]:
+    def list_agents(self):
         try:
             pool_id = self._get_default_agent_pool()
-            if pool_id:
-                agents = self._list_agents_flat(pool_id)
-                for agent in agents:
-                    a_name = agent.get("name") or agent.get("displayName") or ""
-                    if display_name in a_name:
-                        return agent.get("id") or agent.get("agentId")
-            self.logger.warning(f"No agent found matching display name '{display_name}' via Plugin API")
+            if not pool_id:
+                raise Exception("No default agent pool found")
+            return self._list_agents_flat(pool_id)
         except Exception as e:
-            self._handle_api_error(e, "get agent ID (Internal)")
+            self._handle_api_error_or_raise(e, "get agent ID (Internal)")
+        return None
+
+    def get_agent_id(self, display_name: str) -> Optional[str]:
+        try:
+            agents = self.list_agents()
+            for agent in agents:
+                agent_name = agent.get("name") or agent.get("displayName") or ""
+                if display_name in agent_name:
+                    return agent.get("id") or agent.get("agentId")
+            self.logger.warning(f"No agent found matching display name '{display_name}' via Plugin API. all agents: {agents}")
+        except Exception as e:
+            self._handle_api_error_or_raise(e, "get agent ID (Internal)")
         return None
 
     def add_snapshot(
@@ -116,7 +124,7 @@ class LightrunPluginAPI(LightrunAPI):
                 else:
                     self.logger.warning(f"Failed to create snapshot (Internal): {response.status_code} - {response.text}")
         except Exception as e:
-            self._handle_api_error(e, "create snapshot (Internal)")
+            self._handle_api_error_or_raise(e, "create snapshot (Internal)")
         return None
 
     def add_log_action(
@@ -160,7 +168,7 @@ class LightrunPluginAPI(LightrunAPI):
                 else:
                     self.logger.warning(f"Failed to create log (Internal): {response.status_code} - {response.text}")
         except Exception as e:
-            self._handle_api_error(e, "create log (Internal)")
+            self._handle_api_error_or_raise(e, "create log (Internal)")
         return None
 
     def get_snapshot(self, snapshot_id: str) -> Optional[dict]:
@@ -201,7 +209,7 @@ class LightrunPluginAPI(LightrunAPI):
             else:
                 self.logger.warning(f"Failed to delete snapshot (Internal): {response.status_code}")
         except Exception as e:
-            self._handle_api_error(e, "delete snapshot (Internal)")
+            self._handle_api_error_or_raise(e, "delete snapshot (Internal)")
         return False
 
     def delete_log_action(self, log_id: str) -> bool:

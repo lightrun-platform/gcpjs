@@ -6,23 +6,27 @@ from .lightrun_api import LightrunAPI
 class LightrunPublicAPI(LightrunAPI):
     """Client for the Lightrun Public API (using API Keys)."""
 
-    def get_agent_id(self, display_name: str) -> Optional[str]:
+    def list_agents(self):
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/agents"
             response = self.authenticator.send_authenticated_request(self.session, 'GET', url, timeout=30)
 
             if response.status_code == 200:
-                agents = response.json()
-                for agent in agents:
-                    if display_name in agent.get("displayName", ""):
-                        selected_agent_id = agent.get("id")
-                        self.logger.debug(f"Found agent matching display name '{display_name}', agent id: '{selected_agent_id}'. full agents list: '{agents}'. ")
-                        return selected_agent_id
-                self.logger.warning(f"No agent found matching display name '{display_name}'")
+                return response.json()
             else:
                 self.logger.warning(f"Failed to fetch agents: {response.status_code} - {response.text}")
         except Exception as e:
-            self._handle_api_error(e, "get agent ID")
+            self._handle_api_error_or_raise(e, "get agent ID")
+
+    def get_agent_id(self, display_name: str) -> Optional[str]:
+        all_agents = self.list_agents()
+        for agent in all_agents:
+            if display_name in agent.get("displayName", ""):
+                selected_agent_id = agent.get("id")
+                self.logger.debug(f"Found agent matching display name '{display_name}', agent id: '{selected_agent_id}'. full agents list: '{all_agents}'. ")
+                return selected_agent_id
+
+        self.logger.warning(f"Could not find an agent matching the display name '{display_name}'. full agents list: '{all_agents}'. ")
         return None
 
     def add_snapshot(
@@ -51,7 +55,7 @@ class LightrunPublicAPI(LightrunAPI):
             else:
                 self.logger.warning(f"Failed to create snapshot: {response.status_code} - {response.text}")
         except Exception as e:
-            self._handle_api_error(e, "create snapshot")
+            self._handle_api_error_or_raise(e, "create snapshot")
         return None
 
     def add_log_action(
@@ -82,7 +86,7 @@ class LightrunPublicAPI(LightrunAPI):
             else:
                 self.logger.warning(f"Failed to create log: {response.status_code} - {response.text}")
         except Exception as e:
-            self._handle_api_error(e, "create log")
+            self._handle_api_error_or_raise(e, "create log")
         return None
 
     def get_snapshot(self, snapshot_id: str) -> Optional[dict]:
@@ -115,7 +119,7 @@ class LightrunPublicAPI(LightrunAPI):
             else:
                 self.logger.warning(f"Failed to delete snapshot {snapshot_id}: {response.status_code} - {response.text}")
         except Exception as e:
-            self._handle_api_error(e, "delete snapshot")
+            self._handle_api_error_or_raise(e, "delete snapshot")
         return False
 
     def delete_log_action(self, log_id: str) -> bool:
@@ -128,5 +132,5 @@ class LightrunPublicAPI(LightrunAPI):
             else:
                 self.logger.warning(f"Failed to delete log {log_id}: {response.status_code} - {response.text}")
         except Exception as e:
-            self._handle_api_error(e, "delete log")
+            self._handle_api_error_or_raise(e, "delete log")
         return False

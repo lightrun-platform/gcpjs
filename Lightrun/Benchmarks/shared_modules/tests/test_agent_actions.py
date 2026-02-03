@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import Mock
 import sys
+import logging
 from pathlib import Path
 
 # Add parent directory to path so we can import as a package
@@ -19,6 +20,7 @@ class TestAgentActions(unittest.TestCase):
         self.agent_id = "agent-uuid-123"  # The real UUID
         # Mock get_agent_id to return the UUID when called with display name
         self.mock_api.get_agent_id.return_value = self.agent_id
+        self.logger = Mock(spec=logging.Logger)
 
     def test_apply_actions(self):
         # Mock return values for action IDs
@@ -31,7 +33,7 @@ class TestAgentActions(unittest.TestCase):
         ]
         
         # Use factory method (direct constructor blocked by metaclass)
-        with AgentActions.create(self.mock_api, self.agent_display_name, actions) as agent_actions:
+        with AgentActions.create(self.logger, self.mock_api, self.agent_display_name, actions) as agent_actions:
             # Verify get_agent_id was called with the display name
             self.mock_api.get_agent_id.assert_called_once_with(self.agent_display_name)
             
@@ -61,7 +63,7 @@ class TestAgentActions(unittest.TestCase):
         self.mock_api.delete_snapshot.assert_called_once_with("snap-456")
 
     def test_empty_actions(self):
-        with AgentActions.create(self.mock_api, self.agent_display_name, []):
+        with AgentActions.create(self.logger, self.mock_api, self.agent_display_name, []):
             pass
         
         self.mock_api.add_log_action.assert_not_called()
@@ -69,7 +71,8 @@ class TestAgentActions(unittest.TestCase):
         self.mock_api.delete_log_action.assert_not_called()
         self.mock_api.delete_snapshot.assert_not_called()
 
-    def test_agent_not_found(self):
+    @unittest.mock.patch('time.sleep')
+    def test_agent_not_found(self, mock_sleep):
         """Test factory method raises AgentNotFoundError when agent not found."""
         self.mock_api.get_agent_id.return_value = None
         
@@ -78,9 +81,10 @@ class TestAgentActions(unittest.TestCase):
         ]
         
         with self.assertRaises(AgentNotFoundError) as context:
-            AgentActions.create(self.mock_api, self.agent_display_name, actions)
+            AgentActions.create(self.logger, self.mock_api, self.agent_display_name, actions, retries=1)
         
         self.assertIn(self.agent_display_name, str(context.exception))
+        mock_sleep.assert_called()
 
 if __name__ == '__main__':
     unittest.main()
