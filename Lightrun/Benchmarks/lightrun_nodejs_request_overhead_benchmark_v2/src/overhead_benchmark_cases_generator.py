@@ -93,7 +93,8 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
                                 delete_timeout=benchmark_config.delete_timeout,
                                 authenticator=authenticator,
                                 logger_factory=logger_factory,
-                                lightrun_version=benchmark_config.lightrun_version)
+                                lightrun_version=benchmark_config.lightrun_version,
+                                clean_after_run=benchmark_config.clean_after_run)
                             cases.append(case)
                 
         return cases

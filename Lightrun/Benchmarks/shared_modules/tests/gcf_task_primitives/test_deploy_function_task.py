@@ -47,7 +47,8 @@ class TestDeployFunctionTask(unittest.TestCase):
             project='test-project',
             env_vars={'LIGHTRUN_SECRET': 'secret', 'DISPLAY_NAME': 'disp'},
             kwargs={},
-            labels={'foo': 'bar'}
+            labels={'foo': 'bar'},
+            logger=self.mock_logger
         )
         self.function.logger = self.mock_logger
         

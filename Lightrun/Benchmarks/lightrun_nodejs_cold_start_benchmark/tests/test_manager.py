@@ -92,7 +92,7 @@ class TestBenchmarkManager(unittest.TestCase):
 
         # Create function object for testing (already deployed)
         from shared_modules.gcf_models import GCPFunction
-        function = GCPFunction(index=1, region='us-central1', base_name='test')
+        function = GCPFunction(index=1, region='us-central1', base_name='test', logger=Mock())
         function.is_deployed = True
         function.url = 'https://test.run.app'
 
@@ -126,7 +126,7 @@ class TestBenchmarkManager(unittest.TestCase):
 
         # Create function object for testing
         from shared_modules.gcf_models import GCPFunction
-        function = GCPFunction(index=1, region='us-central1', base_name='test')
+        function = GCPFunction(index=1, region='us-central1', base_name='test', logger=Mock())
         function.is_deployed = True
         function.url = 'https://test.run.app'
 

@@ -131,6 +131,8 @@ if (!displayName || displayName.trim() === '') {{
 
 const initArguments = {{
   lightrunSecret: lightrunSecret,
+  agentLog: {{ agentLogTargetDir: '', agentLogLevel: 'debug' }},
+  internal: {{ gcpDebug: true }},
   metadata: {{
     registration: {{
       displayName: displayName

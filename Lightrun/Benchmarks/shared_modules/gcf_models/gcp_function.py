@@ -17,6 +17,7 @@ MAX_GCP_FUNCTION_NAME_LENGTH = 63
 class GCPFunction:
     """Represents a Google Cloud Function instance throughout its lifecycle."""
 
+    logger: logging.Logger
     region: str
     name: str
     runtime: str
@@ -37,9 +38,7 @@ class GCPFunction:
     env_vars: Dict[str, str] = field(default_factory=dict)
     kwargs: Optional[Dict[str, Any]] = None
     labels: Dict[str, str] = field(default_factory=dict)
-    
-    logger: Optional[logging.Logger] = field(default=None, compare=False, repr=False)
-    
+
     test_result: Optional[Dict[str, Any]] = field(init=False, default=None)
     error: Optional[str] = field(init=False, default=None)
     deployment_result: Optional[DeploymentResult] = field(init=False, default=None)
@@ -61,11 +60,6 @@ class GCPFunction:
             List of identified CloudAssets (GCS objects, AR images, etc.)
         """
         assets: List[CloudAsset] = []
-        if not self.logger:
-            # Fallback logger if not set
-            local_logger = logging.getLogger(self.name)
-        else:
-            local_logger = self.logger
         
         try:
             cmd = ['gcloud', 'functions', 'describe', self.name,
@@ -78,7 +72,7 @@ class GCPFunction:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             
             if result.returncode != 0:
-                local_logger.warning(f"Could not describe function {self.name} to discover assets: {result.stderr.strip()}")
+                self.logger.warning(f"Could not describe function {self.name} to discover assets: {result.stderr.strip()}")
                 return assets
             
             data = json.loads(result.stdout)
@@ -98,7 +92,7 @@ class GCPFunction:
                 source_url = data.get('sourceArchiveUrl')
 
             if source_url:
-                local_logger.debug(f"Discovered associated GCS object: {source_url}")
+                self.logger.debug(f"Discovered associated GCS object: {source_url}")
                 assets.append(GCSSourceObject(source_url))
 
             # 2. Discover Artifact Registry Image
@@ -107,13 +101,13 @@ class GCPFunction:
                 image_uri = data.get('buildConfig', {}).get('imageUri')
             
             if image_uri:
-                 local_logger.debug(f"Discovered associated Container Image: {image_uri}")
+                 self.logger.debug(f"Discovered associated Container Image: {image_uri}")
                  assets.append(ArtifactRegistryImage(image_uri))
                  
             return assets
 
         except Exception as e:
-            local_logger.exception(f"Exception raised while discovering assets for '{self.name}': {e}")
+            self.logger.exception(f"Exception raised while discovering assets for '{self.name}': {e}")
             return assets
 
     @property

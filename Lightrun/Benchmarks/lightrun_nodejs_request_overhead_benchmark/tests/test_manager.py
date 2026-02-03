@@ -43,7 +43,7 @@ class TestRequestOverheadBenchmarkManager(unittest.TestCase):
         manager = RequestOverheadBenchmarkManager(self.config, self.function_dir)
         
         # Create function correctly
-        function = GCPFunction(index=1, region='us-central1', base_name='test-lightrun')
+        function = GCPFunction(index=1, region='us-central1', base_name='test-lightrun', logger=Mock())
         function.is_deployed = True
         function.url = 'https://test.run.app'
         
@@ -72,7 +72,7 @@ class TestRequestOverheadBenchmarkManager(unittest.TestCase):
         """Test prepare_function logic without Lightrun (warmup only)."""
         manager = RequestOverheadBenchmarkManager(self.config, self.function_dir)
         
-        function = GCPFunction(index=1, region='us-central1', base_name='test-nolightrun')
+        function = GCPFunction(index=1, region='us-central1', base_name='test-nolightrun', logger=Mock())
         function.url = 'https://test.run.app'
         
         mock_response = Mock()
@@ -93,7 +93,7 @@ class TestRequestOverheadBenchmarkManager(unittest.TestCase):
     def test_get_test_task(self):
         """Test task factory."""
         manager = RequestOverheadBenchmarkManager(self.config, self.function_dir)
-        function = GCPFunction(index=1, region='us-central1', base_name='test')
+        function = GCPFunction(index=1, region='us-central1', base_name='test', logger=Mock())
         
         task = manager.get_test_task(function, 1000.0)
         from lightrun_nodejs_request_overhead_benchmark.src.iterative_test_task import IterativeOverheadTestTask

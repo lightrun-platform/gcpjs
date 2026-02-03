@@ -1,3 +1,4 @@
+from logging import Logger
 from pathlib import Path
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
@@ -33,9 +34,10 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  delete_timeout: int,
                  authenticator: Authenticator,
                  logger_factory: LoggerFactory,
-                 lightrun_version: str
+                 lightrun_version: str,
+                 clean_after_run: bool
     ):
-        super().__init__(deployment_timeout, delete_timeout, logger_factory)
+        super().__init__(deployment_timeout, delete_timeout, clean_after_run=clean_after_run)
         self.benchmark_name = benchmark_name
         self.runtime = runtime
         self.region = region
@@ -55,7 +57,10 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         self.authenticator = authenticator
         self.lightrun_version = lightrun_version
         self._gcp_function = None
+        self._logger = logger_factory.get_logger(self.name)
 
+    def logger(self) -> Logger:
+        return self._logger
 
     def case_identifier(self) -> str:
         sanitized_mem = self.memory.lower()

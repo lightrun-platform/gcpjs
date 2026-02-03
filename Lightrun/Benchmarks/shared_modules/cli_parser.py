@@ -349,6 +349,13 @@ class CLIParser:
         )
 
         parser.add_argument(
+            '--clean-test-resources',
+            type=bool,
+            default=True,
+            help='Whether to clean up test resources after the test (default: True). Set to False to preserve cloud assets for post-mortem examinations. Make sure to clean them up yourself afterwards!'
+        )
+
+        parser.add_argument(
             '--lightrun-version',
             type=str,
             help='Lightrun library version to use in the test'
