@@ -41,8 +41,7 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
             authenticator = InteractiveAuthenticator(
                 benchmark_config.lightrun_api_url, 
                 benchmark_config.lightrun_company_id, 
-                logger,
-                no_cache=benchmark_config.no_token_cache
+                logger
             )
 
         for runtime in benchmark_config.runtimes:
