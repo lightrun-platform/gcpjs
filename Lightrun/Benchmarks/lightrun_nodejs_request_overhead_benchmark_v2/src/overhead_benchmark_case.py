@@ -59,6 +59,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         self._gcp_function = None
         self._logger = logger_factory.get_logger(self.name)
 
+    @property
     def logger(self) -> Logger:
         return self._logger
 
