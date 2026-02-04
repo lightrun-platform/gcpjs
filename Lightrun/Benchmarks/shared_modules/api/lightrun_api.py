@@ -53,7 +53,7 @@ class LightrunAPI(ABC):
                               f"3. You are on a network that doesn't resolve public DNS names correctly.\n" +
                               f"4. The URL '{self.api_url}' is incorrect or missing the scheme (e.g., https://).\n")
         else:
-            self.logger.warning(f"Could not {context}: {e}")
+            self.logger.warning(f"{context}: {e}")
             raise e
 
     @abstractmethod

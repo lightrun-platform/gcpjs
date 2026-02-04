@@ -25,19 +25,85 @@ def get_client_info_header(api_version: str):
 
 class LightrunPluginAPI(LightrunAPI):
     """Client for the Lightrun Internal/Plugin API (using User Tokens via Device Flow)."""
-    
+
+    DEFAULT_AGENT_POOL_PAGE_SIZE: int = 20
+
     def __init__(self, api_url, company_id, api_version, logger):
         authenticator = InteractiveAuthenticator(api_url, company_id, logger)
         super().__init__(api_url, company_id, authenticator, logger)
         self.api_version = api_version
 
-    def get_all_agent_pools(self):
-        url_all = f"{self.api_url}/api/company/{self.company_id}/agent-pools"
-        resp_all = self.authenticator.send_authenticated_request(self.session, 'GET', url_all)
-        if resp_all.status_code == 200:
-            return resp_all.json().get('content')
-        else:
-            raise Exception(f"Error getting agent pools: response code: {resp_all.status_code}")
+    def get_all_agent_pools(self) -> list:
+        """
+        Fetches all agent pools for this company, handling pagination.
+        
+        Makes an initial request without pagination params to discover the server's
+        default page size, then uses that for subsequent requests.
+        
+        Returns:
+            List of agent pool dictionaries.
+        """
+        all_pools = []
+        page = 0
+        page_size = None  # Will be discovered from first response
+        
+        base_url = f"{self.api_url}/api/company/{self.company_id}/agent-pools"
+        
+        while True:
+            # First request: no pagination params to discover server's default page size
+            # Subsequent requests: use discovered page size
+            if page == 0:
+                params = {}
+            else:
+                params = {"page": page, "size": page_size}
+            
+            response = self.authenticator.send_authenticated_request(
+                self.session, 'GET', base_url, params=params
+            )
+            
+            if response.status_code != 200:
+                raise Exception(
+                    f"Error getting agent pools: response code: {response.status_code}, "
+                    f"response: {response.text}"
+                )
+            
+            data = response.json()
+            
+            if isinstance(data, list):
+                # Direct list response (no pagination wrapper)
+                all_pools.extend(data)
+                self.logger.debug(f"Fetched {len(data)} agent pools (direct list format)")
+                break
+                
+            elif isinstance(data, dict) and 'content' in data:
+                # Paginated response with 'content' wrapper
+                pools_page = data['content']
+                all_pools.extend(pools_page)
+                
+                # Extract page size from first response
+                if page == 0:
+                    pageable = data.get('pageable', {})
+                    page_size = pageable.get('pageSize', 20)
+                    self.logger.debug(f"Discovered server page size: {page_size}")
+                
+                self.logger.debug(
+                    f"Fetched page {page}: {len(pools_page)} pools "
+                    f"(total so far: {len(all_pools)}/{data.get('totalElements', 'unknown')})"
+                )
+                
+                # Check if this is the last page
+                if data.get('last', True):
+                    break
+                    
+                page += 1
+            else:
+                raise Exception(
+                    f"Error getting agent pools: unexpected response structure - "
+                    f"status code: {response.status_code}, json: {data}"
+                )
+        
+        self.logger.info(f"Total agent pools fetched: {len(all_pools)}")
+        return all_pools
 
 
     def get_default_agent_pool(self) -> Optional[str]:
@@ -49,27 +115,87 @@ class LightrunPluginAPI(LightrunAPI):
             raise Exception(f"Error getting default agent pool: response code: {response.status_code}, response json: {response.json()}")
 
     def _get_agents_in_pool(self, pool_id: str) -> list:
-        agents = []
-        data = None
-        url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{pool_id}/{self.api_version}/agentsFlat"
+        """
+        Fetches all agents in a specific pool, handling pagination.
+        
+        Makes an initial request without pagination params to discover the server's
+        default page size, then uses that for subsequent requests.
+        
+        Args:
+            pool_id: The agent pool ID to query.
+            
+        Returns:
+            List of agent dictionaries.
+        """
+        all_agents = []
+        page = 0
+        page_size = None  # Will be discovered from first response
+        
+        base_url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{pool_id}/{self.api_version}/agentsFlat"
         headers = {"client-info": get_client_info_header(self.api_version)}
-        response = self.authenticator.send_authenticated_request(self.session, 'GET', url, headers=headers)
-        response.raise_for_status()
-        try:
-            data = response.json()
-        except requests.exceptions.JSONDecodeError as e:
-            self.logger.warning(f"Malformed or empty JSON in server response! response code: {response.status_code}, response body: {response.text}")
-            raise e
+        
+        while True:
+            # First request: no pagination params to discover server's default page size
+            # Subsequent requests: use discovered page size
+            if page == 0:
+                params = {}
+            else:
+                params = {"page": page, "size": page_size}
+            
+            response = self.authenticator.send_authenticated_request(
+                self.session, 'GET', base_url, headers=headers, params=params
+            )
+            response.raise_for_status()
+            
+            try:
+                data = response.json()
+            except requests.exceptions.JSONDecodeError as e:
+                self.logger.warning(
+                    f"Malformed or empty JSON in server response! "
+                    f"response code: {response.status_code}, response body: {response.text}"
+                )
+                raise e
+            
+            if isinstance(data, list):
+                # Direct list response (no pagination wrapper)
+                all_agents.extend(data)
+                self.logger.debug(f"Fetched {len(data)} agents from pool {pool_id} (direct list format)")
+                break  # No pagination info means single response
+                
+            elif isinstance(data, dict) and 'content' in data:
+                # Paginated response with 'content' wrapper
+                agents_page = data['content']
+                all_agents.extend(agents_page)
+                
+                # Extract page size from first response
+                if page == 0:
+                    if data.get('pageable', {}):
+                        pageable = data.get('pageable', {})
+                        page_size = pageable.get('pageSize')
+                        self.logger.debug(f"Discovered server page size: {page_size}")
+                    else:
+                        page_size = LightrunPluginAPI.DEFAULT_AGENT_POOL_PAGE_SIZE
+                        self.logger.debug(f"No paging information in first response, using default page size: {page_size}")
 
-        if isinstance(data, list):
-            agents = data
-            self.logger.info(f"Agent pool {pool_id} had {len(data)} agents arranged in a list, agents: {data}")
-        elif isinstance(data, dict) and 'content' in data:
-            agents = data['content']
-            self.logger.info(f"Agent pool {pool_id} had {len(agents)} agents arranged in a dictionary, agents: {agents}, and the entire data dictionary is: {data}")
-        else:
-            raise Exception(f"Error querying the server for agents in agent pool: {pool_id}. Unexpected response or response structure - response status code: {response.status_code}, response json: {data}")
-        return agents
+                
+                self.logger.debug(
+                    f"Fetched page {page}: {len(agents_page)} agents "
+                    f"(total so far: {len(all_agents)}/{data.get('totalElements', 'unknown')})"
+                )
+                
+                # Check if this is the last page
+                if data.get('last', True):
+                    break
+                    
+                page += 1
+            else:
+                raise Exception(
+                    f"Error querying the server for agents in agent pool: {pool_id}. "
+                    f"Unexpected response structure - status code: {response.status_code}, json: {data}"
+                )
+        
+        self.logger.info(f"Total agents fetched from pool {pool_id}: {len(all_agents)}")
+        return all_agents
 
 
     def list_agents(self):
@@ -79,12 +205,13 @@ class LightrunPluginAPI(LightrunAPI):
                 return []
             agents = []
             for pool in agent_pools:
-                agents.extend(self._get_agents_in_pool(pool))
+                agent_pool_id = pool.get('id')
+                agents.extend(self._get_agents_in_pool(agent_pool_id))
 
             return agents
 
         except Exception as e:
-            self._handle_api_error_or_raise(e, "get agent ID (Internal)")
+            self._handle_api_error_or_raise(e, "Failed to list all agents (Internal)")
         return None
 
     def get_agent_id(self, display_name: str) -> Optional[str]:
