@@ -2,6 +2,8 @@ import json
 import logging
 import time
 import webbrowser
+import platform
+import subprocess
 from typing import Optional
 
 import requests
@@ -31,6 +33,8 @@ class Credentials:
     #         return False
 
     def is_token_expired(self) -> bool:
+        if self.expiration_time is None:
+             return True
         return self.expiration_time < time.monotonic_ns()
 
     def get_access_token(self) -> str:
@@ -42,7 +46,7 @@ class Credentials:
 
         if self._refresh_token:
             self.logger.info("Cached token invalid/expired. Attempting refresh...")
-            self._access_token = self.try_refreshing_token(self.refresh_token)
+            self._access_token = self.try_refreshing_token(self._refresh_token)
             if self._access_token:
                 return self._access_token
 
@@ -71,6 +75,15 @@ class Credentials:
 
         return None
 
+    def _save_token(self, access_token, refresh_token):
+        # In-memory only, so just update instance
+        self._access_token = access_token
+        self._refresh_token = refresh_token
+        # Update expiration if provided? 
+        # API doesn't return expires_in on refresh usually, need to check. 
+        # Assuming reasonable default if not provided, but mostly get_access_token flow handles expiration.
+        pass 
+
     def _perform_device_login(self):
         self.logger.info("Initiating interactive device login...")
 
@@ -92,7 +105,7 @@ class Credentials:
 
             if not verification_uri or not device_code:
                 self.logger.error(f"Invalid response from auth info endpoint. Keys found: {list(auth_info.keys())}. Content: {auth_info}")
-                return None
+                return None, None, None
 
             self.logger.info("\n" + "= " * 60)
             self.logger.info("Action Required: Lightrun Authentication")
@@ -110,7 +123,7 @@ class Credentials:
             token_url = f"{self.api_url}/api/oauth/authenticate/device/{device_code}"
 
             start_time = time.time()
-            timeout = 20  # 20 seconds
+            timeout = 300  # 5 minutes
 
             while time.time() - start_time < timeout:
                 resp = self.session.get(token_url)
@@ -129,7 +142,7 @@ class Credentials:
 
                             if access_token:
                                 self.logger.info("Successfully authenticated!")
-                                # self._close_active_tab_macos()
+                                self._close_active_tab_macos()
                                 return access_token, refresh_token, expiration_time
                         except json.JSONDecodeError:
                             self.logger.warning(f"Failed to decode JSON from 200 response: {resp.text}")
@@ -140,30 +153,30 @@ class Credentials:
                 time.sleep(polling_interval)
 
             self.logger.error("Authentication timed out.")
-            return None
+            return None, None, None
 
         except Exception as e:
             self.logger.exception(f"Device login failed: {e}")
-            return None
+            return None, None, None
 
 
-    # def _close_active_tab_macos(self):
-    #     """Attempts to close the active tab in Google Chrome on macOS."""
-    #     try:
-    #         # Only run on macOS
-    #         if platform.system() != 'Darwin':
-    #             return
-    #
-    #         # AppleScript to close the active tab of the front window of Google Chrome
-    #         # We check if it's running to avoid launching it if it's not open (though it must be if used for auth)
-    #         script = '''
-    #         tell application "Google Chrome"
-    #             if running then
-    #                 close active tab of front window
-    #             end if
-    #         end tell
-    #         '''
-    #         subprocess.run(['osascript', '-e', script], capture_output=True, check=False)
-    #         self.logger.info("Attempted to close browser tab.")
-    #     except Exception as e:
-    #         self.logger.exception(f"Failed to auto-close browser tab: {e}")
+    def _close_active_tab_macos(self):
+        """Attempts to close the active tab in Google Chrome on macOS."""
+        try:
+            # Only run on macOS
+            if platform.system() != 'Darwin':
+                return
+
+            # AppleScript to close the active tab of the front window of Google Chrome
+            # We check if it's running to avoid launching it if it's not open (though it must be if used for auth)
+            script = '''
+            tell application "Google Chrome"
+                if running then
+                    close active tab of front window
+                end if
+            end tell
+            '''
+            subprocess.run(['osascript', '-e', script], capture_output=True, check=False)
+            self.logger.info("Attempted to close browser tab.")
+        except Exception as e:
+            self.logger.exception(f"Failed to auto-close browser tab: {e}")

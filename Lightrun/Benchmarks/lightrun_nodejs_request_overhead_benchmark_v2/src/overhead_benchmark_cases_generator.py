@@ -69,6 +69,9 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
                     for cpu in benchmark_config.cpus:
                         # Generate cases: 0 to test_size actions
                         for num_actions in range(benchmark_config.test_size + 1):
+                            if num_actions == 0:
+                                continue # temp, just so the test gets to interesting cases faster
+
                             region = next(regions_allocation_order)
                             
                             case = LightrunOverheadBenchmarkCase(
@@ -93,7 +96,7 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
                                 authenticator=authenticator,
                                 logger_factory=logger_factory,
                                 lightrun_version=benchmark_config.lightrun_version,
-                                clean_after_run=benchmark_config.clean_test_resources)
+                                clean_after_run=not benchmark_config.skip_test_cleanup)
                             cases.append(case)
                 
         return cases

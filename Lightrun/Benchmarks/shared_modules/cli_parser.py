@@ -343,10 +343,10 @@ class CLIParser:
         )
 
         parser.add_argument(
-            '--clean-test-resources',
-            type=bool,
-            default=True,
-            help='Whether to clean up test resources after the test (default: True). Set to False to preserve cloud assets for post-mortem examinations. Make sure to clean them up yourself afterwards!'
+            '--skip-test-cleanup',
+            action='store_true',
+            default=False,
+            help='Whether to skip cleaning up test resources after the test (default: True). Set to flag to True to preserve cloud assets for post-mortem examinations, but make sure to clean them up yourself afterwards!'
         )
 
         parser.add_argument(
