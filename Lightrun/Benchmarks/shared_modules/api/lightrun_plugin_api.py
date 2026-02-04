@@ -1,3 +1,5 @@
+import requests
+
 from .lightrun_api import LightrunAPI
 import json
 import base64
@@ -48,12 +50,17 @@ class LightrunPluginAPI(LightrunAPI):
 
     def _get_agents_in_pool(self, pool_id: str) -> list:
         agents = []
-
+        data = None
         url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{pool_id}/{self.api_version}/agentsFlat"
         headers = {"client-info": get_client_info_header(self.api_version)}
         response = self.authenticator.send_authenticated_request(self.session, 'GET', url, headers=headers)
         response.raise_for_status()
-        data = response.json()
+        try:
+            data = response.json()
+        except requests.exceptions.JSONDecodeError as e:
+            self.logger.warning(f"Malformed or empty JSON in server response! response code: {response.status_code}, response body: {response.text}")
+            raise e
+
         if isinstance(data, list):
             agents = data
             self.logger.info(f"Agent pool {pool_id} had {len(data)} agents arranged in a list, agents: {data}")
