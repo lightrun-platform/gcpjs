@@ -1,5 +1,7 @@
 from logging import Logger
 from pathlib import Path
+from typing import List
+
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
 from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import LightrunOverheadBenchmarkResult
@@ -24,7 +26,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  lightrun_secret: str,
                  lightrun_api_key: str,
                  lightrun_company_id: str,
-                 lightrun_api_url: str,
+                 lightrun_api_hostname: str,
                  project: str,
                  memory: str,
                  cpu: str,
@@ -48,7 +50,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         self.lightrun_secret = lightrun_secret
         self.lightrun_api_key = lightrun_api_key
         self.lightrun_company_id = lightrun_company_id
-        self.lightrun_api_url = lightrun_api_url
+        self.lightrun_api_hostname = lightrun_api_hostname
         self.project = project
         self.memory = memory
         self.cpu = cpu
@@ -108,9 +110,9 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
     @property
     def env_vars(self) -> dict:
         return {
-            'LIGHTRUN_SECRET': self.lightrun_secret,
+            'LIGHTRUN_SECRET': self.lightrun_secret, # special lightrun agent environment variable which configured the lightrun secret
             'DISPLAY_NAME': self.name,
-            'LIGHTRUN_API_ENDPOINT': self.lightrun_api_url
+            'LIGHTRUN_API_ENDPOINT': self.lightrun_api_hostname # special lightrun agent environment variable which configures the location of the lightrun server. it is misleadingly called ENDPOINT, implying a full url but it actually expects only the hostname without protocol prefix
         }
 
     def _get_action_line_numbers(self) -> List[int]:
@@ -168,10 +170,10 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         # Initialize Lightrun API with correct authenticator
         if isinstance(self.authenticator, InteractiveAuthenticator):
             self.logger.info("Using internal Plugin API for User Token authentication.")
-            api: LightrunAPI = LightrunPluginAPI(self.lightrun_api_url, self.lightrun_company_id, self.authenticator, logger=self.logger, api_version=self.lightrun_version)
+            api: LightrunAPI = LightrunPluginAPI(f"https://{self.lightrun_api_hostname}", self.lightrun_company_id, self.authenticator, logger=self.logger, api_version=self.lightrun_version)
         else:
              self.logger.info("Using Public API for API Key authentication.")
-             api: LightrunAPI = LightrunPublicAPI(self.lightrun_api_url, self.lightrun_company_id, self.authenticator, logger=self.logger)
+             api: LightrunAPI = LightrunPublicAPI(self.lightrun_api_hostname, self.lightrun_company_id, self.authenticator, logger=self.logger, api_version=self.lightrun_version)
         
         # 2. Agent Display Name (used to identify the agent on the server)
         agent_display_name = self.name

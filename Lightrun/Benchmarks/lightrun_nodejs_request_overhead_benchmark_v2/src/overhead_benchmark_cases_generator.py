@@ -39,7 +39,7 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
             authenticator = ApiKeyAuthenticator(benchmark_config.lightrun_api_key)
         elif benchmark_config.authentication_type == 'MANUAL':
             authenticator = InteractiveAuthenticator(
-                benchmark_config.lightrun_api_url, 
+                benchmark_config.lightrun_api_hostname,
                 benchmark_config.lightrun_company_id, 
                 logger
             )
@@ -85,7 +85,7 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
                                 lightrun_secret=benchmark_config.lightrun_secret,
                                 lightrun_api_key=benchmark_config.lightrun_api_key,
                                 lightrun_company_id=benchmark_config.lightrun_company_id,
-                                lightrun_api_url=benchmark_config.lightrun_api_url,
+                                lightrun_api_hostname=benchmark_config.lightrun_api_hostname,
                                 project=benchmark_config.project,
                                 memory=memory,
                                 cpu=cpu,

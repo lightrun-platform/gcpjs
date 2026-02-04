@@ -311,11 +311,11 @@ class CLIParser:
             help="Method of authentication to use. Options: ['API_KEY', 'MANUAL']. Option 'MANUAL' initiates an interactive login flow. Option 'API_KEY' must be used with the --lightrun-api-key option and uses the provided API key directly."
         )
         parser.add_argument(
-            '--lightrun-api-url',
+            '--lightrun-api-hostname',
             type=str,
-            default='https://app.lightrun.com',
-            env_var='LIGHTRUN_API_URL',
-            help='Lightrun API URL (default: from LIGHTRUN_API_URL env var or https://app.lightrun.com)'
+            default='app.lightrun.com',
+            env_var='LIGHTRUN_API_HOSTNAME',
+            help='Lightrun API Hostname (default: from LIGHTRUN_API_HOSTNAME env var or app.lightrun.com)'
         )
         parser.add_argument(
             '--max-allocations-per-region',

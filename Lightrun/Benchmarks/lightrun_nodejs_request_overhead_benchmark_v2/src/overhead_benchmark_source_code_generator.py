@@ -119,18 +119,18 @@ const functions = require('@google-cloud/functions-framework');
 const lightrun = require('lightrun/gcp');
 const crypto = require('crypto');
 
-const lightrunSecret = process.env.LIGHTRUN_SECRET;
-if (!lightrunSecret || lightrunSecret.trim() === '') {{
-  throw new Error('LIGHTRUN_SECRET environment variable is required');
-}}
 
 const displayName = process.env.DISPLAY_NAME;
 if (!displayName || displayName.trim() === '') {{
   throw new Error('DISPLAY_NAME environment variable is required and cannot be empty');
 }}
 
+
 const initArguments = {{
-  lightrunSecret: lightrunSecret,
+// in addition to these arguments, the agent will the value for the lightrunSecret configuration parameter from the LIGHTRUN_SECRET environment variable.
+// and the value of the apiEndpoint configuration parameter from the LIGHTRUN_API_ENDPOINT environment variable.
+// both env variables must be set up on the function for the benchmark to run properly.
+
   agentLog: {{ agentLogTargetDir: '', agentLogLevel: 'debug' }},
   internal: {{ gcpDebug: true }},
   metadata: {{
