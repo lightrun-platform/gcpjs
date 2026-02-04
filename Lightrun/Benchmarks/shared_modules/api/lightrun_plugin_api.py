@@ -29,50 +29,53 @@ class LightrunPluginAPI(LightrunAPI):
         super().__init__(api_url, company_id, authenticator, logger)
         self.api_version = api_version
 
-    def _get_default_agent_pool(self) -> Optional[str]:
-        try:
-            url = f"{self.api_url}/api/company/{self.company_id}/agent-pools/default"
-            response = self.authenticator.send_authenticated_request(self.session, 'GET', url)
-            if response.status_code == 200:
-                return response.json().get('id')
-            else:
-                # Fallback: List all pools
-                self.logger.warning(f"Failed to get default pool: {response.text}, trying list")
-                url_all = f"{self.api_url}/api/company/{self.company_id}/agent-pools"
-                resp_all = self.authenticator.send_authenticated_request(self.session, 'GET', url_all)
-                if resp_all.status_code == 200:
-                    pools = resp_all.json().get('content', [])
-                    if pools:
-                        return pools[0]['id']
-        except Exception as e:
-            self.logger.exception(f"Error getting default agent pool: {e}")
-        return None
+    def get_all_agent_pools(self):
+        url_all = f"{self.api_url}/api/company/{self.company_id}/agent-pools"
+        resp_all = self.authenticator.send_authenticated_request(self.session, 'GET', url_all)
+        if resp_all.status_code == 200:
+            return resp_all.json().get('content')
+        else:
+            raise Exception(f"Error getting agent pools: response code: {resp_all.status_code}")
 
-    def _list_agents_flat(self, pool_id: str) -> list:
+
+    def get_default_agent_pool(self) -> Optional[str]:
+        url = f"{self.api_url}/api/company/{self.company_id}/agent-pools/default"
+        response = self.authenticator.send_authenticated_request(self.session, 'GET', url)
+        if response.status_code == 200:
+            return response.json().get('id')
+        else:
+            raise Exception(f"Error getting default agent pool: response code: {response.status_code}, response json: {response.json()}")
+
+    def _get_agents_in_pool(self, pool_id: str) -> list:
         agents = []
-        try:
-            url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{pool_id}/{self.api_version}/agentsFlat"
-            headers = {"client-info": get_client_info_header(self.api_version)}
-            response = self.authenticator.send_authenticated_request(self.session, 'GET', url, headers=headers)
 
-            if response.status_code == 200:
-                data = response.json()
-                if isinstance(data, list):
-                    agents = data
-                elif isinstance(data, dict) and 'content' in data:
-                    agents = data['content']
-            else:
-                self.logger.warning(f"Failed to list agents flat: {response.status_code}")
-        except Exception as e:
-            self.logger.exception(f"Error listing agents flat: {e}")
+        url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{pool_id}/{self.api_version}/agentsFlat"
+        headers = {"client-info": get_client_info_header(self.api_version)}
+        response = self.authenticator.send_authenticated_request(self.session, 'GET', url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, list):
+            agents = data
+            self.logger.info(f"Agent pool {pool_id} had {len(data)} agents arranged in a list, agents: {data}")
+        elif isinstance(data, dict) and 'content' in data:
+            agents = data['content']
+            self.logger.info(f"Agent pool {pool_id} had {len(agents)} agents arranged in a dictionary, agents: {agents}, and the entire data dictionary is: {data}")
+        else:
+            raise Exception(f"Error querying the server for agents in agent pool: {pool_id}. Unexpected response or response structure - response status code: {response.status_code}, response json: {data}")
         return agents
+
 
     def list_agents(self):
         try:
-            pool_id = self._get_default_agent_pool()
-            if not pool_id:
-                raise Exception("No default agent pool found")
-            return self._list_agents_flat(pool_id)
+            agent_pools = self.get_all_agent_pools()
+            if not agent_pools:
+                return []
+            agents = []
+            for pool in agent_pools:
+                agents.extend(self._get_agents_in_pool(pool))
+
+            return agents
+
         except Exception as e:
             self._handle_api_error_or_raise(e, "get agent ID (Internal)")
         return None
@@ -107,7 +110,7 @@ class LightrunPluginAPI(LightrunAPI):
             expire_seconds: int = 3600,
     ) -> Optional[str]:
         try:
-            pool_id = self._get_default_agent_pool()
+            pool_id = self.get_default_agent_pool()
             if pool_id:
                 url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/insertCapture/**"
                 headers = {"client-info": get_client_info_header(self.api_version)}
@@ -150,7 +153,7 @@ class LightrunPluginAPI(LightrunAPI):
             expire_seconds: int = 3600,
     ) -> Optional[str]:
         try:
-            pool_id = self._get_default_agent_pool()
+            pool_id = self.get_default_agent_pool()
             if pool_id:
                 url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/insertLog/**"
                 headers = {"client-info": get_client_info_header(self.api_version)}
@@ -204,23 +207,39 @@ class LightrunPluginAPI(LightrunAPI):
         return None
 
     def get_log(self, log_id: str) -> Optional[dict]:
-        # Same as get_snapshot, assuming getAction works for Logs too
-        return self.get_snapshot(log_id)
+        try:
+            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs/{log_id}"
+            response = self.authenticator.send_authenticated_request(self.session, 'GET', url, timeout=10)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                self.logger.warning(f"Failed to get log (Public fallback): {response.status_code} - {response.text}")
+        except Exception as e:
+            self.logger.exception(f"Error fetching log: {e}")
+        return None
 
     def delete_snapshot(self, snapshot_id: str) -> bool:
         try:
-            # deleteAction: /athena/company/{company}/{apiVersion}/deleteAction/{actionId}
-            url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/deleteAction/{snapshot_id}"
-            headers = {"client-info": get_client_info_header(self.api_version)}
-            response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, headers=headers, timeout=10)
+            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots/{snapshot_id}"
+            response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, timeout=10)
             if response.status_code in [200, 204]:
-                self.logger.info(f"Snapshot deleted (Internal): {snapshot_id}")
+                self.logger.info(f"Snapshot deleted: {snapshot_id}")
                 return True
             else:
-                self.logger.warning(f"Failed to delete snapshot (Internal): {response.status_code}")
+                self.logger.warning(f"Failed to delete snapshot (Public fallback): {response.status_code} - {response.text}")
         except Exception as e:
-            self._handle_api_error_or_raise(e, "delete snapshot (Internal)")
+            self.logger.exception(f"Error deleting snapshot: {e}")
         return False
 
     def delete_log_action(self, log_id: str) -> bool:
-        return self.delete_snapshot(log_id)
+        try:
+            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs/{log_id}"
+            response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, timeout=10)
+            if response.status_code in [200, 204]:
+                self.logger.info(f"Log action deleted: {log_id}")
+                return True
+            else:
+                self.logger.warning(f"Failed to delete log (Public fallback): {response.status_code} - {response.text}")
+        except Exception as e:
+            self.logger.exception(f"Error deleting log: {e}")
+        return False
