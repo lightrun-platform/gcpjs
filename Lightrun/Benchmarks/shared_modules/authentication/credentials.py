@@ -144,7 +144,7 @@ class Credentials:
                             token_data = resp.json()
                             access_token = token_data.get("id_token")
                             refresh_token = token_data.get("refresh_token")
-                            time_window = token_data.get("expires_in")
+                            time_window = token_data.get("expires_in_seconds")
                             expiration_time = time.monotonic_ns() + (time_window * 1_000_000_000)
 
                             if access_token:
