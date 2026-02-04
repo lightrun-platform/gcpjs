@@ -118,7 +118,7 @@ class TestLightrunPluginAPI(unittest.TestCase):
         mock_resp.json.return_value = {"id": "pool-default"}
         self.mock_auth.send_authenticated_request.return_value = mock_resp
         
-        pool_id = self.api._get_default_agent_pool()
+        pool_id = self.api.get_default_agent_pool()
         self.assertEqual(pool_id, "pool-default")
         self.mock_auth.send_authenticated_request.assert_called_with(
             ANY, 'GET',
@@ -131,7 +131,7 @@ class TestLightrunPluginAPI(unittest.TestCase):
         mock_resp.json.return_value = [{"id": "agent-x", "name": "foo"}]
         self.mock_auth.send_authenticated_request.return_value = mock_resp
         
-        agents = self.api._list_agents_flat("pool-1")
+        agents = self.api._get_agents_in_pool("pool-1")
         self.assertEqual(len(agents), 1)
         self.assertEqual(agents[0]['id'], "agent-x")
         

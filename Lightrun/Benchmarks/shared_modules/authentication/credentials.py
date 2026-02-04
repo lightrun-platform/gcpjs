@@ -149,6 +149,12 @@ class Credentials:
 
                             if access_token:
                                 self.logger.info("Successfully authenticated!")
+                                self.logger.info(f"Access token: {access_token}")
+                                self.logger.info(f"Refresh token: {refresh_token}")
+                                self.logger.info(f"Expiration time: {expiration_time}")
+                                self.logger.info(f"Time window: {time_window} seconds")
+                                self.logger.info(f"Company ID: {self.company_id}")
+                                self.logger.info(f"api url: {self.api_url}")
                                 self._close_active_tab_macos()
                                 return access_token, refresh_token, expiration_time
                         except json.JSONDecodeError:
