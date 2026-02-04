@@ -4,6 +4,8 @@ import copy
 import math
 import logging
 
+from Benchmarks.shared_modules.authentication.authenticator import AuthenticationType
+
 
 def _mask_secret(value: str) -> str:
     """Mask a secret value: show first 10% and last 10%, hide the rest."""
@@ -305,10 +307,10 @@ class CLIParser:
         )
         parser.add_argument(
             '--authentication-type',
-            type=str,
+            type=lambda x: AuthenticationType[x.upper()] if x.upper() in AuthenticationType else x,
             required=True,
-            choices=['API_KEY', 'MANUAL'],
-            help="Method of authentication to use. Options: ['API_KEY', 'MANUAL']. Option 'MANUAL' initiates an interactive login flow. Option 'API_KEY' must be used with the --lightrun-api-key option and uses the provided API key directly."
+            choices=[AuthenticationType.API_KEY, AuthenticationType.MANUAL],
+            help=f"Method of authentication to use. Options: {[AuthenticationType.API_KEY.name, AuthenticationType.MANUAL.name]}. Option '{AuthenticationType.MANUAL.name}' initiates an interactive login flow. Option '{AuthenticationType.API_KEY.name}' must be used with the --lightrun-api-key option and uses the provided API key directly."
         )
         parser.add_argument(
             '--lightrun-api-hostname',
@@ -369,8 +371,8 @@ class CLIParser:
             # 16 is a safe default to avoid hitting project-wide quotas too easily.
             args.num_workers = min(args.num_functions, 16)
 
-        if args.authentication_type == 'API_KEY' and not args.lightrun_api_key:
-            parser.error("argument --lightrun-api-key is required when --authentication-type is 'API_KEY'")
+        if args.authentication_type == AuthenticationType.API_KEY and not args.lightrun_api_key:
+            parser.error(f"argument --lightrun-api-key is required when --authentication-type is '{AuthenticationType.API_KEY}'")
         
         if not args.lightrun_company_id:
             parser.error("the following arguments are required: --lightrun-company-id (or set the LIGHTRUN_COMPANY_ID environment variable)")

@@ -1,4 +1,5 @@
 """Authentication strategies for Lightrun."""
+from enum import Enum
 
 import requests
 from abc import ABC, abstractmethod
@@ -19,3 +20,7 @@ class Authenticator(ABC):
          pass
 
 
+class AuthenticationType(Enum):
+
+    API_KEY = "API_KEY"
+    MANUAL = "MANUAL"

@@ -24,7 +24,8 @@ def get_client_info_header(api_version: str):
 class LightrunPluginAPI(LightrunAPI):
     """Client for the Lightrun Internal/Plugin API (using User Tokens via Device Flow)."""
     
-    def __init__(self, api_url, company_id, authenticator, api_version, logger):
+    def __init__(self, api_url, company_id, api_version, logger):
+        authenticator = InteractiveAuthenticator(api_url, company_id, logger)
         super().__init__(api_url, company_id, authenticator, logger)
         self.api_version = api_version
 

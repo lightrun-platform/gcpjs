@@ -20,6 +20,8 @@ class Credentials:
         self._refresh_token = None
         self.expiration_time = None
 
+        self.logger.debug(f"Credentials.__init__ called with api_url={api_url}, company_id={company_id}")
+
     # def _is_token_valid(self, token: str) -> bool:
     #     if not token:
     #         return False
@@ -38,20 +40,24 @@ class Credentials:
         return self.expiration_time < time.monotonic_ns()
 
     def get_access_token(self) -> str:
+        print("DEBUG: get_access_token called")
         if self._access_token:
             # 2. Validate Token (Quick Check)
             if not self.is_token_expired():
                 self.logger.info("Cached token is valid, reusing it..")
+                print("DEBUG: Returning cached token")
                 return self._access_token
 
         if self._refresh_token:
             self.logger.info("Cached token invalid/expired. Attempting refresh...")
             self._access_token = self.try_refreshing_token(self._refresh_token)
             if self._access_token:
+                print("DEBUG: Returning refreshed token")
                 return self._access_token
 
         # 4. Fallback to full login
         self.logger.info("Cached token invalid and refresh failed.")
+        print("DEBUG: About to call _perform_device_login")
         self._access_token, self._refresh_token, self.expiration_time = self._perform_device_login()
 
         return self._access_token
@@ -85,6 +91,7 @@ class Credentials:
         pass 
 
     def _perform_device_login(self):
+        print("DEBUG: _perform_device_login called")
         self.logger.info("Initiating interactive device login...")
 
         try:

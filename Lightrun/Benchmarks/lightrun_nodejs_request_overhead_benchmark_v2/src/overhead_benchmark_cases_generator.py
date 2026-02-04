@@ -34,16 +34,6 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
         source_dir = results_directory / 'source_code'
         logger.info(f"Generating source code in: {source_dir}")
 
-        authenticator = None
-        if benchmark_config.authentication_type == 'API_KEY':
-            authenticator = ApiKeyAuthenticator(benchmark_config.lightrun_api_key)
-        elif benchmark_config.authentication_type == 'MANUAL':
-            authenticator = InteractiveAuthenticator(
-                benchmark_config.lightrun_api_hostname,
-                benchmark_config.lightrun_company_id, 
-                logger
-            )
-
         for runtime in benchmark_config.runtimes:
             # Extract version from runtime string (e.g. 'nodejs20' -> '20')
             match = re.search(r'nodejs(\d+)', runtime)
@@ -93,7 +83,7 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
                                 gen2=is_gen2,
                                 deployment_timeout=benchmark_config.deployment_timeout,
                                 delete_timeout=benchmark_config.delete_timeout,
-                                authenticator=authenticator,
+                                authentication_type=benchmark_config.authentication_type,
                                 logger_factory=logger_factory,
                                 lightrun_version=benchmark_config.lightrun_version,
                                 clean_after_run=not benchmark_config.skip_test_cleanup)

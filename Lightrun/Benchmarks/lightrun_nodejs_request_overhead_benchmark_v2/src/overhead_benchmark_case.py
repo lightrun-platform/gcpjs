@@ -8,7 +8,9 @@ from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overh
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import MAX_GCP_FUNCTION_NAME_LENGTH
 from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 
-from Benchmarks.shared_modules.authentication import Authenticator
+from Benchmarks.shared_modules.api import LightrunPluginAPI
+from Benchmarks.shared_modules.authentication import ApiKeyAuthenticator
+from Benchmarks.shared_modules.authentication.authenticator import AuthenticationType
 
 
 class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResult]):
@@ -34,7 +36,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  gen2: bool,
                  deployment_timeout: int,
                  delete_timeout: int,
-                 authenticator: Authenticator,
+                 authentication_type: AuthenticationType,
                  logger_factory: LoggerFactory,
                  lightrun_version: str,
                  clean_after_run: bool
@@ -56,10 +58,18 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         self.cpu = cpu
         self.timeout = timeout
         self.gen2 = gen2
-        self.authenticator = authenticator
         self.lightrun_version = lightrun_version
         self._gcp_function = None
         self._logger = logger_factory.get_logger(self.name)
+
+
+        match authentication_type:
+            case AuthenticationType.API_KEY:
+                self.logger.info("Using public api with a public API key for API authentication.")
+                self.lightrun_api = ApiKeyAuthenticator(lightrun_api_key)
+            case AuthenticationType.MANUAL:
+                self.logger.info("Using internal Plugin API with User Token authentication for API authentication.")
+                self.lightrun_api = LightrunPluginAPI(f"https://{self.lightrun_api_hostname}", self.lightrun_company_id, logger=self.logger, api_version=self.lightrun_version)
 
     @property
     def logger(self) -> Logger:
@@ -165,20 +175,11 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.send_request_task import SendRequestTask
 
         self.logger.info(f"Executing benchmark with {self.num_actions} {self.action_type} actions on {self.runtime}")
-
-
-        # Initialize Lightrun API with correct authenticator
-        if isinstance(self.authenticator, InteractiveAuthenticator):
-            self.logger.info("Using internal Plugin API for User Token authentication.")
-            api: LightrunAPI = LightrunPluginAPI(f"https://{self.lightrun_api_hostname}", self.lightrun_company_id, self.authenticator, logger=self.logger, api_version=self.lightrun_version)
-        else:
-             self.logger.info("Using Public API for API Key authentication.")
-             api: LightrunAPI = LightrunPublicAPI(self.lightrun_api_hostname, self.lightrun_company_id, self.authenticator, logger=self.logger, api_version=self.lightrun_version)
         
-        # 2. Agent Display Name (used to identify the agent on the server)
+        # 1. get Agent Display Name (used to identify the agent on the server)
         agent_display_name = self.name
 
-        # 3. Determine Action Lines
+        # 2. Determine Action Lines
         if self.num_actions > 0:
             action_lines = self._get_action_line_numbers()
             if len(action_lines) != self.num_actions:
@@ -186,7 +187,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         else:
             action_lines = []
 
-        # 4. Create Actions
+        # 3. Create Actions
         actions = []
         filename = "lightrunOverheadBenchmark.js"
         
@@ -197,7 +198,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 actions.append(LogAction(filename=filename, line_number=line, max_hit_count=1, expire_seconds=3600, log_message="deployment-test-log: Hello from Lightrun!"))
             # Default/Fallback? Raise error? Assuming validated config.
 
-        # 5. Execute with Actions Context
+        # 4. Execute with Actions Context
         try:
             send_task = SendRequestTask(self.gcp_function)
             
@@ -223,7 +224,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 self.logger.warning(f"Warmup response did not contain initArguments. Response: {warmup_result}")
             
             # Step 2: Apply actions now that agent is registered
-            with AgentActions.create(self.logger, api, agent_display_name, actions) as active_actions:
+            with AgentActions.create(self.logger, self.lightrun_api, agent_display_name, actions) as active_actions:
                 # Wait a moment for actions to be bound to the agent
                 time.sleep(2)
 
@@ -266,12 +267,12 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                         is_hit = False
                         
                         if isinstance(action, BreakpointAction):
-                            info = api.get_snapshot(action_id)
+                            info = self.lightrun_api.get_snapshot(action_id)
                             # Check if CAPTURED or if hit count > 0 (snapshots might be consumable)
                             if info and (info.get('captureState') == 'CAPTURED' or info.get('hitCount', 0) > 0):
                                 is_hit = True
                         elif isinstance(action, LogAction):
-                            info = api.get_log(action_id)
+                            info = self.lightrun_api.get_log(action_id)
                             if info and info.get('hitCount', 0) > 0:
                                 is_hit = True
                         

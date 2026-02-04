@@ -1,10 +1,16 @@
+import logging
 from typing import Optional
 
 from .lightrun_api import LightrunAPI
+from ..authentication import ApiKeyAuthenticator
 
 
 class LightrunPublicAPI(LightrunAPI):
     """Client for the Lightrun Public API (using API Keys)."""
+
+    def __init__(self, api_url: str, company_id: str, lightrun_api_key: str, logger: logging.Logger):
+        authenticator = ApiKeyAuthenticator(lightrun_api_key)
+        super().__init__(api_url, company_id, authenticator, logger)
 
     def list_agents(self):
         try:
