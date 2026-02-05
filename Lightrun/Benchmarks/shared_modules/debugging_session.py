@@ -79,7 +79,7 @@ class DebuggingSession:
 
     @property
     def agent_pool_id(self) -> str:
-        return self._agent["poolId"]
+        return self._agent["agentPoolId"]
 
     def apply_actions(self):
         """Apply all actions to the specified agent."""
