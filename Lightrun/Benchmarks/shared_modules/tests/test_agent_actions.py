@@ -58,9 +58,10 @@ class TestAgentActions(unittest.TestCase):
             self.assertEqual(agent_actions.agent_display_name, self.agent_display_name)
             self.assertEqual(agent_actions.agent_id, self.agent_id)
         
-        # Verify removal after exit
-        self.mock_api.delete_log_action.assert_called_once_with("log-123")
-        self.mock_api.delete_snapshot.assert_called_once_with("snap-456")
+        # Verify removal after exit (both action types use delete_action)
+        self.assertEqual(self.mock_api.delete_action.call_count, 2)
+        self.mock_api.delete_action.assert_any_call("log-123")
+        self.mock_api.delete_action.assert_any_call("snap-456")
 
     def test_empty_actions(self):
         with DebuggingSession.apply_actions(self.logger, self.mock_api, self.agent_display_name, []):
@@ -68,8 +69,7 @@ class TestAgentActions(unittest.TestCase):
         
         self.mock_api.add_log_action.assert_not_called()
         self.mock_api.add_snapshot.assert_not_called()
-        self.mock_api.delete_log_action.assert_not_called()
-        self.mock_api.delete_snapshot.assert_not_called()
+        self.mock_api.delete_action.assert_not_called()
 
     @unittest.mock.patch('time.sleep')
     def test_agent_not_found(self, mock_sleep):

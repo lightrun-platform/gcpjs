@@ -10,6 +10,8 @@ from Lightrun.Benchmarks.shared_modules.authentication import Authenticator, Int
 class LightrunAPI(ABC):
     """Abstract Base Client for interacting with the Lightrun API."""
 
+    DEFAULT_PAGE_SIZE: int = 20
+
     def __init__(
         self,
         api_url: str,
@@ -19,7 +21,7 @@ class LightrunAPI(ABC):
     ):
         """
         Initialize the Lightrun API client.
-        
+
         Args:
             api_url: Lightrun API URL.
             company_id: Lightrun Company ID.
@@ -29,7 +31,7 @@ class LightrunAPI(ABC):
         self.api_url = api_url
         if self.api_url.endswith("/"):
              self.api_url = self.api_url[:-1]
-             
+
         self.company_id = company_id
         self.authenticator = authenticator
         self.logger = logger
@@ -43,8 +45,8 @@ class LightrunAPI(ABC):
 
     def _handle_api_error_or_raise(self, e: Exception, context: str):
         parsed = urlparse(self.api_url)
-        hostname = parsed.hostname or "app.lightrun.com"
-        
+        hostname = parsed.hostname
+
         if isinstance(e, requests.exceptions.ConnectionError) and "NameResolutionError" in str(e):
             self.logger.error(f"DNS RESOLUTION ERROR: Could not resolve '{hostname}'\n" +
                               f"Possible reasons:\n" +
@@ -98,9 +100,16 @@ class LightrunAPI(ABC):
         pass
 
     @abstractmethod
-    def delete_snapshot(self, snapshot_id: str) -> bool:
+    def delete_lightrun_action(self, action_id: str) -> bool:
+        """Delete any action (snapshot, log, etc.) by its ID."""
         pass
 
     @abstractmethod
-    def delete_log_action(self, log_id: str) -> bool:
+    def get_actions_by_agent(self, agent_id: str, pool_id: str) -> list:
+        """Get all actions currently bound to a specific agent."""
+        pass
+
+    @abstractmethod
+    def clear_agent_actions(self, agent_id: str, pool_id: str) -> int:
+        """Clear all actions for a specific agent. Returns count deleted or -1 on error."""
         pass

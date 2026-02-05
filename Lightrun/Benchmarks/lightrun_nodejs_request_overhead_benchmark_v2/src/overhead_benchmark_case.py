@@ -207,7 +207,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         for elapsed in range(0, max_wait, poll_interval):
 
             # Get all actions currently associated with this agent (single API call)
-            agent_actions = self.lightrun_api.get_actions_by_agent(debug_session.agent_id, debug_session.agent_pool_id)
+            agent_actions = self.lightrun_api.list_actions_by_agent(debug_session.agent_id, debug_session.agent_pool_id)
 
             agent_action_ids = {action.get('id') for action in agent_actions}
             if agent_action_ids != expected_action_ids:
@@ -311,7 +311,11 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
 
 
             with DebuggingSession(self.lightrun_api, agent_display_name, actions, self.logger) as debug_session:
-                # Step 2: Apply actions
+
+                # Step 1: Clear any existing actions on the agent to ensure a clean slate
+                debug_session.clear_all_actions_from_agent()
+
+                # Step 2: Apply benchmark actions
                 debug_session.apply_actions()
 
                 # Step 3: Wait for the agent to fetch the actions

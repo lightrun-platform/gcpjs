@@ -28,9 +28,12 @@ class DebuggingSession:
         self._agent_display_name = agent_display_name
         self._agent: Optional[Dict[Any, Any]] = None # looked up on __enter__
         self.actions = list(actions)
-        self.applied_actions: List[Tuple[LightrunAction, str]] = []
-        self._applied_actions: bool = False
+        self._did_apply_actions: bool = False
         self.logger = logger
+
+    @property
+    def applied_actions(self) -> List[LightrunAction]:
+        return [action for action in self.actions if action.is_applied]
 
     def __enter__(self):
         self._find_agent()
@@ -69,7 +72,7 @@ class DebuggingSession:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Remove all actions when exiting context."""
-        if not self._applied_actions:
+        if not self._did_apply_actions:
             self.logger.debug("Exiting the the DebuggingSession scope without apply_actions ever being called. did you forget to call it? actions are not applied automatically on context entry.")
         self.remove_all()
 
@@ -89,17 +92,16 @@ class DebuggingSession:
             self._find_agent() # will raise an exception if unsuccessful
 
         for action in self.actions:
-            action_id = action.apply(self.agent_id, self.agent_pool_id, self.lightrun_api)
-            if action_id:
-                self.applied_actions.append((action, action_id))
+            action.apply(self.agent_id, self.agent_pool_id, self.lightrun_api)
 
     def remove_all(self):
         """Remove all applied actions."""
+        for action in self.actions:
+            action.remove(self.lightrun_api)
 
-        updated_state = [(action, action_id, action.remove(self.lightrun_api, action_id)) for action, action_id in self.applied_actions]
+        for action in self.actions:
+            if action.is_applied:
+                self.logger.warning(f"Failed to remove {action.__class__.__name__}:{action.action_id} from agent '{self._agent_display_name}'")
 
-        self.applied_actions.clear()
-        for action, action_id, is_removed in updated_state:
-            if not is_removed:
-                self.logger.warning(f"Failed to remove {action.__class__.__name__}:{action_id} from agent '{self._agent_display_name}'")
-                self.applied_actions.append((action, action_id))
+    def clear_all_actions_from_agent(self) -> int:
+        return self.lightrun_api.clear_agent_actions(self.agent_id, self.agent_pool_id)

@@ -26,8 +26,6 @@ def get_client_info_header(api_version: str):
 class LightrunPluginAPI(LightrunAPI):
     """Client for the Lightrun Internal/Plugin API (using User Tokens via Device Flow)."""
 
-    DEFAULT_AGENT_POOL_PAGE_SIZE: int = 20
-
     def __init__(self, api_url, company_id, api_version, logger):
         authenticator = InteractiveAuthenticator(api_url, company_id, logger)
         super().__init__(api_url, company_id, authenticator, logger)
@@ -156,7 +154,7 @@ class LightrunPluginAPI(LightrunAPI):
                         page_size = pageable.get('pageSize')
                         self.logger.debug(f"Discovered server page size: {page_size}")
                     else:
-                        page_size = LightrunPluginAPI.DEFAULT_AGENT_POOL_PAGE_SIZE
+                        page_size = LightrunAPI.DEFAULT_PAGE_SIZE
                         self.logger.debug(f"No paging information in first response, using default page size: {page_size}")
 
                 
@@ -344,26 +342,84 @@ class LightrunPluginAPI(LightrunAPI):
             self.logger.exception(f"Error fetching log: {e}")
         return None
 
-    def delete_snapshot(self, snapshot_id: str) -> bool:
+    def delete_lightrun_action(self, action_id: str, pool_id: str = None) -> bool:
+        """Delete any action (snapshot, log, etc.) by its ID."""
         try:
-            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots/{snapshot_id}"
-            response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, timeout=10)
+            if pool_id is None:
+                pool_id = self._get_default_agent_pool()
+            
+            url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{pool_id}/{self.api_version}/actions/{action_id}"
+            headers = {"client-info": get_client_info_header(self.api_version)}
+            
+            response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, headers=headers, timeout=10)
+            
+            if response.status_code in [200, 204]:
+                self.logger.info(f"Action deleted: {action_id}")
+                return True
+            else:
+                self.logger.warning(f"Failed to delete action {action_id}: {response.status_code} - {response.text}")
+        except Exception as e:
+            self.logger.exception(f"Error deleting action: {e}")
+        return False
+
+    def delete_actions(self, action_ids: list, pool_id: str) -> bool:
+        """
+        Delete multiple actions by their IDs in bulk.
+        
+        Uses: DELETE /athena/company/{company}/agent-pools/{agentPoolId}/{apiVersion}/actions
+        Body: List of action IDs
+        """
+        if not action_ids:
+            return True
+            
+        try:
+            
+            url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{pool_id}/{self.api_version}/actions"
+            headers = {"client-info": get_client_info_header(self.api_version)}
+            
+            response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, json=action_ids, headers=headers, timeout=30)
             response.raise_for_status()
-            self.logger.info(f"Snapshot deleted: {snapshot_id}")
+
+            self.logger.info(f"Deleted {len(action_ids)} actions in bulk")
             return True
 
         except Exception as e:
-            self.logger.exception(f"Error deleting snapshot: {e}")
+            self.logger.exception(f"Error deleting actions: {e}. Attempted to delete these actions: {action_ids} with this pool id: {pool_id}")
         return False
 
-    def delete_log_action(self, log_id: str) -> bool:
+    def clear_agent_actions(self, agent_id: str, pool_id: str) -> int:
+        """
+        Clear all actions currently assigned to a specific agent.
+        
+        Args:
+            agent_id: The agent's UUID.
+            pool_id: The agent pool ID (required).
+            
+        Returns:
+            Number of actions deleted, or throw an error if can't delete all.
+        """
         try:
-            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs/{log_id}"
-            response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, timeout=10)
-            response.raise_for_status()
-            self.logger.info(f"Log action deleted: {log_id}")
-            return True
+            # Get all actions for this agent
+            actions_before = self.get_actions_by_agent(agent_id, pool_id)
 
+            if not actions_before:
+                self.logger.info(f"No actions found for agent {agent_id}")
+                return 0
+            
+            action_ids = [action['id'] for action in actions_before]
+            
+            if not action_ids:
+                return 0
+            
+            self.logger.info(f"Clearing {len(action_ids)} actions from agent {agent_id}")
+            self.delete_actions(action_ids, pool_id)
+
+            actions_after = self.get_actions_by_agent(agent_id, pool_id)
+            if len(actions_after) > 0:
+                raise Exception(f"Failed to clear all actions from agent {agent_id} with pool {pool_id}, remaining actions: {actions_after}")
+
+            return len(actions_before)
+                
         except Exception as e:
-            self.logger.exception(f"Error deleting log: {e}")
-        return False
+            self.logger.exception(f"Error clearing agent actions: {e}")
+            return -1
