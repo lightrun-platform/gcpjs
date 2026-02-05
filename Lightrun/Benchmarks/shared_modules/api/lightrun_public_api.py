@@ -43,15 +43,29 @@ class LightrunPublicAPI(LightrunAPI):
         max_hit_count: int,
         expire_seconds: int = 3600,
     ) -> Optional[str]:
+        """
+        Create a snapshot action via the Public API.
+        
+        Args:
+            agent_id: The UUID of the agent to attach the action to.
+            agent_pool_id: The agent pool ID.
+            filename: Full path to the source file.
+            line_number: Line number for the snapshot.
+            max_hit_count: Maximum number of times the snapshot can be captured.
+            expire_seconds: Action expiration time in seconds (default 3600).
+        """
         try:
-            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots"
+            url = f"{self.api_url}/api/v1/actions/snapshots"
             snapshot_data = {
-                "agentId": agent_id,
+                "source": {
+                    "id": agent_id,
+                    "type": "AGENT"
+                },
                 "agentPoolId": agent_pool_id,
                 "filename": filename,
-                "lineNumber": line_number,
+                "line": line_number,
                 "maxHitCount": max_hit_count,
-                "expireSec": expire_seconds,
+                "expirationSeconds": expire_seconds,
             }
             response = self.authenticator.send_authenticated_request(self.session, 'POST', url, json=snapshot_data, timeout=30)
 
@@ -75,22 +89,36 @@ class LightrunPublicAPI(LightrunAPI):
         max_hit_count: int,
         expire_seconds: int = 3600,
     ) -> Optional[str]:
+        """
+        Create a log action via the Public API.
+        
+        Args:
+            agent_id: The UUID of the agent to attach the action to.
+            agent_pool_id: The agent pool ID.
+            filename: Full path to the source file.
+            line_number: Line number for the log.
+            message: Log message format (supports placeholders like "Hello {myVar}").
+            max_hit_count: Maximum number of times the log can be triggered.
+            expire_seconds: Action expiration time in seconds (default 3600).
+        """
         try:
-            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs"
+            url = f"{self.api_url}/api/v1/actions/logs"
             log_data = {
-                "agentId": agent_id,
+                "source": {
+                    "id": agent_id,
+                    "type": "AGENT"
+                },
                 "agentPoolId": agent_pool_id,
                 "filename": filename,
-                "lineNumber": line_number,
-                "maxHitCount": max_hit_count,
-                "expireSec": expire_seconds,
-                "logMessage": message,
+                "line": line_number,
+                "format": message,
+                "expirationSeconds": expire_seconds,
             }
             response = self.authenticator.send_authenticated_request(self.session, 'POST', url, json=log_data, timeout=30)
 
             if response.status_code in [200, 201]:
                 action_id = response.json().get("id")
-                self.logger.info(f"Log created: {action_id} at {filename}:{line_number} (maxHits={max_hit_count})")
+                self.logger.info(f"Log created: {action_id} at {filename}:{line_number}")
                 return action_id
             else:
                 self.logger.warning(f"Failed to create log: {response.status_code} - {response.text}")
@@ -98,30 +126,46 @@ class LightrunPublicAPI(LightrunAPI):
             self._handle_api_error_or_raise(e, "create log")
         return None
 
-    def get_snapshot(self, snapshot_id: str) -> Optional[dict]:
+    def get_snapshot(self, snapshot_id: str, agent_pool_id: str = None) -> Optional[dict]:
+        """Get a snapshot action by ID."""
         try:
-            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots/{snapshot_id}"
-            response = self.authenticator.send_authenticated_request(self.session, 'GET', url, timeout=10)
+            url = f"{self.api_url}/api/v1/actions/snapshots/{snapshot_id}"
+            params = {}
+            if agent_pool_id:
+                params['agentPoolId'] = agent_pool_id
+            response = self.authenticator.send_authenticated_request(self.session, 'GET', url, params=params, timeout=10)
             if response.status_code == 200:
                 return response.json()
+            else:
+                self.logger.warning(f"Failed to get snapshot {snapshot_id}: {response.status_code} - {response.text}")
         except Exception as e:
             self.logger.exception(f"Error fetching snapshot: {e}")
         return None
 
-    def get_log(self, log_id: str) -> Optional[dict]:
+    def get_log(self, log_id: str, agent_pool_id: str = None) -> Optional[dict]:
+        """Get a log action by ID."""
         try:
-            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs/{log_id}"
-            response = self.authenticator.send_authenticated_request(self.session, 'GET', url, timeout=10)
+            url = f"{self.api_url}/api/v1/actions/logs/{log_id}"
+            params = {}
+            if agent_pool_id:
+                params['agentPoolId'] = agent_pool_id
+            response = self.authenticator.send_authenticated_request(self.session, 'GET', url, params=params, timeout=10)
             if response.status_code == 200:
                 return response.json()
+            else:
+                self.logger.warning(f"Failed to get log {log_id}: {response.status_code} - {response.text}")
         except Exception as e:
             self.logger.exception(f"Error fetching log: {e}")
         return None
 
-    def delete_snapshot(self, snapshot_id: str) -> bool:
+    def delete_snapshot(self, snapshot_id: str, agent_pool_id: str = None) -> bool:
+        """Delete a snapshot action by ID."""
         try:
-            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots/{snapshot_id}"
-            response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, timeout=10)
+            url = f"{self.api_url}/api/v1/actions/{snapshot_id}"
+            params = {}
+            if agent_pool_id:
+                params['agentPoolId'] = agent_pool_id
+            response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, params=params, timeout=10)
             if response.status_code in [200, 204]:
                 self.logger.info(f"Snapshot deleted: {snapshot_id}")
                 return True
@@ -131,10 +175,14 @@ class LightrunPublicAPI(LightrunAPI):
             self._handle_api_error_or_raise(e, "delete snapshot")
         return False
 
-    def delete_log_action(self, log_id: str) -> bool:
+    def delete_log_action(self, log_id: str, agent_pool_id: str = None) -> bool:
+        """Delete a log action by ID."""
         try:
-            url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs/{log_id}"
-            response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, timeout=10)
+            url = f"{self.api_url}/api/v1/actions/{log_id}"
+            params = {}
+            if agent_pool_id:
+                params['agentPoolId'] = agent_pool_id
+            response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, params=params, timeout=10)
             if response.status_code in [200, 204]:
                 self.logger.info(f"Log action deleted: {log_id}")
                 return True

@@ -292,6 +292,7 @@ class LightrunPluginAPI(LightrunAPI):
                 "filename": filename,
                 "line": line_number,
                 "maxHitCount": max_hit_count,
+                "expirationSeconds": expire_seconds,
                 "captureActionExtensionDTO": {
                     "contextExpressions": {},
                     "watchExpressions": []
@@ -306,7 +307,6 @@ class LightrunPluginAPI(LightrunAPI):
             snapshot_id = response.json().get("id")
             self.logger.info(f"Snapshot created (Internal): {snapshot_id} at {filename}:{line_number}")
             return snapshot_id
-            self.logger.warning(f"Failed to create snapshot (Internal): {response.status_code} - {response.text}")
         except Exception as e:
             self._handle_api_error_or_raise(e, "create snapshot (Internal)")
         return None
@@ -323,7 +323,7 @@ class LightrunPluginAPI(LightrunAPI):
     ) -> Optional[str]:
 
         try:
-            url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/insertLog/**"
+            url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/insertLogMessage/**"
             headers = {"client-info": get_client_info_header(self.api_version)}
 
             log_data = {
@@ -333,6 +333,7 @@ class LightrunPluginAPI(LightrunAPI):
                 "filename": filename,
                 "line": line_number,
                 "maxHitCount": max_hit_count,
+                "expirationSeconds": expire_seconds,
                 "logActionExtensionDTO": {
                     "logMessage": message
                 },
