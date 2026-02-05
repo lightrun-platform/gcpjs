@@ -445,7 +445,7 @@ class BenchmarkManager[T](ABC):
         # Pre-register variant name
         variant = getattr(self.config, 'base_function_name', 'Default')
 
-        with ThreadLogger.create(log_dir, [variant]):
+        with ThreadLogger.apply_actions(log_dir, [variant]):
             print("=" * 80)
             print(self.test_name)
             print("=" * 80)

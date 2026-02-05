@@ -11,8 +11,8 @@ class AgentNotFoundError(Exception):
     pass
 
 
-class AgentActions(metaclass=NoPublicConstructor):
-    """Container for a specific set of Lightrun actions.
+class DebuggingSession(metaclass=NoPublicConstructor):
+    """Context manager applying and removing a specific set of Lightrun actions.
     
     Args:
         lightrun_api: The Lightrun API client
@@ -32,7 +32,7 @@ class AgentActions(metaclass=NoPublicConstructor):
         self.logger = logger
 
     @classmethod
-    def create(cls, logger: logging.Logger, lightrun_api: LightrunAPI, agent_display_name: str, actions: Iterable[LightrunAction], retries: int = 10) -> 'AgentActions':
+    def apply_actions(cls, logger: logging.Logger, lightrun_api: LightrunAPI, agent_display_name: str, actions: Iterable[LightrunAction], retries: int = 10) -> 'DebuggingSession':
         f"""Factory method that resolves agent_id from display name.
         
         Args:
@@ -40,7 +40,7 @@ class AgentActions(metaclass=NoPublicConstructor):
             lightrun_api: The Lightrun API client
             agent_display_name: The friendly display name of the agent (shown in UI)
             actions: The actions to apply to the agent
-            retries: Number of times to retry finding the agent, with {AgentActions.RETRY_DELAY} between them.
+            retries: Number of times to retry finding the agent, with {DebuggingSession.RETRY_DELAY} between them.
             
         Returns:
             AgentActions instance with resolved agent_id
@@ -60,11 +60,11 @@ class AgentActions(metaclass=NoPublicConstructor):
                 break
             
             if attempt < retries:
-                logger.info(f"Agent '{agent_display_name}' not found, retrying in {AgentActions.RETRY_DELAY}s... ({attempt + 1}/{retries})")
-                time.sleep(AgentActions.RETRY_DELAY)
+                logger.info(f"Agent '{agent_display_name}' not found, retrying in {DebuggingSession.RETRY_DELAY}s... ({attempt + 1}/{retries})")
+                time.sleep(DebuggingSession.RETRY_DELAY)
                 
         if not agent_id:
-            raise AgentNotFoundError(f"Timed out after looking for the agent for {retries * AgentActions.RETRY_DELAY} seconds. Could not find agent with display name '{agent_display_name}' for {retries} retries with {AgentActions.RETRY_DELAY} seconds break between them. All agents: {lightrun_api.list_agents()}")
+            raise AgentNotFoundError(f"Timed out after looking for the agent for {retries * DebuggingSession.RETRY_DELAY} seconds. Could not find agent with display name '{agent_display_name}' for {retries} retries with {DebuggingSession.RETRY_DELAY} seconds break between them. All agents: {lightrun_api.list_agents()}")
         
         if retries > 0 and successful_attempt_id > 0:
              logger.info(f"Agent '{agent_display_name}' found after {successful_attempt_id} retries")

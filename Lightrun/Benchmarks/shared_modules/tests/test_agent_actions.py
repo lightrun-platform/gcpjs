@@ -9,7 +9,7 @@ benchmarks_dir = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(benchmarks_dir))
 sys.path.insert(0, str(benchmarks_dir.parent.parent))
 
-from Lightrun.Benchmarks.shared_modules.agent_actions import AgentActions, AgentNotFoundError
+from Lightrun.Benchmarks.shared_modules.agent_actions import DebuggingSession, AgentNotFoundError
 from Lightrun.Benchmarks.shared_modules.agent_models import LogAction, BreakpointAction
 from Lightrun.Benchmarks.shared_modules.api import LightrunAPI
 
@@ -33,7 +33,7 @@ class TestAgentActions(unittest.TestCase):
         ]
         
         # Use factory method (direct constructor blocked by metaclass)
-        with AgentActions.create(self.logger, self.mock_api, self.agent_display_name, actions) as agent_actions:
+        with DebuggingSession.apply_actions(self.logger, self.mock_api, self.agent_display_name, actions) as agent_actions:
             # Verify get_agent_id was called with the display name
             self.mock_api.get_agent_id.assert_called_once_with(self.agent_display_name)
             
@@ -63,7 +63,7 @@ class TestAgentActions(unittest.TestCase):
         self.mock_api.delete_snapshot.assert_called_once_with("snap-456")
 
     def test_empty_actions(self):
-        with AgentActions.create(self.logger, self.mock_api, self.agent_display_name, []):
+        with DebuggingSession.apply_actions(self.logger, self.mock_api, self.agent_display_name, []):
             pass
         
         self.mock_api.add_log_action.assert_not_called()
@@ -81,7 +81,7 @@ class TestAgentActions(unittest.TestCase):
         ]
         
         with self.assertRaises(AgentNotFoundError) as context:
-            AgentActions.create(self.logger, self.mock_api, self.agent_display_name, actions, retries=1)
+            DebuggingSession.apply_actions(self.logger, self.mock_api, self.agent_display_name, actions, retries=1)
         
         self.assertIn(self.agent_display_name, str(context.exception))
         mock_sleep.assert_called()

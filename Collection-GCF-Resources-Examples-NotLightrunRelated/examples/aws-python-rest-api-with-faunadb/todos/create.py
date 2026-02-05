@@ -20,7 +20,7 @@ def create(event, context):
     }
 
     # write the todo to the database
-    created = client.query(query.create(TODOS, {'data': data}))
+    created = client.query(query.apply_actions(TODOS, {'data': data}))
 
     # create a response
     response = {

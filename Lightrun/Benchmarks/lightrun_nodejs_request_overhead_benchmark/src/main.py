@@ -100,7 +100,7 @@ Examples:
     base_name = "lightrun_request_overhead_benchmark"
     max_workers = 2
     barrier = threading.Barrier(max_workers + 1)
-    with ThreadLogger.create(log_dir):
+    with ThreadLogger.apply_actions(log_dir):
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_with = executor.submit(
                 thread_task_wrapper(

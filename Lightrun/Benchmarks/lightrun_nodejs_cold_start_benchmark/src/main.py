@@ -109,7 +109,7 @@ Examples:
     
     log_dir = test_results_dir / 'logs'
     variant_names = ['Variant-With-Lightrun', 'Variant-Without-Lightrun']
-    with ThreadLogger.create(log_dir, variant_names):
+    with ThreadLogger.apply_actions(log_dir, variant_names):
         with ThreadPoolExecutor(max_workers=2) as executor:
             # Submit both tests
             future_with = executor.submit(
