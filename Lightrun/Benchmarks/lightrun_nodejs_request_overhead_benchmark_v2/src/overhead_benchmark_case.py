@@ -176,47 +176,70 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         Wait for actions to be bound to the agent, with early exit detection.
         
         Uses the getActionsByAgent endpoint to efficiently check if all applied actions
-        have been received by the agent, allowing early exit instead of waiting the full duration.
+        have been ACCEPTED by the agent (not just submitted), allowing early exit instead 
+        of waiting the full duration.
+        
+        Action acceptanceStatus lifecycle:
+            SUBMITTED -> REQUESTED -> ACCEPTED
+
+        legend:
+
+        SUBMITTED	Server knows about the action, but agent hasn't fetched it yet
+        REQUESTED	Agent fetched the action definition from the server
+        ACCEPTED    the agent has successfully injected the instrumentation bytecode at the target location
+
+        We wait for ACCEPTED to infer that the breakpoint is ready for test.
         
         Args:
             debug_session: The active debugging session with applied actions.
             poll_interval: Seconds between status checks (default 2).
             
         Returns:
-            True if all actions were confirmed bound, False if timed out.
+            True if all actions were confirmed ACCEPTED before timeout, False if timed out.
         """
         
         max_wait = self.agent_actions_update_interval_seconds + 10  # + grace period
         expected_action_ids = {action_id for _, action_id in debug_session.applied_actions}
-        missing_actions = expected_action_ids.copy()
-        self.logger.info(f"Waiting up to {max_wait}s for agent to bind {len(expected_action_ids)} actions. "
+        pending_actions = expected_action_ids.copy()
+        self.logger.info(f"Waiting up to {max_wait}s for agent to accept {len(expected_action_ids)} actions. "
                          f"Polling every {poll_interval}s for early detection.")
 
         for elapsed in range(0, max_wait, poll_interval):
 
-            # Get all actions currently bound to this agent (single API call)
+            # Get all actions currently associated with this agent (single API call)
             agent_actions = self.lightrun_api.get_actions_by_agent(debug_session.agent_id, debug_session.agent_pool_id)
+
+            agent_action_ids = {action.get('id') for action in agent_actions}
+            if agent_action_ids != expected_action_ids:
+                raise Exception(f"The actions configured for the agent did not match the expected ones. Expected: {str(expected_action_ids)}, Actual: {str(agent_action_ids)}")
             
             # Log response on first poll to help debug
             if elapsed == 0:
                 self.logger.debug(f"Agent actions response (first poll): {agent_actions}")
             
-            # Extract action IDs from the response
-            bound_action_ids = {action.get('id') for action in agent_actions if action.get('id')}
+            # Extract action IDs that have acceptanceStatus == 'ACCEPTED'
+            # Only these actions have been successfully instrumented by the agent
+            accepted_action_ids = {action.get('id') for action in agent_actions if action.get('id') and action.get('acceptanceStatus') == 'ACCEPTED'}
+
             
-            # Check if all our expected actions are in the bound set
-            missing_actions = expected_action_ids - bound_action_ids
-            
-            if not missing_actions:
-                self.logger.info(f"All {len(expected_action_ids)} actions bound to agent after {elapsed + poll_interval}s")
+            if accepted_action_ids == expected_action_ids:
+                self.logger.info(f"All {len(expected_action_ids)} actions accepted by agent after {elapsed + poll_interval}s")
                 return True
             
+            # Log status breakdown for debugging
+            status_counts = {}
+            for action in agent_actions:
+                if action.get('id') in expected_action_ids:
+                    status = action.get('acceptanceStatus', 'UNKNOWN')
+                    status_counts[status] = status_counts.get(status, 0) + 1
+            
             remaining = max_wait - elapsed - poll_interval
-            self.logger.info(f"Waiting for actions to bind... {len(missing_actions)}/{len(expected_action_ids)} still pending, {remaining}s remaining")
+            self.logger.info(f"Waiting for actions to be accepted... {len(pending_actions)}/{len(expected_action_ids)} pending, statuses: {status_counts}, {remaining}s remaining")
 
             time.sleep(poll_interval)
 
-            # the following step is important. we have to trigger the function otherwise it will not wake up to fetch breakpoints
+            # the following step is important. after we wake up we have to trigger the function
+            # otherwise it will not wake up to fetch breakpoints.
             # unfortunately this might also carry the side effect of letting the git
             # more opportunities to optimize, making the duration of the test a less reliable
             # metric, since it is affected by the number of rounds this loop made before
@@ -226,7 +249,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
             # benchmark case results and different runs.
             SendRequestTask(self.gcp_function).execute()
         
-        self.logger.warning(f"Timed out waiting for actions to bind after {max_wait}s. Missing actions: {missing_actions}")
+        self.logger.warning(f"Timed out waiting for actions to be accepted after {max_wait}s. Pending actions: {pending_actions}")
         return False
 
     def warmup(self):
