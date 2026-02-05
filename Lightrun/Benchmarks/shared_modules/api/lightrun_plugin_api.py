@@ -205,7 +205,7 @@ class LightrunPluginAPI(LightrunAPI):
             self._handle_api_error_or_raise(e, "get agent ID (Internal)")
         return None
 
-    def get_actions_by_agent(self, agent_id: str, pool_id: str = None) -> list:
+    def get_actions_by_agent(self, agent_id: str, pool_id: str) -> list:
         """
         Get all actions currently bound to a specific agent.
         
@@ -221,14 +221,8 @@ class LightrunPluginAPI(LightrunAPI):
             List of ActionDTO dictionaries containing action details.
             Each action includes: id, filename, line, actionType, disabled, etc.
         """
+
         try:
-            if not pool_id:
-                pool_id = self.get_default_agent_pool()
-            
-            if not pool_id:
-                self.logger.warning("Cannot get actions by agent: no pool_id available")
-                return []
-            
             url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{pool_id}/{self.api_version}/actions/{agent_id}"
             headers = {"client-info": get_client_info_header(self.api_version)}
             

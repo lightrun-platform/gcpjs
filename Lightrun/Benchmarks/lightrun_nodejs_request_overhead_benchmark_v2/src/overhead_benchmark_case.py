@@ -2,6 +2,8 @@ from logging import Logger
 from pathlib import Path
 from typing import List
 
+import time
+
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
 from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import LightrunOverheadBenchmarkResult
@@ -13,6 +15,8 @@ from Benchmarks.shared_modules.authentication import ApiKeyAuthenticator
 from Benchmarks.shared_modules.authentication.authenticator import AuthenticationType
 from Lightrun.Benchmarks.shared_modules.agent_models import BreakpointAction, LogAction
 from Lightrun.Benchmarks.shared_modules.debugging_session import DebuggingSession
+
+from Benchmarks.shared_modules.gcf_task_primitives.send_request_task import SendRequestTask
 
 
 class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResult]):
@@ -181,21 +185,17 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         Returns:
             True if all actions were confirmed bound, False if timed out.
         """
-        import time
         
         max_wait = self.agent_actions_update_interval_seconds + 10  # + grace period
         expected_action_ids = {action_id for _, action_id in debug_session.applied_actions}
-        
-        self.logger.info(
-            f"Waiting up to {max_wait}s for agent to bind {len(expected_action_ids)} actions. "
-            f"Polling every {poll_interval}s for early detection."
-        )
+        missing_actions = expected_action_ids.copy()
+        self.logger.info(f"Waiting up to {max_wait}s for agent to bind {len(expected_action_ids)} actions. "
+                         f"Polling every {poll_interval}s for early detection.")
 
         for elapsed in range(0, max_wait, poll_interval):
-            time.sleep(poll_interval)
-            
+
             # Get all actions currently bound to this agent (single API call)
-            agent_actions = self.lightrun_api.get_actions_by_agent(debug_session.agent_id)
+            agent_actions = self.lightrun_api.get_actions_by_agent(debug_session.agent_id, debug_session.agent_pool_id)
             
             # Log response on first poll to help debug
             if elapsed == 0:
@@ -208,29 +208,32 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
             missing_actions = expected_action_ids - bound_action_ids
             
             if not missing_actions:
-                self.logger.info(
-                    f"All {len(expected_action_ids)} actions bound to agent "
-                    f"after {elapsed + poll_interval}s (early exit)"
-                )
+                self.logger.info(f"All {len(expected_action_ids)} actions bound to agent after {elapsed + poll_interval}s")
                 return True
             
             remaining = max_wait - elapsed - poll_interval
-            self.logger.info(
-                f"Waiting for actions to bind... {len(missing_actions)}/{len(expected_action_ids)} still pending, "
-                f"{remaining}s remaining"
-            )
+            self.logger.info(f"Waiting for actions to bind... {len(missing_actions)}/{len(expected_action_ids)} still pending, {remaining}s remaining")
+
+            time.sleep(poll_interval)
+
+            # the following step is important. we have to trigger the function otherwise it will not wake up to fetch breakpoints
+            # unfortunately this might also carry the side effect of letting the git
+            # more opportunities to optimize, making the duration of the test a less reliable
+            # metric, since it is affected by the number of rounds this loop made before
+            # until the agent fetched its actions. this is why its imperative to add
+            # a warmup phase to the test so it will already be "maximally optimized"
+            # before getting here to allow stable comparison between different
+            # benchmark case results and different runs.
+            SendRequestTask(self.gcp_function).execute()
         
-        self.logger.warning(
-            f"Timed out waiting for actions to bind after {max_wait}s. "
-            f"Missing actions: {missing_actions}"
-        )
+        self.logger.warning(f"Timed out waiting for actions to bind after {max_wait}s. Missing actions: {missing_actions}")
         return False
+
+    def warmup(self):
+        pass # stub
 
     def execute_benchmark(self) -> LightrunOverheadBenchmarkResult:
         """Execute the benchmark logic."""
-
-        import time
-        from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.send_request_task import SendRequestTask
 
         self.logger.info(f"Executing benchmark with {self.num_actions} {self.action_type} actions on {self.runtime}")
         
@@ -254,7 +257,6 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 actions.append(BreakpointAction(filename=filename, line_number=line, max_hit_count=1, expire_seconds=3600))
             elif self.action_type.lower() == 'log':
                 actions.append(LogAction(filename=filename, line_number=line, max_hit_count=1, expire_seconds=3600, log_message="deployment-test-log: Hello from Lightrun!"))
-            # Default/Fallback? Raise error? Assuming validated config.
 
         # 4. Execute with Actions Context
         try:
@@ -264,11 +266,11 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
             # The agent registers with the server during the first request execution.
             # Once this request completes, the agent is already registered (sends "isLambda: true" header).
             self.logger.info("Sending warmup request to trigger agent registration...")
-            warmup_result = send_task.execute()
+            cold_start_request = send_task.execute()
             
             # Validate that the agent initialized with the correct display name
-            if warmup_result and 'initArguments' in warmup_result:
-                init_args = warmup_result['initArguments']
+            if cold_start_request and 'initArguments' in cold_start_request:
+                init_args = cold_start_request['initArguments']
                 returned_display_name = init_args.get('metadata', {}).get('registration', {}).get('displayName')
                 
                 if returned_display_name != agent_display_name:
@@ -279,9 +281,13 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                     )
                 self.logger.info(f"Agent registered with display name: '{returned_display_name}'")
             else:
-                self.logger.warning(f"Warmup response did not contain initArguments. Response: {warmup_result}")
+                self.logger.warning(f"Cold Start response did not contain initArguments. Response: {cold_start_request}")
 
-            with DebuggingSession(self.lightrun_api, agent_display_name, actions, self.agent_actions_update_interval_seconds, self.logger) as debug_session:
+
+            self.warmup() # Todo - important! add definition later.
+
+
+            with DebuggingSession(self.lightrun_api, agent_display_name, actions, self.logger) as debug_session:
                 # Step 2: Apply actions
                 debug_session.apply_actions()
 
@@ -321,7 +327,6 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                     missing_actions = []
                     
                     for action, action_id in debug_session.applied_actions:
-                        status = None
                         is_hit = False
                         
                         if isinstance(action, BreakpointAction):
