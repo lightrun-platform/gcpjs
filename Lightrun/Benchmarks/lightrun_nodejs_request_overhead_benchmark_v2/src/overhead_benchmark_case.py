@@ -40,7 +40,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  logger_factory: LoggerFactory,
                  lightrun_version: str,
                  clean_after_run: bool,
-                 agent_actions_poll_interval_seconds: int):
+                 agent_actions_update_interval_seconds: int):
         super().__init__(deployment_timeout, delete_timeout, clean_after_run=clean_after_run)
         self.benchmark_name = benchmark_name
         self.runtime = runtime
@@ -59,7 +59,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         self.timeout = timeout
         self.gen2 = gen2
         self.lightrun_version = lightrun_version
-        self.agent_actions_poll_interval_seconds = agent_actions_poll_interval_seconds
+        self.agent_actions_update_interval_seconds = agent_actions_update_interval_seconds
         self._gcp_function = None
         self._logger = logger_factory.get_logger(self.name)
 
@@ -221,17 +221,20 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 self.logger.info(f"Agent registered with display name: '{returned_display_name}'")
             else:
                 self.logger.warning(f"Warmup response did not contain initArguments. Response: {warmup_result}")
-            
-            # Step 2: Apply actions now that agent is registered
-            with DebuggingSession.apply_actions(self.logger, self.lightrun_api, agent_display_name, actions) as active_debug_session:
-                actions_fetch_interval = self.agent_actions_poll_interval_seconds + 10 # + 10 seconds grace
-                self.logger.info(f"Waiting {actions_fetch_interval} seconds for the agent to refresh its breakpoints to make sure the configured actions"
-                                 "are actually used. we're also sending one request every 10 seconds to make sure the function won't become cold")
-                start_time = time.monotonic()
-                while time.monotonic() - start_time < actions_fetch_interval:
-                    time.sleep(10)
-                    SendRequestTask(self.gcp_function).execute()
 
+            with DebuggingSession(self.lightrun_api, agent_display_name, actions, self.agent_actions_update_interval_seconds, self.logger) as debug_session:
+                # Step 2: Apply actions
+                debug_session.apply_actions()
+
+                # Step 2: Wait for the agent to fetch the actions
+                wait_for_agent_duration = self.agent_actions_update_interval_seconds + 10  # + 10 seconds grace period
+                self.logger.info(f"Waiting {wait_for_agent_duration} seconds for the agent to refresh its breakpoints to make sure the configured actions"
+                                 "are actually used. we're also sending one request every 10 seconds to make sure the function won't become cold")
+
+                for i in range(wait_for_agent_duration):
+                    self.logger.info(f"Sleeping.. {wait_for_agent_duration-i}")
+                    time.sleep(1)
+                    # do we have a way of breaking early when the agent have fetched the breakpoints instead of waiting the maximum?
 
                 # Step 4: Measurement request
                 self.logger.info("Sending measurement request...")
@@ -251,15 +254,13 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 missing_actions = []
                 
                 # First check if we successfully applied all actions
-                if len(active_debug_session.applied_actions) != self.num_actions:
-                    self.logger.error(f"Failed to apply all actions. Expected {self.num_actions}, applied {len(active_debug_session.applied_actions)}.")
-                    return LightrunOverheadBenchmarkResult(
-                         success=False,
-                         error=f"Action Application Failed: Expected {self.num_actions} actions, succeeded in applying {len(active_debug_session.applied_actions)}. Check credentials.",
-                         total_run_time_sec=end_time - start_time,
-                         handler_run_time_ns=handler_run_time_ns,
-                         actions_count=len(active_debug_session.applied_actions)
-                     )
+                if len(debug_session.applied_actions) == self.num_actions:
+                    self.logger.error(f"Failed to apply all actions. Expected {self.num_actions}, applied {len(debug_session.applied_actions)}.")
+                    return LightrunOverheadBenchmarkResult(success=False,
+                                                           error=f"Action Application Failed: Expected {self.num_actions} actions, succeeded in applying {len(debug_session.applied_actions)}. Check credentials.",
+                                                           total_run_time_sec=end_time - start_time,
+                                                           handler_run_time_ns=handler_run_time_ns,
+                                                           actions_count=len(debug_session.applied_actions))
 
                 # Allow a short buffer for async reporting from agent to server
                 max_retries = 3
@@ -267,7 +268,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                     actions_triggered = 0
                     missing_actions = []
                     
-                    for action, action_id in active_debug_session.applied_actions:
+                    for action, action_id in debug_session.applied_actions:
                         status = None
                         is_hit = False
                         
@@ -286,7 +287,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                         else:
                             missing_actions.append(f"{action.__class__.__name__}:{action_id}")
                     
-                    if actions_triggered == len(active_debug_session.applied_actions):
+                    if actions_triggered == len(debug_session.applied_actions):
                         break
                     
                     time.sleep(1) # Wait before retry

@@ -352,10 +352,10 @@ class CLIParser:
         )
 
         parser.add_argument(
-            '--agent-actions-poll-interval-seconds',
+            '--agent-actions-update-interval-seconds',
             type=int,
             default=60,
-            help='The interval in which the agent pools for actions. This property is controlled by the server and is not a something we can manipulate inside the test!! you need to configure it to match the real maximum no-contact interval of the server, which is at the time of writing 1 minute by default for serverless functions'
+            help='The interval in which the agent polls for actions. This property is controlled by the server and is not something we can manipulate inside the test!! you need to configure it to match the real maximum no-contact interval of the server, which is at the time of writing 1 minute by default for serverless functions'
         )
 
         parser.add_argument(

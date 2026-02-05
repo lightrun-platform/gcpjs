@@ -199,26 +199,25 @@ class LightrunPluginAPI(LightrunAPI):
 
 
     def list_agents(self):
+        agents = []
         try:
             agent_pools = self.get_all_agent_pools()
             if not agent_pools:
                 return []
-            agents = []
+
             for pool in agent_pools:
                 agent_pool_id = pool.get('id')
                 agents.extend(self._get_agents_in_pool(agent_pool_id))
 
-            return agents
-
         except Exception as e:
             self._handle_api_error_or_raise(e, "Failed to list all agents (Internal)")
-        return None
+        return agents
 
     def get_agent_id(self, display_name: str) -> Optional[str]:
         try:
-            agents = self.list_agents()
-            if agents:
-                for agent in agents:
+            all_available_agents = self.list_agents()
+            if all_available_agents:
+                for agent in all_available_agents:
                     # Strict extraction: matched displayName -> return id
                     # We expect 'id' and 'displayName' based on AgentDTO
                     current_name = agent.get("displayName")
@@ -230,7 +229,7 @@ class LightrunPluginAPI(LightrunAPI):
                         else:
                             raise ValueError(f"Found agent matching '{display_name}' but it has no 'id' field: {agent}")
                 
-            self.logger.warning(f"No agent found matching display name '{display_name}' via Plugin API. Agents count: {len(agents) if agents else 0}")
+            self.logger.warning(f"No agent found matching display name '{display_name}' via Plugin API. Agents count: {len(all_available_agents)}ץ")
         except Exception as e:
             self._handle_api_error_or_raise(e, "get agent ID (Internal)")
         return None
