@@ -121,7 +121,7 @@ class IterativeOverheadTestTask:
         except Exception:
             pass
             
-        agent_id = self.lightrun_api.get_agent_id(self.function.display_name)
+        agent_id = self.lightrun_api.get_agent(self.function.display_name)
         if not agent_id:
             return None
             

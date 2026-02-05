@@ -1,6 +1,6 @@
 import requests
 import logging
-from typing import Optional
+from typing import Optional, Any, Dict
 from abc import ABC, abstractmethod
 from urllib.parse import urlparse
 from Lightrun.Benchmarks.shared_modules.authentication import Authenticator, InteractiveAuthenticator
@@ -61,13 +61,14 @@ class LightrunAPI(ABC):
         pass
 
     @abstractmethod
-    def get_agent_id(self, display_name: str) -> Optional[str]:
+    def get_agent(self, display_name: str) -> Optional[Dict[Any, Any]]:
         pass
 
     @abstractmethod
     def add_snapshot(
         self,
         agent_id: str,
+        agent_pool_id: str,
         filename: str,
         line_number: int,
         max_hit_count: int,
@@ -79,6 +80,7 @@ class LightrunAPI(ABC):
     def add_log_action(
         self,
         agent_id: str,
+        agent_pool_id: str,
         filename: str,
         line_number: int,
         message: str,

@@ -44,7 +44,7 @@ class TestLightrunPublicAPI(unittest.TestCase):
         ]
         self.mock_auth.send_authenticated_request.return_value = mock_resp
         
-        agent_id = self.api.get_agent_id("target-agent")
+        agent_id = self.api.get_agent("target-agent")
         self.assertEqual(agent_id, "agent-2")
         self.mock_auth.send_authenticated_request.assert_called_with(
             ANY, 'GET', 
@@ -146,7 +146,7 @@ class TestLightrunPluginAPI(unittest.TestCase):
             {"id": "id-2", "displayName": "other-func"}
         ]
         with patch.object(self.api, 'list_agents', return_value=mock_agents):
-            agent_id = self.api.get_agent_id("my-func")
+            agent_id = self.api.get_agent("my-func")
             self.assertEqual(agent_id, "id-1")
 
     def test_get_agent_id_strict_missing_id(self):
@@ -156,7 +156,7 @@ class TestLightrunPluginAPI(unittest.TestCase):
         ]
         with patch.object(self.api, 'list_agents', return_value=mock_agents):
             with self.assertRaises(ValueError) as cm:
-                self.api.get_agent_id("my-func")
+                self.api.get_agent("my-func")
             self.assertIn("has no 'id' field", str(cm.exception))
 
     def test_add_snapshot_internal(self):

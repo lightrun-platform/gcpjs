@@ -24,13 +24,12 @@ class LightrunPublicAPI(LightrunAPI):
         except Exception as e:
             self._handle_api_error_or_raise(e, "get agent ID")
 
-    def get_agent_id(self, display_name: str) -> Optional[str]:
+    def get_agent(self, display_name: str) -> Optional[str]:
         all_agents = self.list_agents()
         for agent in all_agents:
-            if display_name in agent.get("displayName", ""):
-                selected_agent_id = agent.get("id")
-                self.logger.debug(f"Found agent matching display name '{display_name}', agent id: '{selected_agent_id}'. full agents list: '{all_agents}'. ")
-                return selected_agent_id
+            if display_name == agent.get("displayName"):
+                self.logger.debug(f"Found agent matching display name '{display_name}', agent id: '{agent.get("id")}'. full agents list: '{all_agents}'. ")
+                return agent
 
         self.logger.warning(f"Could not find an agent matching the display name '{display_name}'. full agents list: '{all_agents}'. ")
         return None
@@ -38,6 +37,7 @@ class LightrunPublicAPI(LightrunAPI):
     def add_snapshot(
         self,
         agent_id: str,
+        agent_pool_id: str,
         filename: str,
         line_number: int,
         max_hit_count: int,
@@ -47,6 +47,7 @@ class LightrunPublicAPI(LightrunAPI):
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots"
             snapshot_data = {
                 "agentId": agent_id,
+                "agentPoolId": agent_pool_id,
                 "filename": filename,
                 "lineNumber": line_number,
                 "maxHitCount": max_hit_count,
@@ -67,6 +68,7 @@ class LightrunPublicAPI(LightrunAPI):
     def add_log_action(
         self,
         agent_id: str,
+        agent_pool_id: str,
         filename: str,
         line_number: int,
         message: str,
@@ -77,6 +79,7 @@ class LightrunPublicAPI(LightrunAPI):
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs"
             log_data = {
                 "agentId": agent_id,
+                "agentPoolId": agent_pool_id,
                 "filename": filename,
                 "lineNumber": line_number,
                 "maxHitCount": max_hit_count,

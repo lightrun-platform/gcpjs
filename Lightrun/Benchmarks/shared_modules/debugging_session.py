@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Tuple, Any, Dict, Optional
 from Lightrun.Benchmarks.shared_modules.api import LightrunAPI
 from .agent_models import LightrunAction
 
@@ -16,35 +16,34 @@ class DebuggingSession:
     Args:
         lightrun_api: The Lightrun API client
         agent_display_name: The friendly display name of the agent (shown in UI)
-        agent_id: The UUID of the agent (from server)
         actions: The actions to apply to the agent
+        logger: An logging.Logger object
     """
 
     RETRY_DELAY = 1
     FIND_AGENT_RETRIES = 10
 
-    def __init__(self, lightrun_api: LightrunAPI, agent_display_name: str, actions: Iterable[LightrunAction], agent_actions_update_interval_seconds: int, logger: logging.Logger):
+    def __init__(self, lightrun_api: LightrunAPI, agent_display_name: str, actions: Iterable[LightrunAction], logger: logging.Logger):
         self.lightrun_api = lightrun_api
         self._agent_display_name = agent_display_name
-        self._agent_id = None # looked up on __enter__
+        self._agent: Optional[Dict[Any, Any]] = None # looked up on __enter__
         self.actions = list(actions)
         self.applied_actions: List[Tuple[LightrunAction, str]] = []
-        self.agent_actions_update_interval_seconds = agent_actions_update_interval_seconds
         self._applied_actions: bool = False
         self.logger = logger
 
     def __enter__(self):
-        self._find_agent_id()
+        self._find_agent()
         return self
 
-    def _find_agent_id(self) -> None:
-        if self._agent_id is not None:
+    def _find_agent(self) -> None:
+        if self._agent is not None:
             return
 
         successful_attempt_id = None
         for attempt in range(DebuggingSession.FIND_AGENT_RETRIES):
-            self._agent_id = self.lightrun_api.get_agent_id(self.agent_display_name)
-            if self._agent_id:
+            self._agent = self.lightrun_api.get_agent(self.agent_display_name)
+            if self._agent:
                 successful_attempt_id = attempt
                 break
             
@@ -52,7 +51,7 @@ class DebuggingSession:
                 self.logger.info(f"Agent '{self.agent_display_name}' not found, retrying in {DebuggingSession.RETRY_DELAY}s... ({attempt + 1}/{DebuggingSession.FIND_AGENT_RETRIES})")
                 time.sleep(DebuggingSession.RETRY_DELAY)
                 
-        if not self.agent_id:
+        if not self._agent:
             raise AgentNotFoundError(f"Timed out after looking for the agent for "
                                      f"{DebuggingSession.FIND_AGENT_RETRIES * DebuggingSession.RETRY_DELAY}"
                                      f"seconds. Could not find agent with display name '{self.agent_display_name}' "
@@ -68,25 +67,29 @@ class DebuggingSession:
         """The friendly display name of the agent (shown in UI)."""
         return self._agent_display_name
 
-    @property
-    def agent_id(self) -> str:
-        """The actual UUID of the agent."""
-        return self._agent_id
-
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Remove all actions when exiting context."""
         if not self._applied_actions:
             self.logger.debug("Exiting the the DebuggingSession scope without apply_actions ever being called. did you forget to call it? actions are not applied automatically on context entry.")
         self.remove_all()
 
+    @property
+    def agent_id(self) -> str:
+        return self._agent["id"]
+
+    @property
+    def agent_pool_id(self) -> str:
+        return self._agent["poolId"]
+
     def apply_actions(self):
         """Apply all actions to the specified agent."""
 
-        if not self.agent_id:
+        if not self._agent:
             self.logger.info("Agent id was not found yet, attempting to find it so we can apply the actions.")
-            self._find_agent_id() # will raise an exception if unsuccessful
+            self._find_agent() # will raise an exception if unsuccessful
+
         for action in self.actions:
-            action_id = action.apply(self.agent_id, self.lightrun_api)
+            action_id = action.apply(self.agent_id, self.agent_pool_id, self.lightrun_api)
             if action_id:
                 self.applied_actions.append((action, action_id))
 

@@ -11,6 +11,8 @@ from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 from Benchmarks.shared_modules.api import LightrunPluginAPI
 from Benchmarks.shared_modules.authentication import ApiKeyAuthenticator
 from Benchmarks.shared_modules.authentication.authenticator import AuthenticationType
+from Lightrun.Benchmarks.shared_modules.agent_models import BreakpointAction, LogAction
+from Lightrun.Benchmarks.shared_modules.debugging_session import DebuggingSession
 
 
 class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResult]):
@@ -165,12 +167,69 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         
         return action_lines
 
+    def _wait_for_actions_to_bind(self, debug_session: DebuggingSession, poll_interval: int = 2) -> bool:
+        """
+        Wait for actions to be bound to the agent, with early exit detection.
+        
+        Uses the getActionsByAgent endpoint to efficiently check if all applied actions
+        have been received by the agent, allowing early exit instead of waiting the full duration.
+        
+        Args:
+            debug_session: The active debugging session with applied actions.
+            poll_interval: Seconds between status checks (default 2).
+            
+        Returns:
+            True if all actions were confirmed bound, False if timed out.
+        """
+        import time
+        
+        max_wait = self.agent_actions_update_interval_seconds + 10  # + grace period
+        expected_action_ids = {action_id for _, action_id in debug_session.applied_actions}
+        
+        self.logger.info(
+            f"Waiting up to {max_wait}s for agent to bind {len(expected_action_ids)} actions. "
+            f"Polling every {poll_interval}s for early detection."
+        )
+
+        for elapsed in range(0, max_wait, poll_interval):
+            time.sleep(poll_interval)
+            
+            # Get all actions currently bound to this agent (single API call)
+            agent_actions = self.lightrun_api.get_actions_by_agent(debug_session.agent_id)
+            
+            # Log response on first poll to help debug
+            if elapsed == 0:
+                self.logger.debug(f"Agent actions response (first poll): {agent_actions}")
+            
+            # Extract action IDs from the response
+            bound_action_ids = {action.get('id') for action in agent_actions if action.get('id')}
+            
+            # Check if all our expected actions are in the bound set
+            missing_actions = expected_action_ids - bound_action_ids
+            
+            if not missing_actions:
+                self.logger.info(
+                    f"All {len(expected_action_ids)} actions bound to agent "
+                    f"after {elapsed + poll_interval}s (early exit)"
+                )
+                return True
+            
+            remaining = max_wait - elapsed - poll_interval
+            self.logger.info(
+                f"Waiting for actions to bind... {len(missing_actions)}/{len(expected_action_ids)} still pending, "
+                f"{remaining}s remaining"
+            )
+        
+        self.logger.warning(
+            f"Timed out waiting for actions to bind after {max_wait}s. "
+            f"Missing actions: {missing_actions}"
+        )
+        return False
+
     def execute_benchmark(self) -> LightrunOverheadBenchmarkResult:
         """Execute the benchmark logic."""
 
         import time
-        from Lightrun.Benchmarks.shared_modules.agent_models import BreakpointAction, LogAction
-        from Lightrun.Benchmarks.shared_modules.agent_actions import DebuggingSession
         from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.send_request_task import SendRequestTask
 
         self.logger.info(f"Executing benchmark with {self.num_actions} {self.action_type} actions on {self.runtime}")
@@ -226,15 +285,8 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 # Step 2: Apply actions
                 debug_session.apply_actions()
 
-                # Step 2: Wait for the agent to fetch the actions
-                wait_for_agent_duration = self.agent_actions_update_interval_seconds + 10  # + 10 seconds grace period
-                self.logger.info(f"Waiting {wait_for_agent_duration} seconds for the agent to refresh its breakpoints to make sure the configured actions"
-                                 "are actually used. we're also sending one request every 10 seconds to make sure the function won't become cold")
-
-                for i in range(wait_for_agent_duration):
-                    self.logger.info(f"Sleeping.. {wait_for_agent_duration-i}")
-                    time.sleep(1)
-                    # do we have a way of breaking early when the agent have fetched the breakpoints instead of waiting the maximum?
+                # Step 3: Wait for the agent to fetch the actions
+                self._wait_for_actions_to_bind(debug_session)
 
                 # Step 4: Measurement request
                 self.logger.info("Sending measurement request...")

@@ -213,65 +213,100 @@ class LightrunPluginAPI(LightrunAPI):
             self._handle_api_error_or_raise(e, "Failed to list all agents (Internal)")
         return agents
 
-    def get_agent_id(self, display_name: str) -> Optional[str]:
+    def get_agent(self, display_name: str) -> Optional[str]:
         try:
             all_available_agents = self.list_agents()
             if all_available_agents:
                 for agent in all_available_agents:
-                    # Strict extraction: matched displayName -> return id
-                    # We expect 'id' and 'displayName' based on AgentDTO
                     current_name = agent.get("displayName")
-                    current_id = agent.get("id")
-                    
-                    if current_name and display_name in current_name:
-                        if current_id:
-                            return current_id
-                        else:
-                            raise ValueError(f"Found agent matching '{display_name}' but it has no 'id' field: {agent}")
-                
-            self.logger.warning(f"No agent found matching display name '{display_name}' via Plugin API. Agents count: {len(all_available_agents)}ץ")
+                    if current_name and display_name == current_name:
+                        return agent
+
+            self.logger.debug(f"No agent found matching display name '{display_name}' via Plugin API. All agents: {all_available_agents}")
         except Exception as e:
             self._handle_api_error_or_raise(e, "get agent ID (Internal)")
         return None
 
+    def get_actions_by_agent(self, agent_id: str, pool_id: str = None) -> list:
+        """
+        Get all actions currently bound to a specific agent.
+        
+        This endpoint returns actions that the agent has received and is actively
+        monitoring. Useful for checking if actions have been bound to the agent
+        after creation.
+        
+        Args:
+            agent_id: The UUID of the agent.
+            pool_id: The agent pool ID. If not provided, uses the default pool.
+            
+        Returns:
+            List of ActionDTO dictionaries containing action details.
+            Each action includes: id, filename, line, actionType, disabled, etc.
+        """
+        try:
+            if not pool_id:
+                pool_id = self.get_default_agent_pool()
+            
+            if not pool_id:
+                self.logger.warning("Cannot get actions by agent: no pool_id available")
+                return []
+            
+            url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{pool_id}/{self.api_version}/actions/{agent_id}"
+            headers = {"client-info": get_client_info_header(self.api_version)}
+            
+            response = self.authenticator.send_authenticated_request(
+                self.session, 'GET', url, headers=headers, timeout=30
+            )
+            
+            if response.status_code == 200:
+                actions = response.json()
+                self.logger.debug(f"Retrieved {len(actions)} actions for agent {agent_id}")
+                return actions
+            else:
+                self.logger.warning(
+                    f"Failed to get actions for agent {agent_id}: "
+                    f"HTTP {response.status_code} - {response.text}"
+                )
+        except Exception as e:
+            self.logger.exception(f"Error getting actions for agent {agent_id}: {e}")
+        
+        return []
+
     def add_snapshot(
             self,
             agent_id: str,
+            agent_pool_id: str,
             filename: str,
             line_number: int,
             max_hit_count: int,
             expire_seconds: int = 3600,
     ) -> Optional[str]:
+
         try:
-            pool_id = self.get_default_agent_pool()
-            if pool_id:
-                url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/insertCapture/**"
-                headers = {"client-info": get_client_info_header(self.api_version)}
-                snapshot_data = {
-                    "actionType": "CAPTURE",
-                    "agentId": agent_id,
-                    "agentPoolId": pool_id,
-                    "filename": filename,
-                    "line": line_number,
-                    "maxHitCount": max_hit_count,
-                    "captureActionExtensionDTO": {
-                        "contextExpressions": {},
-                        "watchExpressions": []
-                    },
-                    "pipingStatus": "NOT_SET",
-                    "disabled": False
-                }
+            url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/insertCapture/**"
+            headers = {"client-info": get_client_info_header(self.api_version)}
+            snapshot_data = {
+                "actionType": "CAPTURE",
+                "agentId": agent_id,
+                "agentPoolId": agent_pool_id,
+                "filename": filename,
+                "line": line_number,
+                "maxHitCount": max_hit_count,
+                "captureActionExtensionDTO": {
+                    "contextExpressions": {},
+                    "watchExpressions": []
+                },
+                "pipingStatus": "NOT_SET",
+                "disabled": False
+            }
 
-                response = self.authenticator.send_authenticated_request(
-                    self.session, 'POST', url, json=snapshot_data, headers=headers, timeout=30
-                )
+            response = self.authenticator.send_authenticated_request(self.session, 'POST', url, json=snapshot_data, headers=headers, timeout=30)
+            response.raise_for_status()
 
-                if response.status_code in [200, 201]:
-                    snapshot_id = response.json().get("id")
-                    self.logger.info(f"Snapshot created (Internal): {snapshot_id} at {filename}:{line_number}")
-                    return snapshot_id
-                else:
-                    self.logger.warning(f"Failed to create snapshot (Internal): {response.status_code} - {response.text}")
+            snapshot_id = response.json().get("id")
+            self.logger.info(f"Snapshot created (Internal): {snapshot_id} at {filename}:{line_number}")
+            return snapshot_id
+            self.logger.warning(f"Failed to create snapshot (Internal): {response.status_code} - {response.text}")
         except Exception as e:
             self._handle_api_error_or_raise(e, "create snapshot (Internal)")
         return None
@@ -279,42 +314,40 @@ class LightrunPluginAPI(LightrunAPI):
     def add_log_action(
             self,
             agent_id: str,
+            agent_pool_id: str,
             filename: str,
             line_number: int,
             message: str,
             max_hit_count: int,
             expire_seconds: int = 3600,
     ) -> Optional[str]:
+
         try:
-            pool_id = self.get_default_agent_pool()
-            if pool_id:
-                url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/insertLog/**"
-                headers = {"client-info": get_client_info_header(self.api_version)}
+            url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/insertLog/**"
+            headers = {"client-info": get_client_info_header(self.api_version)}
 
-                log_data = {
-                    "actionType": "LOG",
-                    "agentId": agent_id,
-                    "agentPoolId": pool_id,
-                    "filename": filename,
-                    "line": line_number,
-                    "maxHitCount": max_hit_count,
-                    "logActionExtensionDTO": {
-                        "logMessage": message
-                    },
-                    "pipingStatus": "NOT_SET",
-                    "disabled": False
-                }
+            log_data = {
+                "actionType": "LOG",
+                "agentId": agent_id,
+                "agentPoolId": agent_pool_id,
+                "filename": filename,
+                "line": line_number,
+                "maxHitCount": max_hit_count,
+                "logActionExtensionDTO": {
+                    "logMessage": message
+                },
+                "pipingStatus": "NOT_SET",
+                "disabled": False
+            }
 
-                response = self.authenticator.send_authenticated_request(
-                    self.session, 'POST', url, json=log_data, headers=headers, timeout=30
-                )
+            response = self.authenticator.send_authenticated_request(self.session, 'POST', url, json=log_data, headers=headers, timeout=30)
 
-                if response.status_code in [200, 201]:
-                    action_id = response.json().get("id")
-                    self.logger.info(f"Log created (Internal): {action_id} at {filename}:{line_number}")
-                    return action_id
-                else:
-                    self.logger.warning(f"Failed to create log (Internal): {response.status_code} - {response.text}")
+            if response.status_code in [200, 201]:
+                action_id = response.json().get("id")
+                self.logger.info(f"Log created (Internal): {action_id} at {filename}:{line_number}")
+                return action_id
+            else:
+                self.logger.warning(f"Failed to create log (Internal): {response.status_code} - {response.text}")
         except Exception as e:
             self._handle_api_error_or_raise(e, "create log (Internal)")
         return None
