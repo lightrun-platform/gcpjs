@@ -57,15 +57,8 @@ class LightrunPluginAPI(LightrunAPI):
             else:
                 params = {"page": page, "size": page_size}
             
-            response = self.authenticator.send_authenticated_request(
-                self.session, 'GET', base_url, params=params
-            )
-            
-            if response.status_code != 200:
-                raise Exception(
-                    f"Error getting agent pools: response code: {response.status_code}, "
-                    f"response: {response.text}"
-                )
+            response = self.authenticator.send_authenticated_request(self.session, 'GET', base_url, params=params)
+            response.raise_for_status()
             
             data = response.json()
             
@@ -86,10 +79,7 @@ class LightrunPluginAPI(LightrunAPI):
                     page_size = pageable.get('pageSize', 20)
                     self.logger.debug(f"Discovered server page size: {page_size}")
                 
-                self.logger.debug(
-                    f"Fetched page {page}: {len(pools_page)} pools "
-                    f"(total so far: {len(all_pools)}/{data.get('totalElements', 'unknown')})"
-                )
+                self.logger.debug(f"Fetched page {page}: {len(pools_page)} pools (total so far: {len(all_pools)}/{data.get('totalElements', 'unknown')})")
                 
                 # Check if this is the last page
                 if data.get('last', True):
@@ -97,10 +87,7 @@ class LightrunPluginAPI(LightrunAPI):
                     
                 page += 1
             else:
-                raise Exception(
-                    f"Error getting agent pools: unexpected response structure - "
-                    f"status code: {response.status_code}, json: {data}"
-                )
+                raise Exception(f"Error getting agent pools: unexpected response structure - status code: {response.status_code}, json: {data}")
         
         self.logger.info(f"Total agent pools fetched: {len(all_pools)}")
         return all_pools
@@ -142,18 +129,13 @@ class LightrunPluginAPI(LightrunAPI):
             else:
                 params = {"page": page, "size": page_size}
             
-            response = self.authenticator.send_authenticated_request(
-                self.session, 'GET', base_url, headers=headers, params=params
-            )
+            response = self.authenticator.send_authenticated_request(self.session, 'GET', base_url, headers=headers, params=params)
             response.raise_for_status()
             
             try:
                 data = response.json()
             except requests.exceptions.JSONDecodeError as e:
-                self.logger.warning(
-                    f"Malformed or empty JSON in server response! "
-                    f"response code: {response.status_code}, response body: {response.text}"
-                )
+                self.logger.warning(f"Malformed or empty JSON in server response! response code: {response.status_code}, response body: {response.text}")
                 raise e
             
             if isinstance(data, list):
@@ -178,10 +160,7 @@ class LightrunPluginAPI(LightrunAPI):
                         self.logger.debug(f"No paging information in first response, using default page size: {page_size}")
 
                 
-                self.logger.debug(
-                    f"Fetched page {page}: {len(agents_page)} agents "
-                    f"(total so far: {len(all_agents)}/{data.get('totalElements', 'unknown')})"
-                )
+                self.logger.debug(f"Fetched page {page}: {len(agents_page)} agents (total so far: {len(all_agents)}/{data.get('totalElements', 'unknown')})")
                 
                 # Check if this is the last page
                 if data.get('last', True):
@@ -189,10 +168,8 @@ class LightrunPluginAPI(LightrunAPI):
                     
                 page += 1
             else:
-                raise Exception(
-                    f"Error querying the server for agents in agent pool: {pool_id}. "
-                    f"Unexpected response structure - status code: {response.status_code}, json: {data}"
-                )
+                raise Exception(f"Error querying the server for agents in agent pool: {pool_id}. "
+                                f"Unexpected response structure - status code: {response.status_code}, json: {data}")
         
         self.logger.info(f"Total agents fetched from pool {pool_id}: {len(all_agents)}")
         return all_agents
@@ -223,6 +200,7 @@ class LightrunPluginAPI(LightrunAPI):
                         return agent
 
             self.logger.debug(f"No agent found matching display name '{display_name}' via Plugin API. All agents: {all_available_agents}")
+
         except Exception as e:
             self._handle_api_error_or_raise(e, "get agent ID (Internal)")
         return None
@@ -254,21 +232,15 @@ class LightrunPluginAPI(LightrunAPI):
             url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{pool_id}/{self.api_version}/actions/{agent_id}"
             headers = {"client-info": get_client_info_header(self.api_version)}
             
-            response = self.authenticator.send_authenticated_request(
-                self.session, 'GET', url, headers=headers, timeout=30
-            )
-            
-            if response.status_code == 200:
-                actions = response.json()
-                self.logger.debug(f"Retrieved {len(actions)} actions for agent {agent_id}")
-                return actions
-            else:
-                self.logger.warning(
-                    f"Failed to get actions for agent {agent_id}: "
-                    f"HTTP {response.status_code} - {response.text}"
-                )
+            response = self.authenticator.send_authenticated_request(self.session, 'GET', url, headers=headers, timeout=30)
+            response.raise_for_status()
+
+            actions = response.json()
+            self.logger.debug(f"Retrieved {len(actions)} actions for agent {agent_id}")
+            return actions
+
         except Exception as e:
-            self.logger.exception(f"Error getting actions for agent {agent_id}: {e}")
+            self._handle_api_error_or_raise(e, f"getting actions for agent {agent_id} (Internal)")
         
         return []
 
@@ -307,6 +279,7 @@ class LightrunPluginAPI(LightrunAPI):
             snapshot_id = response.json().get("id")
             self.logger.info(f"Snapshot created (Internal): {snapshot_id} at {filename}:{line_number}")
             return snapshot_id
+
         except Exception as e:
             self._handle_api_error_or_raise(e, "create snapshot (Internal)")
         return None
@@ -349,26 +322,19 @@ class LightrunPluginAPI(LightrunAPI):
                 return action_id
             else:
                 self.logger.warning(f"Failed to create log (Internal): {response.status_code} - {response.text}")
+
         except Exception as e:
             self._handle_api_error_or_raise(e, "create log (Internal)")
         return None
 
     def get_snapshot(self, snapshot_id: str) -> Optional[dict]:
         try:
-            # Fallback to Public API for retrieval if Internal doesn't have easy GET endpoint or same endpoint works
-            # The actions endpoint often works with user tokens for READ, just not WRITE?
-            # Let's try standard Public API first, if fails we might need internal.
-            # But wait, we determined Public API agents endpoint failed.
-            # So we likely need internal GET endpoints.
-            # Plugin uses: getAction or getActions.
-            # getAction: /athena/company/{company}/{apiVersion}/getAction/{actionId}
             url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/getAction/{snapshot_id}"
             headers = {"client-info": get_client_info_header(self.api_version)}
             response = self.authenticator.send_authenticated_request(self.session, 'GET', url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                return response.json()
-            else:
-                self.logger.warning(f"Failed to get snapshot (Internal): {response.status_code}")
+            response.raise_for_status()
+            return response.json()
+
         except Exception as e:
             self.logger.exception(f"Error fetching snapshot: {e}")
         return None
@@ -377,10 +343,9 @@ class LightrunPluginAPI(LightrunAPI):
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs/{log_id}"
             response = self.authenticator.send_authenticated_request(self.session, 'GET', url, timeout=10)
-            if response.status_code == 200:
-                return response.json()
-            else:
-                self.logger.warning(f"Failed to get log (Public fallback): {response.status_code} - {response.text}")
+            response.raise_for_status()
+            return response.json()
+
         except Exception as e:
             self.logger.exception(f"Error fetching log: {e}")
         return None
@@ -389,11 +354,10 @@ class LightrunPluginAPI(LightrunAPI):
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/snapshots/{snapshot_id}"
             response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, timeout=10)
-            if response.status_code in [200, 204]:
-                self.logger.info(f"Snapshot deleted: {snapshot_id}")
-                return True
-            else:
-                self.logger.warning(f"Failed to delete snapshot (Public fallback): {response.status_code} - {response.text}")
+            response.raise_for_status()
+            self.logger.info(f"Snapshot deleted: {snapshot_id}")
+            return True
+
         except Exception as e:
             self.logger.exception(f"Error deleting snapshot: {e}")
         return False
@@ -402,11 +366,10 @@ class LightrunPluginAPI(LightrunAPI):
         try:
             url = f"{self.api_url}/api/v1/companies/{self.company_id}/actions/logs/{log_id}"
             response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, timeout=10)
-            if response.status_code in [200, 204]:
-                self.logger.info(f"Log action deleted: {log_id}")
-                return True
-            else:
-                self.logger.warning(f"Failed to delete log (Public fallback): {response.status_code} - {response.text}")
+            response.raise_for_status()
+            self.logger.info(f"Log action deleted: {log_id}")
+            return True
+
         except Exception as e:
             self.logger.exception(f"Error deleting log: {e}")
         return False
