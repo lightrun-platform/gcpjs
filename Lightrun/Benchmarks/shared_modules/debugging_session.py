@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Iterable, List, Tuple, Any, Dict, Optional
+from typing import Iterable, List, Any, Dict, Optional, Set
 from Lightrun.Benchmarks.shared_modules.api import LightrunAPI
 from .agent_models import LightrunAction
 
@@ -94,6 +94,9 @@ class DebuggingSession:
         for action in self.actions:
             action.apply(self.agent_id, self.agent_pool_id, self.lightrun_api)
 
+        if self.applied_actions != self.actions:
+            raise Exception(f"Failed to apply all actions! self.applied_actions={self.applied_actions}, self.actions={self.actions}")
+
     def remove_all(self):
         """Remove all applied actions."""
         for action in self.actions:
@@ -105,3 +108,17 @@ class DebuggingSession:
 
     def clear_all_actions_from_agent(self) -> int:
         return self.lightrun_api.clear_agent_actions(self.agent_id, self.agent_pool_id)
+
+    def get_bounded_actions_ids(self) -> Set[str]:
+
+        # Get all actions currently associated with this agent (single API call)
+        agent_actions = self.lightrun_api.list_actions_by_agent(self.agent_id, self.agent_pool_id)
+
+        # Extract action IDs that have acceptanceStatus == 'ACCEPTED'
+        # Only these actions have been successfully instrumented by the agent
+        for action in agent_actions:
+            if not action.get('acceptanceStatus'):
+                raise Exception(f"Malformed action DTO, expected acceptanceStatus attribute. action: {action}")
+
+        return {action.get('id') for action in agent_actions if action.get('acceptanceStatus') == 'ACCEPTED'}
+

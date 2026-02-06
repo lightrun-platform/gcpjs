@@ -22,6 +22,8 @@ from Benchmarks.shared_modules.gcf_task_primitives.send_request_task import Send
 class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResult]):
     """Benchmark case for Lightrun overhead measurement."""
 
+    AGENT_POLL_INTERVAL_SECONDS = 1
+
     def __init__(self,
                  *,
                  benchmark_name: str,
@@ -171,7 +173,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         
         return action_lines
 
-    def _wait_for_actions_to_bind(self, debug_session: DebuggingSession, poll_interval: int = 2) -> bool:
+    def _wait_for_actions_to_bind(self, debug_session: DebuggingSession) -> bool:
         """
         Wait for actions to be bound to the agent, with early exit detection.
         
@@ -197,46 +199,27 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         Returns:
             True if all actions were confirmed ACCEPTED before timeout, False if timed out.
         """
-        
+
         max_wait = self.agent_actions_update_interval_seconds + 10  # + grace period
-        expected_action_ids = {action_id for _, action_id in debug_session.applied_actions}
-        pending_actions = expected_action_ids.copy()
-        self.logger.info(f"Waiting up to {max_wait}s for agent to accept {len(expected_action_ids)} actions. "
+        poll_interval = LightrunOverheadBenchmarkCase.AGENT_POLL_INTERVAL_SECONDS
+
+        self.logger.info(f"Waiting up to {max_wait}s for agent to accept {len(debug_session.actions)} actions. "
                          f"Polling every {poll_interval}s for early detection.")
 
+        expected_bounded_action_ids = {action.action_id for action in debug_session.actions}
+
+        seconds_until_timeout = max_wait
         for elapsed in range(0, max_wait, poll_interval):
-
-            # Get all actions currently associated with this agent (single API call)
-            agent_actions = self.lightrun_api.list_actions_by_agent(debug_session.agent_id, debug_session.agent_pool_id)
-
-            agent_action_ids = {action.get('id') for action in agent_actions}
-            if agent_action_ids != expected_action_ids:
-                raise Exception(f"The actions configured for the agent did not match the expected ones. Expected: {str(expected_action_ids)}, Actual: {str(agent_action_ids)}")
-            
-            # Log response on first poll to help debug
-            if elapsed == 0:
-                self.logger.debug(f"Agent actions response (first poll): {agent_actions}")
-            
-            # Extract action IDs that have acceptanceStatus == 'ACCEPTED'
-            # Only these actions have been successfully instrumented by the agent
-            accepted_action_ids = {action.get('id') for action in agent_actions if action.get('id') and action.get('acceptanceStatus') == 'ACCEPTED'}
-
-            
-            if accepted_action_ids == expected_action_ids:
-                self.logger.info(f"All {len(expected_action_ids)} actions accepted by agent after {elapsed + poll_interval}s")
+            bounded_action_ids = debug_session.get_bounded_actions_ids()
+            if bounded_action_ids == expected_bounded_action_ids:
+                self.logger.info(f"All actions were accepted after {elapsed} seconds.")
                 return True
-            
-            # Log status breakdown for debugging
-            status_counts = {}
-            for action in agent_actions:
-                if action.get('id') in expected_action_ids:
-                    status = action.get('acceptanceStatus', 'UNKNOWN')
-                    status_counts[status] = status_counts.get(status, 0) + 1
-            
-            remaining = max_wait - elapsed - poll_interval
-            self.logger.info(f"Waiting for actions to be accepted... {len(pending_actions)}/{len(expected_action_ids)} pending, statuses: {status_counts}, {remaining}s remaining")
 
+            # sleep if some of the actions have not been bounded yet
+
+            self.logger.info(f"Waiting for actions to be fetched by the agent... accepted actions: {len(bounded_action_ids)}/{len(expected_bounded_action_ids)}. {seconds_until_timeout}s left until timeout.")
             time.sleep(poll_interval)
+            seconds_until_timeout -= poll_interval
 
             # the following step is important. after we wake up we have to trigger the function
             # otherwise it will not wake up to fetch breakpoints.
@@ -249,7 +232,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
             # benchmark case results and different runs.
             SendRequestTask(self.gcp_function).execute()
         
-        self.logger.warning(f"Timed out waiting for actions to be accepted after {max_wait}s. Pending actions: {pending_actions}")
+        self.logger.warning(f"Timed out waiting for actions to be accepted after {max_wait}s. Pending actions: {debug_session.get_unbound_actions()}")
         return False
 
     def warmup(self):
