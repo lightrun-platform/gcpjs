@@ -158,13 +158,11 @@ class LightrunPublicAPI(LightrunAPI):
             self.logger.exception(f"Error fetching log: {e}")
         return None
 
-    def delete_lightrun_action(self, action_id: str, agent_pool_id: str = None) -> bool:
+    def delete_lightrun_action(self, action_id: str, agent_pool_id: str) -> bool:
         """Delete any action (snapshot, log, etc.) by its ID."""
         try:
             url = f"{self.api_url}/api/v1/actions/{action_id}"
-            params = {}
-            if agent_pool_id:
-                params['agentPoolId'] = agent_pool_id
+            params = {'agentPoolId': agent_pool_id}
             response = self.authenticator.send_authenticated_request(self.session, 'DELETE', url, params=params, timeout=10)
             if response.status_code in [200, 204]:
                 self.logger.info(f"Action deleted: {action_id}")

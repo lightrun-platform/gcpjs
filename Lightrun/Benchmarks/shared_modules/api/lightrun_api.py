@@ -100,7 +100,7 @@ class LightrunAPI(ABC):
         pass
 
     @abstractmethod
-    def delete_lightrun_action(self, action_id: str) -> bool:
+    def delete_lightrun_action(self, action_id: str, agent_pool_id: str) -> bool:
         """Delete any action (snapshot, log, etc.) by its ID."""
         pass
 

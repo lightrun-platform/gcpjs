@@ -342,12 +342,9 @@ class LightrunPluginAPI(LightrunAPI):
             self.logger.exception(f"Error fetching log: {e}")
         return None
 
-    def delete_lightrun_action(self, action_id: str, pool_id: str = None) -> bool:
+    def delete_lightrun_action(self, action_id: str, pool_id: str) -> bool:
         """Delete any action (snapshot, log, etc.) by its ID."""
         try:
-            if pool_id is None:
-                pool_id = self._get_default_agent_pool()
-            
             url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{pool_id}/{self.api_version}/actions/{action_id}"
             headers = {"client-info": get_client_info_header(self.api_version)}
             

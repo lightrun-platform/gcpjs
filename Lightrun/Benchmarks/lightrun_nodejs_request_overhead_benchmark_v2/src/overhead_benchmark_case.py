@@ -236,6 +236,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         return False
 
     def warmup(self):
+        # Todo - important! add definition later.
         pass # stub
 
     def execute_benchmark(self) -> LightrunOverheadBenchmarkResult:
@@ -290,13 +291,13 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 self.logger.warning(f"Cold Start response did not contain initArguments. Response: {cold_start_request}")
 
 
-            self.warmup() # Todo - important! add definition later.
-
-
             with DebuggingSession(self.lightrun_api, agent_display_name, actions, self.logger) as debug_session:
 
                 # Step 1: Clear any existing actions on the agent to ensure a clean slate
                 debug_session.clear_all_actions_from_agent()
+
+                # Step 2: Warmup the function so it has stable results that can be compared with other benchmark cases
+                self.warmup()
 
                 # Step 2: Apply benchmark actions
                 debug_session.apply_actions()
