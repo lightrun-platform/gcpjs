@@ -320,6 +320,13 @@ class CLIParser:
             help='Lightrun API Hostname (default: from LIGHTRUN_API_HOSTNAME env var or app.lightrun.com)'
         )
         parser.add_argument(
+            '--lightrun-agent-log-level',
+            type=str,
+            default='info',
+            choices=['debug', 'info', 'warn', 'error'],
+            help='debug level to use for the lightrun agent in the test'
+        )
+        parser.add_argument(
             '--max-allocations-per-region',
             type=int,
             default=20,

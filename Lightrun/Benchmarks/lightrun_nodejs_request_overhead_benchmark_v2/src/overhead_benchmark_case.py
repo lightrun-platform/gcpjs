@@ -48,7 +48,8 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  logger_factory: LoggerFactory,
                  lightrun_version: str,
                  clean_after_run: bool,
-                 agent_actions_update_interval_seconds: int):
+                 agent_actions_update_interval_seconds: int,
+                 lightrun_agent_log_level: str):
         super().__init__(deployment_timeout, delete_timeout, clean_after_run=clean_after_run)
         self.benchmark_name = benchmark_name
         self.runtime = runtime
@@ -68,6 +69,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         self.gen2 = gen2
         self.lightrun_version = lightrun_version
         self.agent_actions_update_interval_seconds = agent_actions_update_interval_seconds
+        self.lightrun_agent_log_level = lightrun_agent_log_level
         self._gcp_function = None
         self._logger = logger_factory.get_logger(self.name)
 
@@ -131,7 +133,8 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         return {
             'LIGHTRUN_SECRET': self.lightrun_secret, # special lightrun agent environment variable which configured the lightrun secret
             'DISPLAY_NAME': self.name,
-            'LIGHTRUN_API_ENDPOINT': self.lightrun_api_hostname # special lightrun agent environment variable which configures the location of the lightrun server. it is misleadingly called ENDPOINT, implying a full url but it actually expects only the hostname without protocol prefix
+            'LIGHTRUN_API_ENDPOINT': self.lightrun_api_hostname, # special lightrun agent environment variable which configures the location of the lightrun server. it is misleadingly called ENDPOINT, implying a full url but it actually expects only the hostname without protocol prefix
+            'AGENT_LOG_LEVEL' : self.lightrun_agent_log_level # log level for the running lightrun agent in the benchmark
         }
 
     def _get_action_line_numbers(self) -> List[int]:
