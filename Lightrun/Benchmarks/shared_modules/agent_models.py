@@ -12,14 +12,20 @@ class LightrunAction(ABC):
     max_hit_count: int
     expire_seconds: int
     _action_id: dict = field(default_factory=lambda: {"value": None}, init=False)
+    _pool_id: dict = field(default_factory=lambda: {"value": None}, init=False)
+
 
     @property
     def is_applied(self) -> bool:
-        return self.action_id is not None
+        return self.action_id is not None and self.pool_id is not None
 
     @property
     def action_id(self) -> Optional[str]:
         return self._action_id["value"]
+
+    @property
+    def pool_id(self) -> Optional[str]:
+        return self._pool_id["value"]
 
     @abstractmethod
     def apply(self, agent_id: str, agent_pool_id: str, lightrun_api: LightrunAPI) -> Optional[str]:
@@ -29,9 +35,10 @@ class LightrunAction(ABC):
         if not self.action_id:
             return False
 
-        is_deleted = lightrun_api.delete_lightrun_action(self.action_id)
+        is_deleted = lightrun_api.delete_lightrun_action(self.action_id, self.pool_id)
         if is_deleted:
             self._action_id["value"] = None
+            self._pool_id["value"] = None
         return is_deleted
 
 @dataclass(frozen=True)
@@ -49,6 +56,8 @@ class LogAction(LightrunAction):
                                                                 message=self.log_message,
                                                                 max_hit_count=self.max_hit_count,
                                                                 expire_seconds=self.expire_seconds)
+        if self.action_id is not None:
+            self._pool_id["value"] = agent_pool_id
 
         return self.action_id
 
@@ -66,5 +75,7 @@ class BreakpointAction(LightrunAction):
                                                              line_number=self.line_number,
                                                              max_hit_count=self.max_hit_count,
                                                              expire_seconds=self.expire_seconds)
+        if self.action_id is not None:
+            self._pool_id["value"] = agent_pool_id
 
         return self.action_id

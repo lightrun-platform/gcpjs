@@ -105,7 +105,7 @@ class LightrunAPI(ABC):
         pass
 
     @abstractmethod
-    def get_actions_by_agent(self, agent_id: str, pool_id: str) -> list:
+    def list_actions_by_agent(self, agent_id: str, pool_id: str) -> list:
         """Get all actions currently bound to a specific agent."""
         pass
 

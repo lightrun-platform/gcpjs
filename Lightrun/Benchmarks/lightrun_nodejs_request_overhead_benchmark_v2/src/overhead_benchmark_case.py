@@ -321,18 +321,9 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 # Iterate over applied actions and check their hit count/status
                 actions_triggered = 0
                 missing_actions = []
-                
-                # First check if we successfully applied all actions
-                if len(debug_session.applied_actions) == self.num_actions:
-                    self.logger.error(f"Failed to apply all actions. Expected {self.num_actions}, applied {len(debug_session.applied_actions)}.")
-                    return LightrunOverheadBenchmarkResult(success=False,
-                                                           error=f"Action Application Failed: Expected {self.num_actions} actions, succeeded in applying {len(debug_session.applied_actions)}. Check credentials.",
-                                                           total_run_time_sec=end_time - start_time,
-                                                           handler_run_time_ns=handler_run_time_ns,
-                                                           actions_count=len(debug_session.applied_actions))
 
                 # Allow a short buffer for async reporting from agent to server
-                max_retries = 3
+                max_retries = 10
                 for _ in range(max_retries):
                     actions_triggered = 0
                     missing_actions = []

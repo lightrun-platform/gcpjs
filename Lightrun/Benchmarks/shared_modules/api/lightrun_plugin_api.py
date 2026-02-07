@@ -203,7 +203,7 @@ class LightrunPluginAPI(LightrunAPI):
             self._handle_api_error_or_raise(e, "get agent ID (Internal)")
         return None
 
-    def get_actions_by_agent(self, agent_id: str, pool_id: str) -> list:
+    def list_actions_by_agent(self, agent_id: str, pool_id: str) -> list:
         """
         Get all actions currently bound to a specific agent.
         
@@ -397,7 +397,7 @@ class LightrunPluginAPI(LightrunAPI):
         """
         try:
             # Get all actions for this agent
-            actions_before = self.get_actions_by_agent(agent_id, pool_id)
+            actions_before = self.list_actions_by_agent(agent_id, pool_id)
 
             if not actions_before:
                 self.logger.info(f"No actions found for agent {agent_id}")
@@ -411,7 +411,7 @@ class LightrunPluginAPI(LightrunAPI):
             self.logger.info(f"Clearing {len(action_ids)} actions from agent {agent_id}")
             self.delete_actions(action_ids, pool_id)
 
-            actions_after = self.get_actions_by_agent(agent_id, pool_id)
+            actions_after = self.list_actions_by_agent(agent_id, pool_id)
             if len(actions_after) > 0:
                 raise Exception(f"Failed to clear all actions from agent {agent_id} with pool {pool_id}, remaining actions: {actions_after}")
 

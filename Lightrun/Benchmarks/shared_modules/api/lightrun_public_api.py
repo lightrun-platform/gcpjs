@@ -199,7 +199,7 @@ class LightrunPublicAPI(LightrunAPI):
             self._handle_api_error_or_raise(e, "list actions (Public API)")
         return {"content": [], "last": True}
 
-    def get_actions_by_agent(self, agent_id: str, pool_id: str) -> list:
+    def list_actions_by_agent(self, agent_id: str, pool_id: str) -> list:
         """
         Get all actions currently bound to a specific agent.
         
@@ -247,7 +247,7 @@ class LightrunPublicAPI(LightrunAPI):
         """
         try:
             # Get all actions for this agent
-            agent_actions = self.get_actions_by_agent(agent_id, pool_id)
+            agent_actions = self.list_actions_by_agent(agent_id, pool_id)
             
             if not agent_actions:
                 self.logger.info(f"No actions found for agent {agent_id}")
