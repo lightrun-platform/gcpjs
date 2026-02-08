@@ -5,12 +5,10 @@ from typing import List, Dict, Any
 
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.benchmark_report_generator import BenchmarkReportGenerator
-
-from .overhead_benchmark_case import LightrunOverheadBenchmarkCase
-from .overhead_benchmark_result import (
-    LightrunOverheadBenchmarkFailure,
-    LightrunOverheadBenchmarkSuccess,
-    LightrunOverheadBenchmarkResult,
+from .overhead_benchmark_result import Success, LightrunOverheadBenchmarkResult
+from .overhead_benchmark_result_repository import (
+    LightrunOverheadBenchmarkResultRepository,
+    RAW_FILENAME,
 )
 
 
@@ -37,173 +35,165 @@ def _linear_regression(
     return (slope, intercept, r_squared)
 
 
+def _build_report_data_from_results(
+    results: List[LightrunOverheadBenchmarkResult],
+) -> tuple[Dict[str, Any], List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
+    """Build summary, successes list, by_actions_count, regression from result list."""
+    successes: List[Dict[str, Any]] = []
+    failures_count = 0
+    for result in results:
+        if result is None:
+            failures_count += 1
+            continue
+        if isinstance(result, Success):
+            successes.append({
+                "actions_count": result.actions_count,
+                "handler_run_time_ns": result.handler_run_time_ns,
+            })
+        else:
+            failures_count += 1
+    total = len(results)
+    success_count = len(successes)
+    times_ns = [s["handler_run_time_ns"] for s in successes]
+    actions_counts = [s["actions_count"] for s in successes]
+    summary: Dict[str, Any] = {
+        "total_cases": total,
+        "success_count": success_count,
+        "failure_count": failures_count,
+    }
+    if times_ns:
+        summary["handler_run_time_ns"] = {
+            "min": min(times_ns),
+            "max": max(times_ns),
+            "mean": statistics.mean(times_ns),
+            "median": statistics.median(times_ns),
+            "stdev": statistics.stdev(times_ns) if len(times_ns) > 1 else 0.0,
+        }
+    by_actions: Dict[int, List[int]] = {}
+    for s in successes:
+        k = s["actions_count"]
+        by_actions.setdefault(k, []).append(s["handler_run_time_ns"])
+    by_actions_count = [
+        {
+            "actions_count": k,
+            "count": len(v),
+            "mean_ns": statistics.mean(v),
+            "samples_ns": v,
+        }
+        for k, v in sorted(by_actions.items())
+    ]
+    regression: Dict[str, Any] = {}
+    if len(successes) >= 2:
+        x = [float(a) for a in actions_counts]
+        y = [float(t) for t in times_ns]
+        slope, intercept, r_squared = _linear_regression(x, y)
+        regression = {
+            "slope_ns_per_action": slope,
+            "intercept_ns": intercept,
+            "r_squared": r_squared,
+        }
+    return summary, successes, by_actions_count, regression
+
+
+def _write_report_files(
+    save_path: Path,
+    summary: Dict[str, Any],
+    successes: List[Dict[str, Any]],
+    by_actions_count: List[Dict[str, Any]],
+    regression: Dict[str, Any],
+) -> Path:
+    """Write report_data.json and benchmark_report.txt; return report_path."""
+    report_data = {
+        "summary": summary,
+        "successes": successes,
+        "by_actions_count": by_actions_count,
+        "regression": regression,
+    }
+    data_path = save_path / "report_data.json"
+    with open(data_path, "w") as f:
+        json.dump(report_data, f, indent=2)
+    report_path = save_path / "benchmark_report.txt"
+    total = summary["total_cases"]
+    success_count = summary["success_count"]
+    failures_count = summary["failure_count"]
+    lines = [
+        "Lightrun Request Overhead Benchmark Report",
+        "==========================================",
+        "",
+        f"Total cases:     {total}",
+        f"Successes:      {success_count}",
+        f"Failures:       {failures_count}",
+        "",
+    ]
+    if summary.get("handler_run_time_ns"):
+        h = summary["handler_run_time_ns"]
+        lines.extend([
+            "Handler run time (ns):",
+            f"  Min:    {h['min']}",
+            f"  Max:    {h['max']}",
+            f"  Mean:   {h['mean']:.0f}",
+            f"  Median: {h['median']:.0f}",
+            f"  Stdev:  {h['stdev']:.0f}",
+            "",
+        ])
+    if by_actions_count:
+        lines.append("By number of Lightrun actions:")
+        for row in by_actions_count:
+            lines.append(
+                f"  actions={row['actions_count']}: count={row['count']}, mean_ns={row['mean_ns']:.0f}"
+            )
+        lines.append("")
+    if regression:
+        lines.extend([
+            "Linear fit: handler_run_time_ns = intercept + slope * actions_count",
+            f"  Slope (ns per action): {regression['slope_ns_per_action']:.2f}",
+            f"  Intercept (ns):        {regression['intercept_ns']:.2f}",
+            f"  R²:                    {regression['r_squared']:.4f}",
+            "",
+        ])
+    with open(report_path, "w") as f:
+        f.write("\n".join(lines))
+    return report_path
+
+
 class LightrunOverheadReportGenerator(
     BenchmarkReportGenerator[LightrunOverheadBenchmarkResult]
 ):
     """Generates reports for Lightrun overhead benchmark."""
 
-    def save_benchmark_data(
-        self,
-        benchmark_results: List[BenchmarkCase[LightrunOverheadBenchmarkResult]],
-        save_path: Path,
-    ) -> Path:
-        """Save raw benchmark run data for future analysis."""
-        raw_entries: List[Dict[str, Any]] = []
-        for case in benchmark_results:
-            if not isinstance(case, LightrunOverheadBenchmarkCase):
-                continue
-            entry: Dict[str, Any] = {
-                "case": {
-                    "name": case.name,
-                    "num_actions": case.num_actions,
-                    "region": case.region,
-                    "runtime": case.runtime,
-                    "action_type": case.action_type,
-                },
-                "result": None,
-            }
-            result = case._benchmark_result
-            if result is None:
-                entry["result"] = {"success": False, "error": "No result", "cpu_info": None}
-            elif isinstance(result, LightrunOverheadBenchmarkSuccess):
-                entry["result"] = {
-                    "success": True,
-                    "handler_run_time_ns": result.handler_run_time_ns,
-                    "actions_count": result.actions_count,
-                    "cpu_info": result.cpu_info,
-                }
-            elif isinstance(result, LightrunOverheadBenchmarkFailure):
-                entry["result"] = {
-                    "success": False,
-                    "error": result.error,
-                    "cpu_info": result.cpu_info,
-                }
-            else:
-                entry["result"] = {"success": False, "error": "Unknown result type", "cpu_info": None}
-            raw_entries.append(entry)
-        raw_path = save_path / "benchmark_raw_data.json"
-        with open(raw_path, "w") as f:
-            json.dump({"runs": raw_entries}, f, indent=2)
-        return raw_path
+    def load_benchmark_data(
+        self, path: Path
+    ) -> List[LightrunOverheadBenchmarkResult]:
+        """Load benchmark results from raw data (inverse of repository save_benchmark_data)."""
+        repo = LightrunOverheadBenchmarkResultRepository()
+        raw_path = path / RAW_FILENAME if path.is_dir() else path
+        if not raw_path.exists():
+            return []
+        return repo.load_benchmark_data(path)
 
     def generate_report(
         self,
         benchmark_results: List[BenchmarkCase[LightrunOverheadBenchmarkResult]],
         save_path: Path,
     ) -> Path:
-        """Generate a report file and JSON data from the benchmark results."""
-        successes: List[Dict[str, Any]] = []
-        failures_count = 0
+        """Generate report from benchmark cases (uses get_benchmark_result on each case)."""
+        results = [case.get_benchmark_result() for case in benchmark_results]
+        summary, successes, by_actions_count, regression = _build_report_data_from_results(
+            results
+        )
+        return _write_report_files(
+            save_path, summary, successes, by_actions_count, regression
+        )
 
-        for case in benchmark_results:
-            result = case._benchmark_result
-            if result is None:
-                failures_count += 1
-                continue
-            if isinstance(result, LightrunOverheadBenchmarkSuccess):
-                successes.append({
-                    "actions_count": result.actions_count,
-                    "handler_run_time_ns": result.handler_run_time_ns,
-                })
-            else:
-                failures_count += 1
-
-        total = len(benchmark_results)
-        success_count = len(successes)
-
-        # Stats over all successes
-        times_ns = [s["handler_run_time_ns"] for s in successes]
-        actions_counts = [s["actions_count"] for s in successes]
-        summary: Dict[str, Any] = {
-            "total_cases": total,
-            "success_count": success_count,
-            "failure_count": failures_count,
-        }
-        if times_ns:
-            summary["handler_run_time_ns"] = {
-                "min": min(times_ns),
-                "max": max(times_ns),
-                "mean": statistics.mean(times_ns),
-                "median": statistics.median(times_ns),
-                "stdev": statistics.stdev(times_ns) if len(times_ns) > 1 else 0.0,
-            }
-
-        # Per actions_count stats
-        by_actions: Dict[int, List[int]] = {}
-        for s in successes:
-            k = s["actions_count"]
-            by_actions.setdefault(k, []).append(s["handler_run_time_ns"])
-        by_actions_count = [
-            {
-                "actions_count": k,
-                "count": len(v),
-                "mean_ns": statistics.mean(v),
-                "samples_ns": v,
-            }
-            for k, v in sorted(by_actions.items())
-        ]
-
-        # Linear regression: handler_run_time_ns vs actions_count
-        regression: Dict[str, Any] = {}
-        if len(successes) >= 2:
-            x = [float(a) for a in actions_counts]
-            y = [float(t) for t in times_ns]
-            slope, intercept, r_squared = _linear_regression(x, y)
-            regression = {
-                "slope_ns_per_action": slope,
-                "intercept_ns": intercept,
-                "r_squared": r_squared,
-            }
-
-        report_data = {
-            "summary": summary,
-            "successes": successes,
-            "by_actions_count": by_actions_count,
-            "regression": regression,
-        }
-
-        # Write JSON for visualizer
-        data_path = save_path / "report_data.json"
-        with open(data_path, "w") as f:
-            json.dump(report_data, f, indent=2)
-
-        # Human-readable report
-        report_path = save_path / "benchmark_report.txt"
-        lines = [
-            "Lightrun Request Overhead Benchmark Report",
-            "==========================================",
-            "",
-            f"Total cases:     {total}",
-            f"Successes:      {success_count}",
-            f"Failures:       {failures_count}",
-            "",
-        ]
-        if times_ns:
-            lines.extend([
-                "Handler run time (ns):",
-                f"  Min:    {summary['handler_run_time_ns']['min']}",
-                f"  Max:    {summary['handler_run_time_ns']['max']}",
-                f"  Mean:   {summary['handler_run_time_ns']['mean']:.0f}",
-                f"  Median: {summary['handler_run_time_ns']['median']:.0f}",
-                f"  Stdev:  {summary['handler_run_time_ns']['stdev']:.0f}",
-                "",
-            ])
-        if by_actions_count:
-            lines.append("By number of Lightrun actions:")
-            for row in by_actions_count:
-                lines.append(
-                    f"  actions={row['actions_count']}: count={row['count']}, mean_ns={row['mean_ns']:.0f}"
-                )
-            lines.append("")
-        if regression:
-            lines.extend([
-                "Linear fit: handler_run_time_ns = intercept + slope * actions_count",
-                f"  Slope (ns per action): {regression['slope_ns_per_action']:.2f}",
-                f"  Intercept (ns):        {regression['intercept_ns']:.2f}",
-                f"  R²:                    {regression['r_squared']:.4f}",
-                "",
-            ])
-        with open(report_path, "w") as f:
-            f.write("\n".join(lines))
-
-        return report_path
+    def generate_report_from_results(
+        self,
+        results: List[LightrunOverheadBenchmarkResult],
+        save_path: Path,
+    ) -> Path:
+        """Generate report from a list of results (e.g. after load_benchmark_data)."""
+        summary, successes, by_actions_count, regression = _build_report_data_from_results(
+            results
+        )
+        return _write_report_files(
+            save_path, summary, successes, by_actions_count, regression
+        )

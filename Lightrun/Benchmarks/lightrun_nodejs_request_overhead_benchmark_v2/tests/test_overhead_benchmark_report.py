@@ -16,31 +16,32 @@ sys.path.insert(0, str(_parent_dir.parent.parent))
 import Lightrun.Benchmarks  # noqa: E402
 sys.modules["Benchmarks"] = Lightrun.Benchmarks
 
-from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_report import (
-    LightrunOverheadReportGenerator,
-    _linear_regression,
-)
-from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import (
-    LightrunOverheadBenchmarkFailure,
-    LightrunOverheadBenchmarkSuccess,
-)
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_report import LightrunOverheadReportGenerator,_linear_regression
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import OverheadBenchmarkCaseDTO, LightrunOverheadBenchmarkFailure, Success
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result_repository import LightrunOverheadBenchmarkResultRepository, RAW_FILENAME
 
 
 def _make_fake_case(name="fake", num_actions=0, region="r", runtime="nodejs20", action_type="snapshot", benchmark_result=None):
-    """Minimal case-like object for generator tests."""
+    """Minimal case-like object for generator tests (get_benchmark_result returns the result)."""
     obj = MagicMock()
     obj.name = name
     obj.num_actions = num_actions
     obj.region = region
     obj.runtime = runtime
     obj.action_type = action_type
-    obj.benchmark_result = benchmark_result
+    obj.get_benchmark_result = MagicMock(return_value=benchmark_result)
     return obj
 
 
+def _default_identity() -> OverheadBenchmarkCaseDTO:
+    """Default case identity for test result construction."""
+    return OverheadBenchmarkCaseDTO()
+
+
 def _make_success(handler_run_time_ns, actions_count, cpu_info="cpu"):
-    return LightrunOverheadBenchmarkSuccess(
-        benchmark_case=MagicMock(),
+    """Build a success result with default case identity (for tests)."""
+    return Success(
+        benchmark_props=_default_identity(),
         handler_run_time_ns=handler_run_time_ns,
         actions_count=actions_count,
         cpu_info=cpu_info,
@@ -48,8 +49,9 @@ def _make_success(handler_run_time_ns, actions_count, cpu_info="cpu"):
 
 
 def _make_failure(error="err", cpu_info=None):
+    """Build a failure result with default case identity (for tests)."""
     return LightrunOverheadBenchmarkFailure(
-        benchmark_case=MagicMock(),
+        benchmark_dto=_default_identity(),
         error=error,
         cpu_info=cpu_info,
     )
@@ -91,80 +93,58 @@ class TestLightrunOverheadReportGenerator(unittest.TestCase):
     def setUp(self):
         self.generator = LightrunOverheadReportGenerator()
 
-    def test_save_benchmark_data_skips_non_overhead_case(self):
-        """Only LightrunOverheadBenchmarkCase instances are persisted."""
-        class FakeOverheadCase:
-            def __init__(self):
-                self.name = "only-case"
-                self.num_actions = 1
-                self.region = "us-central1"
-                self.runtime = "nodejs20"
-                self.action_type = "snapshot"
-                self.benchmark_result = _make_success(100, 1)
-
+    def test_repository_save_then_load_roundtrip(self):
+        """Repository save_benchmark_data then load_benchmark_data returns equivalent results."""
+        repo = LightrunOverheadBenchmarkResultRepository()
+        results = [
+            _make_success(100, 1),
+            _make_failure("deploy failed"),
+            None,
+        ]
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            with patch(
-                "Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_report.LightrunOverheadBenchmarkCase",
-                FakeOverheadCase,
-            ):
-                out = self.generator.save_benchmark_data(
-                    [FakeOverheadCase()],
-                    path,
-                )
-            self.assertEqual(out, path / "benchmark_raw_data.json")
+            out = repo.save_benchmark_data(results, path)
+            self.assertEqual(out, path / RAW_FILENAME)
             self.assertTrue(out.exists())
-            with open(out) as f:
-                data = json.load(f)
-            self.assertIn("runs", data)
-            self.assertEqual(len(data["runs"]), 1)
-            self.assertEqual(data["runs"][0]["case"]["name"], "only-case")
-            self.assertTrue(data["runs"][0]["result"]["success"])
-            self.assertEqual(data["runs"][0]["result"]["handler_run_time_ns"], 100)
+            loaded = repo.load_benchmark_data(path)
+            self.assertEqual(len(loaded), 3)
+            self.assertIsInstance(loaded[0], Success)
+            self.assertEqual(loaded[0].handler_run_time_ns, 100)
+            self.assertEqual(loaded[0].actions_count, 1)
+            self.assertIsInstance(loaded[1], LightrunOverheadBenchmarkFailure)
+            self.assertEqual(loaded[1].error, "deploy failed")
+            self.assertIsInstance(loaded[2], LightrunOverheadBenchmarkFailure)
+            self.assertEqual(loaded[2].error, "No result")
 
-    def test_save_benchmark_data_ignores_generic_benchmark_case(self):
-        """Generic BenchmarkCase (not LightrunOverheadBenchmarkCase) is skipped."""
-        generic_case = _make_fake_case(name="generic", benchmark_result=_make_success(200, 2))
+    def test_load_benchmark_data_missing_file_returns_empty_list(self):
+        """Report generator load_benchmark_data returns [] when file does not exist."""
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            # Do not patch: real generator uses real LightrunOverheadBenchmarkCase
-            out = self.generator.save_benchmark_data([generic_case], path)
-            self.assertTrue(out.exists())
-            with open(out) as f:
-                data = json.load(f)
-            self.assertEqual(len(data["runs"]), 0)
+            loaded = self.generator.load_benchmark_data(path)
+            self.assertEqual(loaded, [])
 
-    def test_save_benchmark_data_records_success_and_failure(self):
-        """Raw data includes both success and failure results."""
-        class FakeOverheadCase:
-            def __init__(self, name, result):
-                self.name = name
-                self.num_actions = 0
-                self.region = "r"
-                self.runtime = "nodejs20"
-                self.action_type = "snapshot"
-                self.benchmark_result = result
-
+    def test_load_benchmark_data_then_generate_report_from_results(self):
+        """Load raw data then generate_report_from_results produces same report shape as from cases."""
+        repo = LightrunOverheadBenchmarkResultRepository()
+        results = [
+            _make_success(100, 0),
+            _make_success(150, 1),
+        ]
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            cases = [
-                FakeOverheadCase("s1", _make_success(100, 1)),
-                FakeOverheadCase("f1", _make_failure("deploy failed")),
-                FakeOverheadCase("none", None),
-            ]
-            with patch(
-                "Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_report.LightrunOverheadBenchmarkCase",
-                FakeOverheadCase,
-            ):
-                self.generator.save_benchmark_data(cases, path)
-            with open(path / "benchmark_raw_data.json") as f:
+            repo.save_benchmark_data(results, path)
+            loaded = self.generator.load_benchmark_data(path)
+            self.assertEqual(len(loaded), 2)
+            report_path = self.generator.generate_report_from_results(loaded, path)
+            self.assertTrue(report_path.exists())
+            with open(path / "report_data.json") as f:
                 data = json.load(f)
-            self.assertEqual(len(data["runs"]), 3)
-            self.assertTrue(data["runs"][0]["result"]["success"])
-            self.assertFalse(data["runs"][1]["result"]["success"])
-            self.assertEqual(data["runs"][1]["result"]["error"], "deploy failed")
-            self.assertFalse(data["runs"][2]["result"]["success"])
-            self.assertEqual(data["runs"][2]["result"]["error"], "No result")
+            self.assertEqual(data["summary"]["total_cases"], 2)
+            self.assertEqual(data["summary"]["success_count"], 2)
+            self.assertIn("regression", data)
+            self.assertAlmostEqual(
+                data["regression"]["slope_ns_per_action"], 50.0, places=2
+            )
 
     def test_generate_report_empty_results(self):
         """Report with no cases produces valid summary and no regression."""

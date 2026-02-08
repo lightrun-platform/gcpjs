@@ -12,6 +12,7 @@ sys.path.insert(0, str(root_dir))
 from Lightrun.Benchmarks.shared_modules.lightrun_benchmark_runner import LightrunBenchmark
 from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_cases_generator import LightrunOverheadBenchmarkCasesGenerator
 from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_report import LightrunOverheadReportGenerator
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result_repository import LightrunOverheadBenchmarkResultRepository
 from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_results_viewer import LightrunOverheadReportVisualizer
 
 def main():
@@ -26,6 +27,7 @@ def main():
         benchmark_name=benchmark_name,
         test_root_dir=project_root,
         benchmark_cases_generator=LightrunOverheadBenchmarkCasesGenerator(),
+        benchmark_results_repository=LightrunOverheadBenchmarkResultRepository(),
         report_generator=LightrunOverheadReportGenerator(),
         report_visualizer=LightrunOverheadReportVisualizer()
     )

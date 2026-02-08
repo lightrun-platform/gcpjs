@@ -4,15 +4,13 @@ from typing import List
 
 import time
 
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
-from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import (
-    LightrunOverheadBenchmarkFailure,
-    LightrunOverheadBenchmarkSuccess,
-    LightrunOverheadBenchmarkResult,
-)
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import LightrunOverheadBenchmarkResult
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import MAX_GCP_FUNCTION_NAME_LENGTH
 from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
+
 
 from Benchmarks.shared_modules.api import LightrunPluginAPI
 from Benchmarks.shared_modules.authentication import ApiKeyAuthenticator
@@ -74,6 +72,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         self.lightrun_version = lightrun_version
         self.agent_actions_update_interval_seconds = agent_actions_update_interval_seconds
         self.lightrun_agent_log_level = lightrun_agent_log_level
+        self.authentication_type = authentication_type
         self._gcp_function = None
         self._logger = logger_factory.get_logger(self.name)
 
@@ -85,6 +84,35 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
             case AuthenticationType.MANUAL:
                 self.logger.info("Using internal Plugin API with User Token authentication for API authentication.")
                 self.lightrun_api = LightrunPluginAPI(f"https://{self.lightrun_api_hostname}", self.lightrun_company_id, logger=self.logger, api_version=self.lightrun_version)
+
+
+    def to_dto(self) -> LightrunOverheadBenchmarkCaseDTO:
+        return LightrunOverheadBenchmarkCaseDTO(
+        deployment_timeout_seconds=self.deployment_timeout_seconds,
+        delete_timeout_seconds=self.delete_timeout_seconds,
+        clean_after_run=self.clean_after_run,
+        benchmark_name = self.benchmark_name,
+        name=self.name,
+        runtime = self.runtime,
+        region = self.region,
+        source_code_dir = self.source_code_dir,
+        entry_point = self.entry_point,
+        num_actions = self.num_actions,
+        action_type = self.action_type,
+        authentication_type=self.authentication_type,
+        lightrun_company_id = self.lightrun_company_id,
+        lightrun_api_hostname = self.lightrun_api_hostname,
+        project = self.project,
+        memory = self.memory,
+        cpu = self.cpu,
+        timeout = self.timeout,
+        gen2 = self.gen2,
+        lightrun_version = self.lightrun_version,
+        agent_actions_update_interval_seconds = self.agent_actions_update_interval_seconds,
+        lightrun_agent_log_level = self.lightrun_agent_log_level,
+        deployment_result=self.deployment_result,
+        delete_result=self.delete_result
+        )
 
     @property
     def logger(self) -> Logger:
@@ -317,12 +345,12 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 
                 # 7. Parse Result
                 if not result or 'handlerRunTime' not in result:
-                     return LightrunOverheadBenchmarkFailure(benchmark_case=self, error=f"Invalid response from function, missing 'handlerRunTime' attribute: {result}", cpu_info=None)
+                     return LightrunOverheadBenchmarkResult.FAILURE(self, error=f"Invalid response from function, missing 'handlerRunTime' attribute: {result}", cpu_info=None)
 
                 handler_run_time_ns = int(result['handlerRunTime'])
 
                 if not result or 'cpuInfo' not in result:
-                     return LightrunOverheadBenchmarkFailure(benchmark_case=self, error=f"Invalid response from function, missing 'cpuInfo' attribute: {result}", cpu_info=None)
+                     return LightrunOverheadBenchmarkResult.FAILURE(self, error=f"Invalid response from function, missing 'cpuInfo' attribute: {result}", cpu_info=None)
 
                 cpu_info = result['cpuInfo']
                 
@@ -339,7 +367,6 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                     
                     for action in debug_session.applied_actions:
                         try:
-                            status = None
                             is_hit = False
                             info = action.get_info(self.lightrun_api)
                             # Check if CAPTURED or if hit count > 0 (snapshots might be consumable)
@@ -367,21 +394,17 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
 
                 if actions_triggered < self.num_actions:
                      self.logger.warning(f"Verification Failed: Only {actions_triggered}/{self.num_actions} actions triggered. Missing: {missing_actions}")
-                     return LightrunOverheadBenchmarkFailure(
-                         benchmark_case=self,
-                         error=f"Partial action triggering: {actions_triggered}/{self.num_actions} triggered. Potential throttling or agent lag.",
-                         cpu_info=cpu_info,
-                     )
+                     return LightrunOverheadBenchmarkResult.FAILURE(benchmark_dto=self.to_dto(),
+                                                                    error=f"Partial action triggering: {actions_triggered}/{self.num_actions} triggered. Potential throttling or agent lag.",
+                                                                    cpu_info=cpu_info)
 
                 self.logger.info(f"Verification Successful: All {actions_triggered} actions triggered.")
 
-                return LightrunOverheadBenchmarkSuccess(
-                    benchmark_case=self,
-                    handler_run_time_ns=handler_run_time_ns,
-                    actions_count=self.num_actions,
-                    cpu_info=cpu_info,
-                )
+                return LightrunOverheadBenchmarkResult.SUCCESS(benchmark_dto=self.to_dto(),
+                                                               handler_run_time_ns=handler_run_time_ns,
+                                                               actions_count=self.num_actions,
+                                                               cpu_info=cpu_info)
 
         except Exception as e:
             self.logger.exception(f"Benchmark execution failed with an exception: {e}")
-            return LightrunOverheadBenchmarkFailure(benchmark_case=self, error=str(e), cpu_info=None)
+            return LightrunOverheadBenchmarkResult.FAILURE(self, error=str(e), cpu_info=None)

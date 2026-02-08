@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
-from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 from typing import Optional, List
 
 from Lightrun.Benchmarks.shared_modules.gcf_models.delete_function_result import DeleteFunctionResult, DeleteSuccess, DeleteFailure
 from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task import DeployFunctionTask
 from Lightrun.Benchmarks.shared_modules.gcf_models.deploy_function_result import DeploymentResult, DeploymentSuccess, DeploymentFailure
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import LightrunOverheadBenchmarkFailure, Success
 import logging
 
 class BenchmarkCase[T](ABC):
@@ -84,18 +84,14 @@ class BenchmarkCase[T](ABC):
                     if self._benchmark_result is None:
                         summary += "Benchmark result: benchmark did not run or info is missing"
                     else:
-                        from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import (
-                            LightrunOverheadBenchmarkFailure,
-                            LightrunOverheadBenchmarkSuccess,
-                        )
                         summary += f"Benchmark result: "
                         match self._benchmark_result:
-                            case LightrunOverheadBenchmarkFailure(error=error, cpu_info=cpu_info):
+                            case Failure(error=error, cpu_info=cpu_info):
                                 summary += f"Failure\n"
                                 summary += f"Error: {error}\n"
                                 if cpu_info is not None:
                                     summary += f"CPU info: {cpu_info}\n"
-                            case LightrunOverheadBenchmarkSuccess(cpu_info=cpu_info):
+                            case Success(cpu_info=cpu_info):
                                 summary += f"Success\n"
                                 summary += f"CPU info: {cpu_info}\n"
                             case _:
