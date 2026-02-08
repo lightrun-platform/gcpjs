@@ -12,13 +12,13 @@ class LightrunOverheadBenchmarkResult(ABC):
 
 @dataclass
 class BenchmarkFailure(LightrunOverheadBenchmarkResult):
-    error: Optional[str] = None
-
+    error: str
+    cpu_info: Optional[str] = None
 
 @dataclass
 class BenchmarkSuccess(LightrunOverheadBenchmarkResult):
     handler_run_time_ns: int
     actions_count: int
-
+    cpu_info: str
 
 

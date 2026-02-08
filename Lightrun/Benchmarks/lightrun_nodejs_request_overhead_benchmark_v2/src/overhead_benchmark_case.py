@@ -317,9 +317,14 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 
                 # 7. Parse Result
                 if not result or 'handlerRunTime' not in result:
-                     return BenchmarkFailure(benchmark_case=self, error=f"Invalid response from function: {result}")
+                     return BenchmarkFailure(benchmark_case=self, error=f"Invalid response from function, missing 'handlerRunTime' attribute: {result}", cpu_info=None)
 
                 handler_run_time_ns = int(result['handlerRunTime'])
+
+                if not result or 'cpuInfo' not in result:
+                     return BenchmarkFailure(benchmark_case=self, error=f"Invalid response from function, missing 'cpuInfo' attribute: {result}", cpu_info=None)
+
+                cpu_info = result['cpuInfo']
                 
                 # 8. Verify Action Triggering
                 # Iterate over applied actions and check their hit count/status
@@ -365,6 +370,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                      return BenchmarkFailure(
                          benchmark_case=self,
                          error=f"Partial action triggering: {actions_triggered}/{self.num_actions} triggered. Potential throttling or agent lag.",
+                         cpu_info=cpu_info,
                      )
 
                 self.logger.info(f"Verification Successful: All {actions_triggered} actions triggered.")
@@ -373,8 +379,9 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                     benchmark_case=self,
                     handler_run_time_ns=handler_run_time_ns,
                     actions_count=self.num_actions,
+                    cpu_info=cpu_info,
                 )
 
         except Exception as e:
             self.logger.exception(f"Benchmark execution failed with an exception: {e}")
-            return BenchmarkFailure(benchmark_case=self, error=str(e))
+            return BenchmarkFailure(benchmark_case=self, error=str(e), cpu_info=None)

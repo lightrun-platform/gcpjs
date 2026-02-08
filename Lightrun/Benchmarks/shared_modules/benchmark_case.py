@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
 from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
-from typing import Union, Optional, List
+from typing import Optional, List
 
 from Lightrun.Benchmarks.shared_modules.gcf_models.delete_function_result import DeleteFunctionResult, DeleteSuccess, DeleteFailure
 from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task import DeployFunctionTask
@@ -87,11 +87,14 @@ class BenchmarkCase[T](ABC):
                         )
                         summary += f"Benchmark result: "
                         match self.benchmark_result:
-                            case BenchmarkFailure(error=error):
+                            case BenchmarkFailure(error=error, cpu_info=cpu_info):
                                 summary += f"Failure\n"
                                 summary += f"Error: {error}\n"
-                            case BenchmarkSuccess():
+                                if cpu_info is not None:
+                                    summary += f"CPU info: {cpu_info}\n"
+                            case BenchmarkSuccess(cpu_info=cpu_info):
                                 summary += f"Success\n"
+                                summary += f"CPU info: {cpu_info}\n"
                             case _:
                                 summary += "Unknown result type\n"
                     # only check delete state if the function was deployed, hence its in this nested else
