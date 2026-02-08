@@ -11,6 +11,8 @@ import requests
 
 class Credentials:
 
+    REFRESH_TIME_SAFETY_RATIO = 0.75
+
     def __init__(self, logger: logging.Logger, api_url: str, company_id: str) -> None:
         self.logger = logger
         self.api_url = api_url
@@ -124,7 +126,10 @@ class Credentials:
                             access_token = token_data.get("id_token")
                             refresh_token = token_data.get("refresh_token")
                             time_window = token_data.get("expires_in_seconds")
-                            expiration_time = time.monotonic_ns() + (time_window * 1_000_000_000)
+
+                            # multiplying by Credentials.REFRESH_TIME_SAFETY_RATIO (which should be less than 1) to stay on the safe side and
+                            # ask for a new token before it expires
+                            expiration_time = int(time.monotonic_ns() + (time_window * 1_000_000_000) * Credentials.REFRESH_TIME_SAFETY_RATIO)
 
                             if access_token:
                                 self.logger.info("Successfully authenticated!")
