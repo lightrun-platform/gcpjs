@@ -1,4 +1,4 @@
 from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO
-from Lightrun.Benchmarks.shared_modules.gcf_models.benchmark_result import Success, Failure
+from Lightrun.Benchmarks.shared_modules.gcf_models.benchmark_result import Failure, Success
 
 LightrunOverheadBenchmarkResult = Success[LightrunOverheadBenchmarkCaseDTO] | Failure[LightrunOverheadBenchmarkCaseDTO]
