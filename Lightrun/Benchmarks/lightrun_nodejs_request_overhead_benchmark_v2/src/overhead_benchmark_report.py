@@ -47,6 +47,86 @@ def _group_key(memory: str, cpu: str, cpu_model: str | None) -> str:
     return f"{memory}-{cpu}|{model_part}"
 
 
+def _build_warmup_summary(results: List[LightrunOverheadBenchmarkResult]) -> Dict[str, Any]:
+    """Build warmup summary across all results that have warmup data.
+    
+    Returns:
+        Dict with warmup statistics and per-case warmup info
+    """
+    warmup_cases: List[Dict[str, Any]] = []
+    
+    for result in results:
+        if result is None:
+            continue
+        if not isinstance(result, Success):
+            continue
+        
+        warmup_result = result.benchmark_dto.warmup_result
+        if not warmup_result or not warmup_result.measurements:
+            continue
+        
+        measurements = warmup_result.measurements
+        run_times = [m.handler_run_time_ns for m in measurements]
+        
+        case_warmup = {
+            "case_name": result.benchmark_dto.name,
+            "memory": result.benchmark_dto.memory,
+            "cpu": result.benchmark_dto.cpu,
+            "cpu_model": result.benchmark_dto.cpu_model,
+            "total_requests": warmup_result.total_requests,
+            "stabilized": warmup_result.stabilized,
+            "stability_achieved_at_request": warmup_result.stability_achieved_at_request,
+            "config": {
+                "timeout_seconds": warmup_result.timeout_seconds,
+                "max_requests": warmup_result.max_requests,
+                "stability_window": warmup_result.stability_window,
+                "stability_tolerance": warmup_result.stability_tolerance,
+            },
+            "stats": {
+                "min_ns": min(run_times),
+                "max_ns": max(run_times),
+                "mean_ns": statistics.mean(run_times),
+                "median_ns": statistics.median(run_times),
+                "stdev_ns": statistics.stdev(run_times) if len(run_times) > 1 else 0.0,
+            },
+            # Include all measurements for the graph
+            "measurements": [
+                {"request_number": m.request_number, "handler_run_time_ns": m.handler_run_time_ns, "timestamp_ns": m.timestamp_ns}
+                for m in measurements
+            ],
+        }
+        warmup_cases.append(case_warmup)
+    
+    if not warmup_cases:
+        return {"cases": [], "summary": {}}
+    
+    # Aggregate summary
+    all_run_times = []
+    total_stabilized = 0
+    for case in warmup_cases:
+        all_run_times.extend([m["handler_run_time_ns"] for m in case["measurements"]])
+        if case["stabilized"]:
+            total_stabilized += 1
+    
+    summary = {
+        "total_cases_with_warmup": len(warmup_cases),
+        "cases_stabilized": total_stabilized,
+        "cases_not_stabilized": len(warmup_cases) - total_stabilized,
+    }
+    if all_run_times:
+        summary["all_run_times_ns"] = {
+            "min": min(all_run_times),
+            "max": max(all_run_times),
+            "mean": statistics.mean(all_run_times),
+            "median": statistics.median(all_run_times),
+        }
+    
+    return {
+        "summary": summary,
+        "cases": warmup_cases,
+    }
+
+
 def _build_report_data_from_results(
     results: List[LightrunOverheadBenchmarkResult],
 ) -> Dict[str, Any]:
@@ -60,6 +140,7 @@ def _build_report_data_from_results(
     - summary: global stats
     - by_allocation: grouped by memory/cpu allocation only (for backward compatibility)
     - by_group: grouped by (allocation, cpu_model) for precise comparisons
+    - warmup: warmup phase data from all cases
     
     Note: Results can contain individual measurements in benchmark_results dict (new format)
     or a single measurement (legacy format). This function handles both.
@@ -244,10 +325,14 @@ def _build_report_data_from_results(
             "cross-group comparison is not meaningful."
         )
 
+    # Build warmup data
+    warmup_data = _build_warmup_summary(results)
+    
     return {
         "summary": summary,
         "by_allocation": by_allocation,
         "by_group": by_group,
+        "warmup": warmup_data,
     }
 
 
@@ -375,6 +460,59 @@ def _write_report_files(save_path: Path, report_data: Dict[str, Any]) -> Path:
                 f"    R²:                    {regression['r_squared']:.4f}",
                 "",
             ])
+    
+    # Section 3: Warmup Analysis
+    warmup_data = report_data.get("warmup", {})
+    warmup_cases = warmup_data.get("cases", [])
+    if warmup_cases:
+        warmup_summary = warmup_data.get("summary", {})
+        lines.extend([
+            "=" * 60,
+            "WARMUP ANALYSIS",
+            "=" * 60,
+            "",
+            f"Total cases with warmup data: {warmup_summary.get('total_cases_with_warmup', 0)}",
+            f"Cases that stabilized:        {warmup_summary.get('cases_stabilized', 0)}",
+            f"Cases that did NOT stabilize: {warmup_summary.get('cases_not_stabilized', 0)}",
+            "",
+        ])
+        
+        if warmup_summary.get("all_run_times_ns"):
+            h = warmup_summary["all_run_times_ns"]
+            lines.extend([
+                "Aggregate warmup run times (ns):",
+                f"  Min:    {h['min']}",
+                f"  Max:    {h['max']}",
+                f"  Mean:   {h['mean']:.0f}",
+                f"  Median: {h['median']:.0f}",
+                "",
+            ])
+        
+        lines.append("Per-case warmup summary:")
+        lines.append("")
+        for case in warmup_cases:
+            status = "STABILIZED" if case["stabilized"] else "NOT STABILIZED"
+            stab_at = f" at request {case['stability_achieved_at_request']}" if case["stability_achieved_at_request"] else ""
+            lines.extend([
+                f"--- {case['case_name']} ---",
+                f"  Allocation: {case['memory']} / {case['cpu']} CPU",
+                f"  Processor:  {case.get('cpu_model') or 'Unknown'}",
+                f"  Status:     {status}{stab_at}",
+                f"  Requests:   {case['total_requests']}",
+            ])
+            stats = case.get("stats", {})
+            if stats:
+                lines.extend([
+                    f"  Run time (ns): min={stats['min_ns']}, max={stats['max_ns']}, mean={stats['mean_ns']:.0f}",
+                ])
+            config = case.get("config", {})
+            if config:
+                lines.extend([
+                    f"  Config: timeout={config['timeout_seconds']}s, max_requests={config['max_requests']}, "
+                    f"window={config['stability_window']}, tolerance={config['stability_tolerance']*100:.1f}%",
+                ])
+            lines.append("")
+    
     with open(report_path, "w") as f:
         f.write("\n".join(lines))
     return report_path

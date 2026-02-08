@@ -1,10 +1,31 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 from Lightrun.Benchmarks.shared_modules.authentication.authenticator import AuthenticationType
 from Lightrun.Benchmarks.shared_modules.gcf_models import DeploymentResult
 from Lightrun.Benchmarks.shared_modules.gcf_models.delete_function_result import DeleteFunctionResult
+
+
+@dataclass(frozen=True)
+class WarmupMeasurement:
+    """Result of a single warmup request."""
+    request_number: int  # 1-based index
+    handler_run_time_ns: int
+    timestamp_ns: int  # Time when this measurement was taken (relative to warmup start)
+
+
+@dataclass(frozen=True)
+class WarmupResult:
+    """Complete warmup phase result."""
+    measurements: List[WarmupMeasurement]  # All warmup measurements in order
+    total_requests: int
+    stabilized: bool  # True if warmup ended due to stability, False if timeout/max requests
+    stability_achieved_at_request: Optional[int] = None  # Request number where stability was achieved
+    timeout_seconds: int = 0  # Configured timeout
+    max_requests: int = 0  # Configured max requests
+    stability_window: int = 0  # Configured stability window
+    stability_tolerance: float = 0.0  # Configured tolerance
 
 
 @dataclass(frozen=True)
@@ -48,3 +69,5 @@ class LightrunOverheadBenchmarkCaseDTO:
     cpu_model: Optional[str] = None  # Identified CPU microarchitecture (e.g., "AMD EPYC 3rd Gen (Milan / Zen 3)")
     # Results for each action count tested (key: num_actions, value: measurement result)
     benchmark_results: Dict[int, BenchmarkMeasurement] = field(default_factory=dict)
+    # Warmup phase results
+    warmup_result: Optional[WarmupResult] = None

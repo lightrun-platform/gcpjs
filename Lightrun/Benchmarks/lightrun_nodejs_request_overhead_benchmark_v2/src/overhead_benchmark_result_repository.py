@@ -8,19 +8,58 @@ from typing import List, Dict, Any
 from Lightrun.Benchmarks.shared_modules.authentication.authenticator import AuthenticationType
 from Lightrun.Benchmarks.shared_modules.benchmark_result_repository import BenchmarkResultRepository
 from Lightrun.Benchmarks.shared_modules.cpu_model import CpuModel
-from .lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO, BenchmarkMeasurement
+from .lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO, BenchmarkMeasurement, WarmupMeasurement, WarmupResult
 from .overhead_benchmark_result import Failure, LightrunOverheadBenchmarkResult, Success
 
 RAW_FILENAME = "benchmark_raw_data.json"
 
 
-def _dict_to_dto(c: Dict[str, Any], cpu_model: str | None = None, benchmark_results: Dict[int, BenchmarkMeasurement] | None = None) -> LightrunOverheadBenchmarkCaseDTO:
+def _dict_to_warmup_result(d: Dict[str, Any] | None) -> WarmupResult | None:
+    """Convert a dict to WarmupResult, or return None if no warmup data."""
+    if not d:
+        return None
+    
+    measurements = [
+        WarmupMeasurement(**m) for m in d.get("measurements", [])
+    ]
+    
+    return WarmupResult(
+        measurements=measurements,
+        total_requests=d.get("total_requests", len(measurements)),
+        stabilized=d.get("stabilized", False),
+        stability_achieved_at_request=d.get("stability_achieved_at_request"),
+        timeout_seconds=d.get("timeout_seconds", 0),
+        max_requests=d.get("max_requests", 0),
+        stability_window=d.get("stability_window", 0),
+        stability_tolerance=d.get("stability_tolerance", 0.0),
+    )
+
+
+def _warmup_result_to_dict(warmup: WarmupResult | None) -> Dict[str, Any] | None:
+    """Convert WarmupResult to dict for JSON serialization."""
+    if not warmup:
+        return None
+    
+    return {
+        "measurements": [asdict(m) for m in warmup.measurements],
+        "total_requests": warmup.total_requests,
+        "stabilized": warmup.stabilized,
+        "stability_achieved_at_request": warmup.stability_achieved_at_request,
+        "timeout_seconds": warmup.timeout_seconds,
+        "max_requests": warmup.max_requests,
+        "stability_window": warmup.stability_window,
+        "stability_tolerance": warmup.stability_tolerance,
+    }
+
+
+def _dict_to_dto(c: Dict[str, Any], cpu_model: str | None = None, benchmark_results: Dict[int, BenchmarkMeasurement] | None = None, warmup_result: WarmupResult | None = None) -> LightrunOverheadBenchmarkCaseDTO:
     """Build LightrunOverheadBenchmarkCaseDTO from saved case dict (missing fields use defaults).
     
     Args:
         c: Dictionary of case fields
         cpu_model: Optional identified CPU model (parsed from cpu_info at load time)
         benchmark_results: Optional dict of measurement results keyed by action count
+        warmup_result: Optional warmup phase result
     """
     return LightrunOverheadBenchmarkCaseDTO(
         name=c.get("name", ""),
@@ -49,6 +88,7 @@ def _dict_to_dto(c: Dict[str, Any], cpu_model: str | None = None, benchmark_resu
         delete_result=None,
         cpu_model=cpu_model or c.get("cpu_model"),  # Use passed value or try from dict
         benchmark_results=benchmark_results or c.get("benchmark_results", {}),
+        warmup_result=warmup_result,
     )
 
 
@@ -82,6 +122,8 @@ def _dto_to_dict(dto: LightrunOverheadBenchmarkCaseDTO) -> Dict[str, Any]:
     }
     if dto.cpu_model:
         d["cpu_model"] = dto.cpu_model
+    if dto.warmup_result:
+        d["warmup_result"] = _warmup_result_to_dict(dto.warmup_result)
     return d
 
 
@@ -177,7 +219,10 @@ class LightrunOverheadBenchmarkResultRepository(BenchmarkResultRepository[Lightr
                 for k, v in raw_benchmark_results.items()
             } if raw_benchmark_results else {}
             
-            dto = _dict_to_dto(case_dict, cpu_model=cpu_model, benchmark_results=benchmark_results)
+            # Parse warmup_result if present
+            warmup_result = _dict_to_warmup_result(case_dict.get("warmup_result"))
+            
+            dto = _dict_to_dto(case_dict, cpu_model=cpu_model, benchmark_results=benchmark_results, warmup_result=warmup_result)
             success = result_dict.get("success", False)
             if success:
                 results.append(

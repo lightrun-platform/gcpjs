@@ -4,7 +4,7 @@ from typing import List, Dict
 
 import time
 
-from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO, BenchmarkMeasurement
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO, BenchmarkMeasurement, WarmupMeasurement, WarmupResult
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.gcf_models.benchmark_result import LightrunBenchmarkResult
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
@@ -29,6 +29,12 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
     AGENT_POLL_INTERVAL_SECONDS = 1
     AGENT_POLL_TIMEOUT_GRACE_SECONDS = 40
     DEFAULT_DELAY_BETWEEN_TESTS_SECONDS = 10
+
+    # Default warmup configuration
+    DEFAULT_WARMUP_TIMEOUT_SECONDS = 120
+    DEFAULT_WARMUP_MAX_REQUESTS = 200
+    DEFAULT_WARMUP_STABILITY_WINDOW = 100
+    DEFAULT_WARMUP_STABILITY_TOLERANCE = 0.05  # 5%
 
     def __init__(self,
                  *,
@@ -57,7 +63,11 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  agent_actions_update_interval_seconds: int,
                  lightrun_agent_log_level: str,
                  required_cpu_model: str | None = None,
-                 delay_between_tests_seconds: int | None = None):
+                 delay_between_tests_seconds: int | None = None,
+                 warmup_timeout_seconds: int | None = None,
+                 warmup_max_requests: int | None = None,
+                 warmup_stability_window: int | None = None,
+                 warmup_stability_tolerance: float | None = None):
         super().__init__(deployment_timeout, delete_timeout, clean_after_run=clean_after_run)
         self.benchmark_name = benchmark_name
         self.runtime = runtime
@@ -81,10 +91,19 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         self.authentication_type = authentication_type
         self.required_cpu_model = required_cpu_model
         self.delay_between_tests_seconds = delay_between_tests_seconds or self.DEFAULT_DELAY_BETWEEN_TESTS_SECONDS
+        
+        # Warmup configuration
+        self.warmup_timeout_seconds = warmup_timeout_seconds or self.DEFAULT_WARMUP_TIMEOUT_SECONDS
+        self.warmup_max_requests = warmup_max_requests or self.DEFAULT_WARMUP_MAX_REQUESTS
+        self.warmup_stability_window = warmup_stability_window or self.DEFAULT_WARMUP_STABILITY_WINDOW
+        self.warmup_stability_tolerance = warmup_stability_tolerance if warmup_stability_tolerance is not None else self.DEFAULT_WARMUP_STABILITY_TOLERANCE
+        
         self._gcp_function = None
         self._logger = logger_factory.get_logger(self.name)
         # Results for each action count tested (key: num_actions, value: measurement result)
         self.benchmark_results: Dict[int, BenchmarkMeasurement] = {}
+        # Warmup result
+        self.warmup_result: WarmupResult | None = None
 
 
         match authentication_type:
@@ -122,7 +141,8 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         lightrun_agent_log_level = self.lightrun_agent_log_level,
         deployment_result=self.deployment_result,
         delete_result=self.delete_result,
-        benchmark_results=self.benchmark_results
+        benchmark_results=self.benchmark_results,
+        warmup_result=self.warmup_result
         )
 
     @property
@@ -306,9 +326,125 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         self.logger.warning(f"Timed out waiting for actions to be accepted after {max_wait}s. Pending actions: {[action for action in debug_session.actions if action.action_id not in bounded_action_ids ]}")
         return False
 
-    def warmup(self):
-        # Todo - important! add definition later.
-        pass # stub
+    def warmup(self, send_task: SendRequestTask) -> WarmupResult:
+        """
+        Warm up the function by sending successive requests until stable performance is achieved.
+        
+        The warmup continues until one of these conditions is met:
+        1. Timeout is reached
+        2. The run time of N successive requests is within X% of each other (stability achieved)
+        3. Maximum number of warmup requests is reached
+        
+        Args:
+            send_task: The SendRequestTask to use for sending requests
+            
+        Returns:
+            WarmupResult containing all measurements and metadata about the warmup phase
+        """
+        self.logger.info(f"Starting warmup phase (timeout={self.warmup_timeout_seconds}s, "
+                        f"max_requests={self.warmup_max_requests}, "
+                        f"stability_window={self.warmup_stability_window}, "
+                        f"stability_tolerance={self.warmup_stability_tolerance*100:.1f}%)")
+        
+        measurements: List[WarmupMeasurement] = []
+        start_time_ns = time.time_ns()
+        stabilized = False
+        stability_achieved_at = None
+        
+        for request_num in range(1, self.warmup_max_requests + 1):
+            # Check timeout
+            elapsed_ns = time.time_ns() - start_time_ns
+            elapsed_seconds = elapsed_ns / 1_000_000_000
+            if elapsed_seconds >= self.warmup_timeout_seconds:
+                self.logger.info(f"Warmup timeout reached after {request_num - 1} requests ({elapsed_seconds:.1f}s)")
+                break
+            
+            # Send request
+            result = send_task.execute()
+            
+            if not result or 'handlerRunTime' not in result:
+                self.logger.warning(f"Warmup request {request_num} failed or missing handlerRunTime: {result}")
+                continue
+            
+            handler_run_time_ns = int(result['handlerRunTime'])
+            timestamp_ns = time.time_ns() - start_time_ns
+            
+            measurement = WarmupMeasurement(
+                request_number=request_num,
+                handler_run_time_ns=handler_run_time_ns,
+                timestamp_ns=timestamp_ns
+            )
+            measurements.append(measurement)
+            
+            # Log progress every 10 requests
+            if request_num % 10 == 0 or request_num <= 5:
+                self.logger.info(f"Warmup request {request_num}: {handler_run_time_ns / 1_000_000:.2f}ms")
+            
+            # Check for stability if we have enough measurements
+            if len(measurements) >= self.warmup_stability_window:
+                if self._check_warmup_stability(measurements):
+                    stabilized = True
+                    stability_achieved_at = request_num
+                    self.logger.info(f"Warmup stability achieved at request {request_num} "
+                                   f"(last {self.warmup_stability_window} requests within "
+                                   f"{self.warmup_stability_tolerance*100:.1f}% of each other)")
+                    break
+        
+        total_requests = len(measurements)
+        elapsed_seconds = (time.time_ns() - start_time_ns) / 1_000_000_000
+        
+        # Calculate summary statistics for logging
+        if measurements:
+            run_times = [m.handler_run_time_ns for m in measurements]
+            avg_time_ms = sum(run_times) / len(run_times) / 1_000_000
+            min_time_ms = min(run_times) / 1_000_000
+            max_time_ms = max(run_times) / 1_000_000
+            
+            self.logger.info(f"Warmup completed: {total_requests} requests in {elapsed_seconds:.1f}s")
+            self.logger.info(f"  Stabilized: {stabilized}" + 
+                           (f" (at request {stability_achieved_at})" if stability_achieved_at else ""))
+            self.logger.info(f"  Avg: {avg_time_ms:.2f}ms, Min: {min_time_ms:.2f}ms, Max: {max_time_ms:.2f}ms")
+        else:
+            self.logger.warning("Warmup completed with no successful measurements")
+        
+        warmup_result = WarmupResult(
+            measurements=measurements,
+            total_requests=total_requests,
+            stabilized=stabilized,
+            stability_achieved_at_request=stability_achieved_at,
+            timeout_seconds=self.warmup_timeout_seconds,
+            max_requests=self.warmup_max_requests,
+            stability_window=self.warmup_stability_window,
+            stability_tolerance=self.warmup_stability_tolerance
+        )
+        
+        self.warmup_result = warmup_result
+        return warmup_result
+    
+    def _check_warmup_stability(self, measurements: List[WarmupMeasurement]) -> bool:
+        """
+        Check if the last N measurements are within the stability tolerance.
+        
+        Returns True if the max and min values in the stability window
+        are within the tolerance percentage of each other.
+        """
+        if len(measurements) < self.warmup_stability_window:
+            return False
+        
+        # Get the last N measurements
+        window = measurements[-self.warmup_stability_window:]
+        run_times = [m.handler_run_time_ns for m in window]
+        
+        min_time = min(run_times)
+        max_time = max(run_times)
+        
+        if min_time == 0:
+            return False
+        
+        # Check if max is within tolerance of min
+        # i.e., (max - min) / min <= tolerance
+        relative_diff = (max_time - min_time) / min_time
+        return relative_diff <= self.warmup_stability_tolerance
 
     def _create_actions_for_count(self, num_actions: int) -> List[BreakpointAction | LogAction]:
         """Create a list of actions for a given action count."""
@@ -501,8 +637,8 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
             if cold_start_request and 'cpuInfo' in cold_start_request:
                 cpu_info_cache['cpu_info'] = cold_start_request['cpuInfo']
             
-            # Warmup phase
-            self.warmup()
+            # Warmup phase - send successive requests until stable performance
+            self.warmup(send_task)
             
             # Run measurements for each action count: 0, 1, 2, ..., test_size
             for num_actions in range(self.test_size + 1):

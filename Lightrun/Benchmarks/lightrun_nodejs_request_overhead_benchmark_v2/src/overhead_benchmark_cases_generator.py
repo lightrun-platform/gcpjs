@@ -85,6 +85,10 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
                             lightrun_agent_log_level=benchmark_config.lightrun_agent_log_level,
                             required_cpu_model=benchmark_config.required_cpu_model,
                             delay_between_tests_seconds=benchmark_config.delay_between_requests,
+                            warmup_timeout_seconds=benchmark_config.warmup_timeout,
+                            warmup_max_requests=benchmark_config.warmup_max_requests,
+                            warmup_stability_window=benchmark_config.warmup_stability_window,
+                            warmup_stability_tolerance=benchmark_config.warmup_stability_tolerance,
                         )
                         cases.append(case)
                 

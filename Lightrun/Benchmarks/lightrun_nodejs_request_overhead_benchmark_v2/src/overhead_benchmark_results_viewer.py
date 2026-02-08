@@ -44,6 +44,7 @@ class LightrunOverheadReportVisualizer(BenchmarkResultsVisualizer[LightrunOverhe
         summary = data.get("summary", {})
         by_allocation = data.get("by_allocation", {})
         by_group = data.get("by_group", {})
+        warmup_data = data.get("warmup", {})
 
         # Global summary
         summary_lines = [
@@ -160,8 +161,145 @@ class LightrunOverheadReportVisualizer(BenchmarkResultsVisualizer[LightrunOverhe
                 ])
             allocation_sections.append("\n".join(section_lines))
 
+        # Section: Warmup analysis
+        warmup_sections = []
+        warmup_datasets_js = []
+        warmup_cases = warmup_data.get("cases", [])
+        warmup_summary = warmup_data.get("summary", {})
+        
+        if warmup_cases:
+            # Warmup summary table
+            warmup_summary_lines = [
+                "<h3>Warmup Summary</h3>",
+                "<table border='1' cellpadding='6'><tbody>",
+                f"<tr><td>Total cases with warmup</td><td>{warmup_summary.get('total_cases_with_warmup', 0)}</td></tr>",
+                f"<tr><td>Cases that stabilized</td><td>{warmup_summary.get('cases_stabilized', 0)}</td></tr>",
+                f"<tr><td>Cases that did NOT stabilize</td><td>{warmup_summary.get('cases_not_stabilized', 0)}</td></tr>",
+            ]
+            if warmup_summary.get("all_run_times_ns"):
+                h = warmup_summary["all_run_times_ns"]
+                warmup_summary_lines.extend([
+                    f"<tr><td>All run times Min (ns)</td><td>{h['min']}</td></tr>",
+                    f"<tr><td>All run times Max (ns)</td><td>{h['max']}</td></tr>",
+                    f"<tr><td>All run times Mean (ns)</td><td>{h['mean']:.0f}</td></tr>",
+                    f"<tr><td>All run times Median (ns)</td><td>{h['median']:.0f}</td></tr>",
+                ])
+            warmup_summary_lines.append("</tbody></table>")
+            warmup_sections.append("\n".join(warmup_summary_lines))
+            
+            # Per-case warmup details and chart data
+            for idx, case in enumerate(warmup_cases):
+                status = "STABILIZED" if case["stabilized"] else "NOT STABILIZED"
+                stab_at = f" at request {case['stability_achieved_at_request']}" if case.get("stability_achieved_at_request") else ""
+                case_name = case.get("case_name", f"Case {idx+1}")
+                memory = case.get("memory", "")
+                cpu = case.get("cpu", "")
+                cpu_model = case.get("cpu_model") or "Unknown"
+                stats = case.get("stats", {})
+                config = case.get("config", {})
+                
+                case_lines = [
+                    f"<h4>{case_name}</h4>",
+                    "<table border='1' cellpadding='6'><tbody>",
+                    f"<tr><td>Allocation</td><td>{memory} / {cpu} CPU</td></tr>",
+                    f"<tr><td>Processor</td><td>{cpu_model}</td></tr>",
+                    f"<tr><td>Status</td><td>{status}{stab_at}</td></tr>",
+                    f"<tr><td>Total requests</td><td>{case.get('total_requests', 0)}</td></tr>",
+                ]
+                if stats:
+                    case_lines.extend([
+                        f"<tr><td>Min run time (ns)</td><td>{stats.get('min_ns', 0)}</td></tr>",
+                        f"<tr><td>Max run time (ns)</td><td>{stats.get('max_ns', 0)}</td></tr>",
+                        f"<tr><td>Mean run time (ns)</td><td>{stats.get('mean_ns', 0):.0f}</td></tr>",
+                        f"<tr><td>Median run time (ns)</td><td>{stats.get('median_ns', 0):.0f}</td></tr>",
+                    ])
+                if config:
+                    case_lines.extend([
+                        f"<tr><td>Config</td><td>timeout={config.get('timeout_seconds', 0)}s, max={config.get('max_requests', 0)}, "
+                        f"window={config.get('stability_window', 0)}, tolerance={config.get('stability_tolerance', 0)*100:.1f}%</td></tr>",
+                    ])
+                case_lines.append("</tbody></table>")
+                warmup_sections.append("\n".join(case_lines))
+                
+                # Chart data for this case's warmup
+                measurements = case.get("measurements", [])
+                if measurements:
+                    scatter_data = [{"x": m["request_number"], "y": m["handler_run_time_ns"]} for m in measurements]
+                    short_model = cpu_model.split("(")[0].strip() if "(" in cpu_model else cpu_model[:15]
+                    warmup_datasets_js.append({
+                        "label": f"{memory}/{cpu} | {short_model}",
+                        "data": scatter_data,
+                    })
+
         # Serialize for embedding in JS
         datasets_js = json.dumps(group_datasets_js)
+        warmup_datasets_js_str = json.dumps(warmup_datasets_js)
+
+        # Warmup section HTML (only if we have warmup data)
+        warmup_html = ""
+        if warmup_cases:
+            warmup_html = f"""
+  <h2>Warmup Analysis</h2>
+  <p>The warmup phase sends successive requests until the function reaches stable performance.
+  Stability is achieved when the last N requests have run times within a specified tolerance of each other.</p>
+  {"".join(warmup_sections)}
+  
+  <h2>Warmup: Handler run time vs request number</h2>
+  <p>Shows how run time changes as the function warms up. Initial requests typically have higher latency.</p>
+  <div class="chart-container">
+    <canvas id="warmupChart"></canvas>
+  </div>
+"""
+
+        # Warmup chart script (only if we have warmup data)
+        warmup_chart_script = ""
+        if warmup_cases:
+            warmup_chart_script = f"""
+    // Warmup chart
+    const warmupDatasets = {warmup_datasets_js_str};
+    const warmupChartDatasets = [];
+    warmupDatasets.forEach((ds, i) => {{
+      const c = colors[i % colors.length];
+      warmupChartDatasets.push({{
+        label: ds.label,
+        data: ds.data,
+        backgroundColor: c.scatter,
+        borderColor: c.line,
+        pointRadius: 3,
+        showLine: true,
+        tension: 0.1,
+      }});
+    }});
+    const warmupCtx = document.getElementById('warmupChart').getContext('2d');
+    new Chart(warmupCtx, {{
+      type: 'scatter',
+      data: {{ datasets: warmupChartDatasets }},
+      options: {{
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {{
+          x: {{
+            title: {{ display: true, text: 'Warmup request number' }},
+            type: 'linear',
+          }},
+          y: {{
+            title: {{ display: true, text: 'Handler run time (ns)' }},
+            type: 'linear',
+          }},
+        }},
+        plugins: {{
+          legend: {{ position: 'top' }},
+          tooltip: {{
+            callbacks: {{
+              label: function(ctx) {{
+                return 'Request ' + ctx.raw.x + ': ' + ctx.raw.y + ' ns';
+              }},
+            }},
+          }},
+        }},
+      }},
+    }});
+"""
 
         html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -198,6 +336,8 @@ class LightrunOverheadReportVisualizer(BenchmarkResultsVisualizer[LightrunOverhe
   <h2>Results by Allocation (Aggregated)</h2>
   <p><em>Warning: These results aggregate across different processor types. For precise comparison, use the 'By Group' section above.</em></p>
   {"".join(allocation_sections)}
+  
+  {warmup_html}
   
   <script>
     const groupDatasets = {datasets_js};
@@ -260,6 +400,7 @@ class LightrunOverheadReportVisualizer(BenchmarkResultsVisualizer[LightrunOverhe
         }},
       }},
     }});
+    {warmup_chart_script}
   </script>
 </body>
 </html>

@@ -396,6 +396,32 @@ class CLIParser:
             help='Show all valid CPU model values for --required-cpu-model and exit'
         )
         
+        # Warmup parameters
+        parser.add_argument(
+            '--warmup-timeout',
+            type=int,
+            default=300,
+            help='Maximum time in seconds for the warmup phase (default: 300)'
+        )
+        parser.add_argument(
+            '--warmup-max-requests',
+            type=int,
+            default=2000,
+            help='Maximum number of warmup requests to send (default: 2000)'
+        )
+        parser.add_argument(
+            '--warmup-stability-window',
+            type=int,
+            default=50,
+            help='Number of successive requests that must be within tolerance to consider warmup complete (default: 50)'
+        )
+        parser.add_argument(
+            '--warmup-stability-tolerance',
+            type=float,
+            default=0.05,
+            help='Maximum relative difference (as fraction) between request times to consider stable (default: 0.05 = 5%%)'
+        )
+        
         args = parser.parse_args()
         
         # Handle --help-cpu-models
