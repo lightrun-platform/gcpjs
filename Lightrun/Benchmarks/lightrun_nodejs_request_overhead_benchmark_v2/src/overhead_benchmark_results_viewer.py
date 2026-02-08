@@ -9,9 +9,7 @@ from Lightrun.Benchmarks.shared_modules.benchmark_results_visualizer import (
 from .overhead_benchmark_result import LightrunOverheadBenchmarkResult
 
 
-class LightrunOverheadReportVisualizer(
-    BenchmarkResultsVisualizer[LightrunOverheadBenchmarkResult]
-):
+class LightrunOverheadReportVisualizer(BenchmarkResultsVisualizer[LightrunOverheadBenchmarkResult]):
     """Visualizes results for Lightrun overhead benchmark: summary and regression plot."""
 
     def __init__(self) -> None:

@@ -7,7 +7,7 @@ from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.gcf_models.benchmark_result import LightrunBenchmarkResult
 
 
-class BenchmarkReportGenerator[T: LightrunBenchmarkResult](ABC):
+class BenchmarkReportGenerator[T](ABC):
 
     @abstractmethod
     def generate_report(self, benchmark_results: List[BenchmarkCase[T]], save_path: Path) -> Path:

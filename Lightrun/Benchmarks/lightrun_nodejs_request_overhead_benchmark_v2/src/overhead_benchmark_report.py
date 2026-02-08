@@ -156,9 +156,7 @@ def _write_report_files(
     return report_path
 
 
-class LightrunOverheadReportGenerator(
-    BenchmarkReportGenerator[LightrunOverheadBenchmarkResult]
-):
+class LightrunOverheadReportGenerator(BenchmarkReportGenerator[LightrunOverheadBenchmarkResult]):
     """Generates reports for Lightrun overhead benchmark."""
 
     def load_benchmark_data(

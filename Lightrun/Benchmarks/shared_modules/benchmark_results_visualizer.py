@@ -1,6 +1,5 @@
 
 from abc import ABC, abstractmethod
-from typing import List
 from pathlib import Path
 
 class BenchmarkResultsVisualizer[T](ABC):

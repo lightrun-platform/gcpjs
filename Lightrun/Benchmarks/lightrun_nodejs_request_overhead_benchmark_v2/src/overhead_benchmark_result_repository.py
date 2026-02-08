@@ -4,45 +4,15 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any
 
-from Lightrun.Benchmarks.shared_modules.benchmark_result_repository import (
-    BenchmarkResultRepository,
-)
-from .overhead_benchmark_result import (
-    OverheadBenchmarkCaseDTO,
-    LightrunOverheadBenchmarkResult,
-    Success,
-    LightrunOverheadBenchmarkFailure,
-)
+from Lightrun.Benchmarks.shared_modules.benchmark_result_repository import BenchmarkResultRepository
+from .lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO
+from .overhead_benchmark_result import OverheadBenchmarkCaseDTO, LightrunOverheadBenchmarkResult, Success, LightrunOverheadBenchmarkFailure
+from ...shared_modules.gcf_models.benchmark_result import LightrunBenchmarkResult
 
 RAW_FILENAME = "benchmark_raw_data.json"
 
 
-def _identity_to_dict(identity: OverheadBenchmarkCaseDTO) -> Dict[str, Any]:
-    """Serialize case identity to JSON-suitable dict."""
-    return {
-        "name": identity.name,
-        "num_actions": identity.num_actions,
-        "region": identity.region,
-        "runtime": identity.runtime,
-        "action_type": identity.action_type,
-        "benchmark_name": identity.benchmark_name,
-        "source_code_dir": str(identity.source_code_dir),
-        "entry_point": identity.entry_point,
-        "project": identity.project,
-        "memory": identity.memory,
-        "cpu": identity.cpu,
-        "timeout": identity.timeout,
-        "gen2": identity.gen2,
-        "lightrun_version": identity.lightrun_version,
-        "deployment_timeout_seconds": identity.deployment_timeout_seconds,
-        "delete_timeout_seconds": identity.delete_timeout_seconds,
-        "clean_after_run": identity.clean_after_run,
-        "agent_actions_update_interval_seconds": identity.agent_actions_update_interval_seconds,
-        "lightrun_agent_log_level": identity.lightrun_agent_log_level,
-    }
-
-
-def _dict_to_identity(c: Dict[str, Any]) -> OverheadBenchmarkCaseDTO:
+def _dict_to_dto(c: Dict[str, Any]) -> OverheadBenchmarkCaseDTO:
     """Build OverheadBenchmarkCaseIdentity from saved case dict."""
     return OverheadBenchmarkCaseDTO(
         name=c.get("name", ""),
@@ -71,12 +41,10 @@ def _dict_to_identity(c: Dict[str, Any]) -> OverheadBenchmarkCaseDTO:
 
 def _result_to_case_dict(r: LightrunOverheadBenchmarkResult) -> Dict[str, Any]:
     """Serialize case identity from a result for JSON."""
-    return _identity_to_dict(r.benchmark_props_dto)
+    return _dto_to_dict(r.benchmark_props_dto)
 
 
-class LightrunOverheadBenchmarkResultRepository(
-    BenchmarkResultRepository[LightrunOverheadBenchmarkResult]
-):
+class LightrunOverheadBenchmarkResultRepository(BenchmarkResultRepository[LightrunBenchmarkResult[LightrunOverheadBenchmarkCaseDTO]]):
     """Saves and loads overhead benchmark raw data as JSON."""
 
     def save_benchmark_data(
@@ -143,7 +111,7 @@ class LightrunOverheadBenchmarkResultRepository(
         for entry in runs:
             case_dict = entry.get("case", {})
             result_dict = entry.get("result", {})
-            identity = _dict_to_identity(case_dict)
+            identity = _dict_to_dto(case_dict)
             success = result_dict.get("success", False)
             if success:
                 results.append(
