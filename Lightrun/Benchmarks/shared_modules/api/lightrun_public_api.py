@@ -126,13 +126,11 @@ class LightrunPublicAPI(LightrunAPI):
             self._handle_api_error_or_raise(e, "create log")
         return None
 
-    def get_snapshot(self, snapshot_id: str, agent_pool_id: str = None) -> Optional[dict]:
+    def get_snapshot(self, snapshot_id: str, agent_pool_id: str) -> Optional[dict]:
         """Get a snapshot action by ID."""
         try:
             url = f"{self.api_url}/api/v1/actions/snapshots/{snapshot_id}"
-            params = {}
-            if agent_pool_id:
-                params['agentPoolId'] = agent_pool_id
+            params = {'agentPoolId': agent_pool_id}
             response = self.authenticator.send_authenticated_request(self.session, 'GET', url, params=params, timeout=10)
             if response.status_code == 200:
                 return response.json()
@@ -142,13 +140,11 @@ class LightrunPublicAPI(LightrunAPI):
             self.logger.exception(f"Error fetching snapshot: {e}")
         return None
 
-    def get_log(self, log_id: str, agent_pool_id: str = None) -> Optional[dict]:
+    def get_log(self, log_id: str, agent_pool_id: str) -> Optional[dict]:
         """Get a log action by ID."""
         try:
             url = f"{self.api_url}/api/v1/actions/logs/{log_id}"
-            params = {}
-            if agent_pool_id:
-                params['agentPoolId'] = agent_pool_id
+            params = {'agentPoolId': agent_pool_id}
             response = self.authenticator.send_authenticated_request(self.session, 'GET', url, params=params, timeout=10)
             if response.status_code == 200:
                 return response.json()

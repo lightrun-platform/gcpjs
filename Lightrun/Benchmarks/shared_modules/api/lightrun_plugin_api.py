@@ -319,9 +319,10 @@ class LightrunPluginAPI(LightrunAPI):
             self._handle_api_error_or_raise(e, "create log (Internal)")
         return None
 
-    def get_action(self, snapshot_id: str) -> Optional[dict]:
+    def get_action(self, action_id: str, agent_pool_id: str) -> Optional[dict]:
         try:
-            url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/getAction/{snapshot_id}"
+            # url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/getAction/{snapshot_id}"
+            url = f"/athena/company/{self.company_id}/agent-pools/{agent_pool_id}/{self.api_version}/action/{action_id}"
             headers = {"client-info": get_client_info_header(self.api_version)}
             response = self.authenticator.send_authenticated_request(self.session, 'GET', url, headers=headers, timeout=10)
             response.raise_for_status()
@@ -331,11 +332,11 @@ class LightrunPluginAPI(LightrunAPI):
             self.logger.exception(f"Error fetching action: {e}")
         return None
 
-    def get_snapshot(self, snapshot_id: str) -> Optional[dict]:
-        return self.get_action(snapshot_id)
+    def get_snapshot(self, snapshot_id: str, agent_pool_id: str) -> Optional[dict]:
+        return self.get_action(snapshot_id, agent_pool_id)
 
-    def get_log(self, log_id: str) -> Optional[dict]:
-        return self.get_action(log_id)
+    def get_log(self, log_id: str, agent_pool_id: str) -> Optional[dict]:
+        return self.get_action(log_id, agent_pool_id)
 
     def delete_lightrun_action(self, action_id: str, pool_id: str) -> bool:
         """Delete any action (snapshot, log, etc.) by its ID."""

@@ -92,11 +92,11 @@ class LightrunAPI(ABC):
         pass
 
     @abstractmethod
-    def get_snapshot(self, snapshot_id: str) -> Optional[dict]:
+    def get_snapshot(self, snapshot_id: str, agent_pool_id: str) -> Optional[dict]:
         pass
 
     @abstractmethod
-    def get_log(self, log_id: str) -> Optional[dict]:
+    def get_log(self, log_id: str, agent_pool_id: str) -> Optional[dict]:
         pass
 
     @abstractmethod
