@@ -9,6 +9,10 @@ from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 class BenchmarkReportGenerator[T](ABC):
 
     @abstractmethod
+    def save_benchmark_data(self, benchmark_results: List[BenchmarkCase[T]], save_path: Path) -> Path:
+        pass
+
+    @abstractmethod
     def generate_report(self, benchmark_results: List[BenchmarkCase[T]], save_path: Path) -> Path:
         """Generate a report file from the benchmark results and saves it to the given directory."""
         pass

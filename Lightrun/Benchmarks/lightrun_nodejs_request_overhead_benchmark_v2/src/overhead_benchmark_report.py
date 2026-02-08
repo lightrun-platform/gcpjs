@@ -1,13 +1,17 @@
 from pathlib import Path
 from typing import List
 from Lightrun.Benchmarks.shared_modules.benchmark_report_generator import BenchmarkReportGenerator
-from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
+
+from .overhead_benchmark_case import LightrunOverheadBenchmarkCase
 from .overhead_benchmark_result import LightrunOverheadBenchmarkResult
 
 class LightrunOverheadReportGenerator(BenchmarkReportGenerator[LightrunOverheadBenchmarkResult]):
     """Generates reports for Lightrun overhead benchmark."""
 
-    def generate_report(self, benchmark_results: List[BenchmarkCase[LightrunOverheadBenchmarkResult]], save_path: Path) -> Path:
+    def save_benchmark_data(self, benchmark_results: List[LightrunOverheadBenchmarkCase[LightrunOverheadBenchmarkResult]], save_path: Path) -> Path:
+        pass
+
+    def generate_report(self, benchmark_results: List[LightrunOverheadBenchmarkCase[LightrunOverheadBenchmarkResult]], save_path: Path) -> Path:
         """Generate a report file from the benchmark results and saves it to the given directory."""
         report_path = save_path / "benchmark_report.txt"
         with open(report_path, "w") as f:

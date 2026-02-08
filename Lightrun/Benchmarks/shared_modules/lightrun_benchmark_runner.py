@@ -53,6 +53,7 @@ class LightrunBenchmark[T]:
         self.benchmark_cases = self.benchmark_cases_generator.generate_benchmark_cases(self.benchmark_name, self.benchmark_parameters, self.logger_factory, self.test_results_dir)
         self.benchmark_manager = BenchmarkManager(self.benchmark_parameters.num_workers, self.logger_factory)
         self.benchmark_manager.run(self.benchmark_cases)
+        self.benchmark_report = self.benchmark_report_generator.save_benchmark_data(self.benchmark_cases, self.test_results_dir)
         self.benchmark_report = self.benchmark_report_generator.generate_report(self.benchmark_cases, self.test_results_dir)
         self.benchmark_report_visualizations = self.benchmark_report_visualizer.create_visualizations(self.benchmark_report, self.test_results_dir)
 
