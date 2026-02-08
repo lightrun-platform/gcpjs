@@ -4,17 +4,17 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any
 
+from Lightrun.Benchmarks.shared_modules.authentication.authenticator import AuthenticationType
 from Lightrun.Benchmarks.shared_modules.benchmark_result_repository import BenchmarkResultRepository
 from .lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO
-from .overhead_benchmark_result import OverheadBenchmarkCaseDTO, LightrunOverheadBenchmarkResult, Success, LightrunOverheadBenchmarkFailure
-from ...shared_modules.gcf_models.benchmark_result import LightrunBenchmarkResult
+from .overhead_benchmark_result import Failure, LightrunOverheadBenchmarkResult, Success
 
 RAW_FILENAME = "benchmark_raw_data.json"
 
 
-def _dict_to_dto(c: Dict[str, Any]) -> OverheadBenchmarkCaseDTO:
-    """Build OverheadBenchmarkCaseIdentity from saved case dict."""
-    return OverheadBenchmarkCaseDTO(
+def _dict_to_dto(c: Dict[str, Any]) -> LightrunOverheadBenchmarkCaseDTO:
+    """Build LightrunOverheadBenchmarkCaseDTO from saved case dict (missing fields use defaults)."""
+    return LightrunOverheadBenchmarkCaseDTO(
         name=c.get("name", ""),
         num_actions=c.get("num_actions", 0),
         region=c.get("region", ""),
@@ -32,19 +32,49 @@ def _dict_to_dto(c: Dict[str, Any]) -> OverheadBenchmarkCaseDTO:
         deployment_timeout_seconds=c.get("deployment_timeout_seconds", 0),
         delete_timeout_seconds=c.get("delete_timeout_seconds", 0),
         clean_after_run=c.get("clean_after_run", False),
-        agent_actions_update_interval_seconds=c.get(
-            "agent_actions_update_interval_seconds", 0
-        ),
+        agent_actions_update_interval_seconds=c.get("agent_actions_update_interval_seconds", 0),
         lightrun_agent_log_level=c.get("lightrun_agent_log_level", ""),
+        lightrun_company_id=c.get("lightrun_company_id", ""),
+        lightrun_api_hostname=c.get("lightrun_api_hostname", ""),
+        authentication_type=AuthenticationType(c["authentication_type"]) if isinstance(c.get("authentication_type"), str) else AuthenticationType.API_KEY,
+        deployment_result=None,
+        delete_result=None,
     )
 
 
+def _dto_to_dict(dto: LightrunOverheadBenchmarkCaseDTO) -> Dict[str, Any]:
+    """Serialize DTO to dict for JSON (subset of fields we persist)."""
+    return {
+        "name": dto.name,
+        "num_actions": dto.num_actions,
+        "region": dto.region,
+        "runtime": dto.runtime,
+        "action_type": dto.action_type,
+        "benchmark_name": dto.benchmark_name,
+        "source_code_dir": str(dto.source_code_dir),
+        "entry_point": dto.entry_point,
+        "project": dto.project,
+        "memory": dto.memory,
+        "cpu": dto.cpu,
+        "timeout": dto.timeout,
+        "gen2": dto.gen2,
+        "lightrun_version": dto.lightrun_version,
+        "deployment_timeout_seconds": dto.deployment_timeout_seconds,
+        "delete_timeout_seconds": dto.delete_timeout_seconds,
+        "clean_after_run": dto.clean_after_run,
+        "agent_actions_update_interval_seconds": dto.agent_actions_update_interval_seconds,
+        "lightrun_agent_log_level": dto.lightrun_agent_log_level,
+        "lightrun_company_id": dto.lightrun_company_id,
+        "lightrun_api_hostname": dto.lightrun_api_hostname,
+        "authentication_type": dto.authentication_type.value,
+    }
+
+
 def _result_to_case_dict(r: LightrunOverheadBenchmarkResult) -> Dict[str, Any]:
-    """Serialize case identity from a result for JSON."""
-    return _dto_to_dict(r.benchmark_props_dto)
+    return _dto_to_dict(r.benchmark_dto)
 
 
-class LightrunOverheadBenchmarkResultRepository(BenchmarkResultRepository[LightrunBenchmarkResult[LightrunOverheadBenchmarkCaseDTO]]):
+class LightrunOverheadBenchmarkResultRepository(BenchmarkResultRepository[LightrunOverheadBenchmarkResult]):
     """Saves and loads overhead benchmark raw data as JSON."""
 
     def save_benchmark_data(
@@ -73,7 +103,7 @@ class LightrunOverheadBenchmarkResultRepository(BenchmarkResultRepository[Lightr
                         "cpu_info": result.cpu_info,
                     },
                 }
-            elif isinstance(result, LightrunOverheadBenchmarkFailure):
+            elif isinstance(result, Failure):
                 entry = {
                     "case": _result_to_case_dict(result),
                     "result": {
@@ -111,12 +141,12 @@ class LightrunOverheadBenchmarkResultRepository(BenchmarkResultRepository[Lightr
         for entry in runs:
             case_dict = entry.get("case", {})
             result_dict = entry.get("result", {})
-            identity = _dict_to_dto(case_dict)
+            dto = _dict_to_dto(case_dict)
             success = result_dict.get("success", False)
             if success:
                 results.append(
                     Success(
-                        benchmark_props=identity,
+                        benchmark_dto=dto,
                         handler_run_time_ns=result_dict["handler_run_time_ns"],
                         actions_count=result_dict["actions_count"],
                         cpu_info=result_dict["cpu_info"],
@@ -124,8 +154,8 @@ class LightrunOverheadBenchmarkResultRepository(BenchmarkResultRepository[Lightr
                 )
             else:
                 results.append(
-                    LightrunOverheadBenchmarkFailure(
-                        benchmark_dto=identity,
+                    Failure(
+                        benchmark_dto=dto,
                         error=result_dict.get("error", "No result"),
                         cpu_info=result_dict.get("cpu_info"),
                     )

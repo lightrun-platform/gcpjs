@@ -3,11 +3,12 @@ from pathlib import Path
 from typing import List, Iterator
 from Lightrun.Benchmarks.shared_modules.cli_parser import ParsedCLIArguments
 from .benchmark_case import BenchmarkCase
+from .gcf_models.benchmark_result import LightrunBenchmarkResult
 from .region_allocator import RegionAllocator
 from .logger_factory import LoggerFactory
 
 
-class BenchmarkCasesGenerator[T](ABC):
+class BenchmarkCasesGenerator[T: LightrunBenchmarkResult](ABC):
 
     REGIONS_ALLOCATOR = RegionAllocator()
 

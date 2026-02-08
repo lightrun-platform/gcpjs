@@ -2,13 +2,14 @@ from abc import ABC, abstractmethod
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
 from typing import Optional, List
 
+from Lightrun.Benchmarks.shared_modules.gcf_models.benchmark_result import LightrunBenchmarkResult
 from Lightrun.Benchmarks.shared_modules.gcf_models.delete_function_result import DeleteFunctionResult, DeleteSuccess, DeleteFailure
 from Lightrun.Benchmarks.shared_modules.gcf_task_primitives.deploy_function_task import DeployFunctionTask
 from Lightrun.Benchmarks.shared_modules.gcf_models.deploy_function_result import DeploymentResult, DeploymentSuccess, DeploymentFailure
-from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import LightrunOverheadBenchmarkFailure, Success
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import Success, Failure
 import logging
 
-class BenchmarkCase[T](ABC):
+class BenchmarkCase[T: LightrunBenchmarkResult](ABC):
     """A single unit of benchmark execution. self contains everything needed to run the benchmark case."""
 
     def __init__(self, deployment_timeout_seconds: int, delete_timeout_seconds: int, clean_after_run: bool) -> None:

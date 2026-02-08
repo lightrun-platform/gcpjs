@@ -6,10 +6,7 @@ from typing import List, Dict, Any
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.benchmark_report_generator import BenchmarkReportGenerator
 from .overhead_benchmark_result import Success, LightrunOverheadBenchmarkResult
-from .overhead_benchmark_result_repository import (
-    LightrunOverheadBenchmarkResultRepository,
-    RAW_FILENAME,
-)
+from .overhead_benchmark_result_repository import LightrunOverheadBenchmarkResultRepository, RAW_FILENAME
 
 
 def _linear_regression(

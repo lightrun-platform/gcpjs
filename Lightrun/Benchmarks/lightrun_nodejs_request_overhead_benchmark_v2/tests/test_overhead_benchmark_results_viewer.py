@@ -12,9 +12,7 @@ import sys
 sys.path.insert(0, str(_parent_dir))
 sys.path.insert(0, str(_parent_dir.parent.parent))
 
-from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_results_viewer import (
-    LightrunOverheadReportVisualizer,
-)
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_results_viewer import LightrunOverheadReportVisualizer
 
 
 def _make_report_data(

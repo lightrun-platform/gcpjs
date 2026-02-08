@@ -1,13 +1,12 @@
-
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Dict
+from typing import List
 
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.gcf_models.benchmark_result import LightrunBenchmarkResult
 
 
-class BenchmarkReportGenerator[T](ABC):
+class BenchmarkReportGenerator[T: LightrunBenchmarkResult](ABC):
 
     @abstractmethod
     def generate_report(self, benchmark_results: List[BenchmarkCase[T]], save_path: Path) -> Path:

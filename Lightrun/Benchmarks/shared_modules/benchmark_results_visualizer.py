@@ -2,7 +2,10 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-class BenchmarkResultsVisualizer[T](ABC):
+from Lightrun.Benchmarks.shared_modules.gcf_models.benchmark_result import LightrunBenchmarkResult
+
+
+class BenchmarkResultsVisualizer[T: LightrunBenchmarkResult](ABC):
 
     @abstractmethod
     def display(self) -> None:

@@ -5,7 +5,7 @@ from typing import List
 from Lightrun.Benchmarks.shared_modules.gcf_models.benchmark_result import LightrunBenchmarkResult
 
 
-class BenchmarkResultRepository[T](ABC):
+class BenchmarkResultRepository[T: LightrunBenchmarkResult](ABC):
 
     @abstractmethod
     def save_benchmark_data(self, benchmark_results: List[T], save_path: Path) -> Path:

@@ -2,9 +2,9 @@ import sys
 import argparse
 from pathlib import Path
 from datetime import datetime, timezone
-import logging
 
 from .benchmark_result_repository import BenchmarkResultRepository
+from .gcf_models.benchmark_result import LightrunBenchmarkResult
 
 # Add parent directories to path to import shared_modules
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -15,7 +15,7 @@ from .benchmark_results_visualizer import BenchmarkResultsVisualizer
 from .cli_parser import CLIParser
 from .logger_factory import LoggerFactory
 
-class LightrunBenchmark[T]:
+class LightrunBenchmark[T: LightrunBenchmarkResult]:
 
     def __init__(self,
                  cli_description: str,

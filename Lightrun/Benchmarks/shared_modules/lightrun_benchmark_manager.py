@@ -3,12 +3,11 @@ from typing import List
 
 from Lightrun.Benchmarks.shared_modules.benchmark_cases_generator import BenchmarkCase
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import logging
 
-
+from Lightrun.Benchmarks.shared_modules.gcf_models.benchmark_result import LightrunBenchmarkResult
 from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 
-class BenchmarkManager[T]:
+class BenchmarkManager[T: LightrunBenchmarkResult]:
 
     def __init__(self, num_workers: int, logger_factory: LoggerFactory):
         self.num_workers = num_workers

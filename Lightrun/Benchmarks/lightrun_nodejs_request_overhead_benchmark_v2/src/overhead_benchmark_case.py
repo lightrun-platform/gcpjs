@@ -345,12 +345,12 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 
                 # 7. Parse Result
                 if not result or 'handlerRunTime' not in result:
-                     return LightrunOverheadBenchmarkResult.FAILURE(self, error=f"Invalid response from function, missing 'handlerRunTime' attribute: {result}", cpu_info=None)
+                     return LightrunOverheadBenchmarkResult.FAILURE(benchmark_dto=self.to_dto(), error=f"Invalid response from function, missing 'handlerRunTime' attribute: {result}", cpu_info=None)
 
                 handler_run_time_ns = int(result['handlerRunTime'])
 
                 if not result or 'cpuInfo' not in result:
-                     return LightrunOverheadBenchmarkResult.FAILURE(self, error=f"Invalid response from function, missing 'cpuInfo' attribute: {result}", cpu_info=None)
+                     return LightrunOverheadBenchmarkResult.FAILURE(benchmark_dto=self.to_dto(), error=f"Invalid response from function, missing 'cpuInfo' attribute: {result}", cpu_info=None)
 
                 cpu_info = result['cpuInfo']
                 
@@ -407,4 +407,4 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
 
         except Exception as e:
             self.logger.exception(f"Benchmark execution failed with an exception: {e}")
-            return LightrunOverheadBenchmarkResult.FAILURE(self, error=str(e), cpu_info=None)
+            return LightrunOverheadBenchmarkResult.FAILURE(benchmark_dto=self.to_dto(), error=str(e), cpu_info=None)

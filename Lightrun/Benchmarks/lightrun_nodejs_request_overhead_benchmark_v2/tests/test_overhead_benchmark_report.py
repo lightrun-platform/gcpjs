@@ -16,8 +16,10 @@ sys.path.insert(0, str(_parent_dir.parent.parent))
 import Lightrun.Benchmarks  # noqa: E402
 sys.modules["Benchmarks"] = Lightrun.Benchmarks
 
-from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_report import LightrunOverheadReportGenerator,_linear_regression
-from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import OverheadBenchmarkCaseDTO, LightrunOverheadBenchmarkFailure, Success
+from Lightrun.Benchmarks.shared_modules.authentication.authenticator import AuthenticationType
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_report import LightrunOverheadReportGenerator, _linear_regression
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import Failure, Success
 from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result_repository import LightrunOverheadBenchmarkResultRepository, RAW_FILENAME
 
 
@@ -33,15 +35,40 @@ def _make_fake_case(name="fake", num_actions=0, region="r", runtime="nodejs20", 
     return obj
 
 
-def _default_identity() -> OverheadBenchmarkCaseDTO:
-    """Default case identity for test result construction."""
-    return OverheadBenchmarkCaseDTO()
+def _default_dto() -> LightrunOverheadBenchmarkCaseDTO:
+    """Minimal DTO for test result construction."""
+    return LightrunOverheadBenchmarkCaseDTO(
+        benchmark_name="bench",
+        name="fake",
+        runtime="nodejs20",
+        region="r",
+        source_code_dir=Path("."),
+        entry_point="index.js",
+        num_actions=0,
+        action_type="snapshot",
+        lightrun_company_id="",
+        lightrun_api_hostname="",
+        project="p",
+        memory="256Mi",
+        cpu="1",
+        timeout=60,
+        gen2=False,
+        deployment_timeout_seconds=300,
+        delete_timeout_seconds=120,
+        authentication_type=AuthenticationType.API_KEY,
+        lightrun_version="",
+        clean_after_run=False,
+        agent_actions_update_interval_seconds=0,
+        lightrun_agent_log_level="",
+        deployment_result=None,
+        delete_result=None,
+    )
 
 
 def _make_success(handler_run_time_ns, actions_count, cpu_info="cpu"):
-    """Build a success result with default case identity (for tests)."""
+    """Build a success result with default case DTO (for tests)."""
     return Success(
-        benchmark_props=_default_identity(),
+        benchmark_dto=_default_dto(),
         handler_run_time_ns=handler_run_time_ns,
         actions_count=actions_count,
         cpu_info=cpu_info,
@@ -49,9 +76,9 @@ def _make_success(handler_run_time_ns, actions_count, cpu_info="cpu"):
 
 
 def _make_failure(error="err", cpu_info=None):
-    """Build a failure result with default case identity (for tests)."""
-    return LightrunOverheadBenchmarkFailure(
-        benchmark_dto=_default_identity(),
+    """Build a failure result with default case DTO (for tests)."""
+    return Failure(
+        benchmark_dto=_default_dto(),
         error=error,
         cpu_info=cpu_info,
     )
@@ -111,9 +138,9 @@ class TestLightrunOverheadReportGenerator(unittest.TestCase):
             self.assertIsInstance(loaded[0], Success)
             self.assertEqual(loaded[0].handler_run_time_ns, 100)
             self.assertEqual(loaded[0].actions_count, 1)
-            self.assertIsInstance(loaded[1], LightrunOverheadBenchmarkFailure)
+            self.assertIsInstance(loaded[1], Failure)
             self.assertEqual(loaded[1].error, "deploy failed")
-            self.assertIsInstance(loaded[2], LightrunOverheadBenchmarkFailure)
+            self.assertIsInstance(loaded[2], Failure)
             self.assertEqual(loaded[2].error, "No result")
 
     def test_load_benchmark_data_missing_file_returns_empty_list(self):

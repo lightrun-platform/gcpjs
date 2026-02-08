@@ -3,9 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from Lightrun.Benchmarks.shared_modules.benchmark_results_visualizer import (
-    BenchmarkResultsVisualizer,
-)
+from Lightrun.Benchmarks.shared_modules.benchmark_results_visualizer import BenchmarkResultsVisualizer
 from .overhead_benchmark_result import LightrunOverheadBenchmarkResult
 
 
