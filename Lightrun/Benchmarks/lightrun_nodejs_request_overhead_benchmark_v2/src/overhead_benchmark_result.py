@@ -17,7 +17,7 @@ class BenchmarkFailure(LightrunOverheadBenchmarkResult):
 
 @dataclass
 class BenchmarkSuccess(LightrunOverheadBenchmarkResult):
-    handler_run_time_ns: int = 0
+    handler_run_time_ns: int
     actions_count: int
 
 

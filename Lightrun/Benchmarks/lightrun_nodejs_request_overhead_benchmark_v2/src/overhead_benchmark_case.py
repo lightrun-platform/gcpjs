@@ -6,7 +6,11 @@ import time
 
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
-from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import LightrunOverheadBenchmarkResult
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import (
+    BenchmarkFailure,
+    BenchmarkSuccess,
+    LightrunOverheadBenchmarkResult,
+)
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import MAX_GCP_FUNCTION_NAME_LENGTH
 from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 
@@ -309,13 +313,11 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
 
                 # Step 4: Measurement request
                 self.logger.info("Sending measurement request...")
-                start_time = time.perf_counter()
                 result = send_task.execute()
-                end_time = time.perf_counter()
                 
                 # 7. Parse Result
                 if not result or 'handlerRunTime' not in result:
-                     return LightrunOverheadBenchmarkResult(success=False, error=f"Invalid response from function: {result}")
+                     return BenchmarkFailure(benchmark_case=self, error=f"Invalid response from function: {result}")
 
                 handler_run_time_ns = int(result['handlerRunTime'])
                 
@@ -360,23 +362,19 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
 
                 if actions_triggered < self.num_actions:
                      self.logger.warning(f"Verification Failed: Only {actions_triggered}/{self.num_actions} actions triggered. Missing: {missing_actions}")
-                     return LightrunOverheadBenchmarkResult(
-                         success=False,
+                     return BenchmarkFailure(
+                         benchmark_case=self,
                          error=f"Partial action triggering: {actions_triggered}/{self.num_actions} triggered. Potential throttling or agent lag.",
-                         total_run_time_sec=end_time - start_time,
-                         handler_run_time_ns=handler_run_time_ns,
-                         actions_count=self.num_actions
                      )
 
                 self.logger.info(f"Verification Successful: All {actions_triggered} actions triggered.")
 
-                return LightrunOverheadBenchmarkResult(
-                    success=True,
-                    total_run_time_sec=end_time - start_time,
+                return BenchmarkSuccess(
+                    benchmark_case=self,
                     handler_run_time_ns=handler_run_time_ns,
-                    actions_count=self.num_actions
+                    actions_count=self.num_actions,
                 )
 
         except Exception as e:
             self.logger.exception(f"Benchmark execution failed with an exception: {e}")
-            return LightrunOverheadBenchmarkResult(success=False, error=str(e))
+            return BenchmarkFailure(benchmark_case=self, error=str(e))

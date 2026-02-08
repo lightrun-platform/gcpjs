@@ -81,12 +81,19 @@ class BenchmarkCase[T](ABC):
                     if self.benchmark_result is None:
                         summary += "Benchmark result: benchmark did not run or info is missing"
                     else:
+                        from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import (
+                            BenchmarkFailure,
+                            BenchmarkSuccess,
+                        )
                         summary += f"Benchmark result: "
-                        if not self.benchmark_result.success:
-                            summary += f"Failure\n"
-                            summary += f"Error: {self.benchmark_result.error}\n"
-                        else:
-                            summary += f"Success\n"
+                        match self.benchmark_result:
+                            case BenchmarkFailure(error=error):
+                                summary += f"Failure\n"
+                                summary += f"Error: {error}\n"
+                            case BenchmarkSuccess():
+                                summary += f"Success\n"
+                            case _:
+                                summary += "Unknown result type\n"
                     # only check delete state if the function was deployed, hence its in this nested else
                     match self.delete_result:
                         case None:
