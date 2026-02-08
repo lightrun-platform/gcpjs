@@ -53,9 +53,12 @@ class LightrunBenchmark[T: LightrunBenchmarkResult]:
         self.test_results_dir.mkdir(parents=True, exist_ok=True)
         self.benchmark_parameters.print_configuration(table_header="Lightrun Request Overhead Benchmark Configuration", logger=self.logger)
         self.logger.info(f"Benchmark results directory: {self.test_results_dir}")
-
         self.benchmark_cases = self.benchmark_cases_generator.generate_benchmark_cases(self.benchmark_name, self.benchmark_parameters, self.logger_factory, self.test_results_dir)
-        self.benchmark_manager = BenchmarkManager(self.benchmark_parameters.num_workers, self.logger_factory)
+
+        # There's no need for more than one thread per test case, and on the other hand
+        # trying to run more than 10 cloud builds concurrently can hit a gcp rate limit
+        num_workers = self.benchmark_parameters.num_workers if self.benchmark_parameters.num_workers else min(len(self.benchmark_cases), 10)
+        self.benchmark_manager = BenchmarkManager(num_workers, self.logger_factory)
         self.benchmark_manager.run(self.benchmark_cases)
 
         self.benchmark_results = [case.get_benchmark_result() for case in self.benchmark_cases]

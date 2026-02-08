@@ -378,12 +378,6 @@ class CLIParser:
         )
         
         args = parser.parse_args()
-        
-        # Set default num_workers to num_functions (capped at 16) if not specified
-        if args.num_workers is None:
-            # GCP Cloud Build often has a default concurrency of 10-30. 
-            # 16 is a safe default to avoid hitting project-wide quotas too easily.
-            args.num_workers = min(max(args.num_functions, args.test_size), 10)
 
         if args.authentication_type == AuthenticationType.API_KEY and not args.lightrun_api_key:
             parser.error(f"argument --lightrun-api-key is required when --authentication-type is '{AuthenticationType.API_KEY}'")
