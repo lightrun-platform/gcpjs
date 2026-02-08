@@ -1,12 +1,24 @@
+from abc import ABC
 from dataclasses import dataclass
 from typing import Optional
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 
 @dataclass
-class LightrunOverheadBenchmarkResult:
+class LightrunOverheadBenchmarkResult(ABC):
     """Class to hold the result of a single benchmark case run."""
-    success: bool
+
+    benchmark_case: BenchmarkCase
+
+
+@dataclass
+class BenchmarkFailure(LightrunOverheadBenchmarkResult):
     error: Optional[str] = None
-    total_run_time_sec: float = 0.0
+
+
+@dataclass
+class BenchmarkSuccess(LightrunOverheadBenchmarkResult):
     handler_run_time_ns: int = 0
-    actions_count: int = 0
+    actions_count: int
+
+
+
