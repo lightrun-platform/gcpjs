@@ -20,6 +20,7 @@ from Lightrun.Benchmarks.shared_modules.agent_models import BreakpointAction, Lo
 from Lightrun.Benchmarks.shared_modules.debugging_session import DebuggingSession
 
 from Benchmarks.shared_modules.gcf_task_primitives.send_request_task import SendRequestTask
+from Benchmarks.shared_modules.cpu_model import CpuModel
 
 
 class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResult]):
@@ -53,7 +54,8 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  lightrun_version: str,
                  clean_after_run: bool,
                  agent_actions_update_interval_seconds: int,
-                 lightrun_agent_log_level: str):
+                 lightrun_agent_log_level: str,
+                 required_cpu_model: str | None = None):
         super().__init__(deployment_timeout, delete_timeout, clean_after_run=clean_after_run)
         self.benchmark_name = benchmark_name
         self.runtime = runtime
@@ -75,6 +77,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         self.agent_actions_update_interval_seconds = agent_actions_update_interval_seconds
         self.lightrun_agent_log_level = lightrun_agent_log_level
         self.authentication_type = authentication_type
+        self.required_cpu_model = required_cpu_model
         self._gcp_function = None
         self._logger = logger_factory.get_logger(self.name)
 
@@ -158,18 +161,44 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
             gen2=self.gen2,
             env_vars=self.env_vars,
             labels={'created-by': 'lightrun-benchmark', 'benchmark-name': self.benchmark_name},
-            logger=self.logger
+            logger=self.logger,
+            required_cpu_model=self.required_cpu_model
         )
         return self._gcp_function
 
     @property
     def env_vars(self) -> dict:
-        return {
+        vars = {
             'LIGHTRUN_SECRET': self.lightrun_secret, # special lightrun agent environment variable which configured the lightrun secret
             'DISPLAY_NAME': self.name,
             'LIGHTRUN_API_ENDPOINT': self.lightrun_api_hostname, # special lightrun agent environment variable which configures the location of the lightrun server. it is misleadingly called ENDPOINT, implying a full url but it actually expects only the hostname without protocol prefix
             'AGENT_LOG_LEVEL' : self.lightrun_agent_log_level # log level for the running lightrun agent in the benchmark
         }
+        # Add CPU pinning env vars if specified
+        # Instead of passing the model name, we pass the vendor and flags to check
+        # This keeps the JS code simple - it just verifies vendor and flags match
+        if self.required_cpu_model:
+            # Look up the CpuModel enum by its display_name (the human-readable name)
+            cpu_model = None
+            for model in CpuModel:
+                if model.display_name == self.required_cpu_model:
+                    cpu_model = model
+                    break
+            
+            if cpu_model and cpu_model.can_be_pinned():
+                vendor, flags, excluded_flags = cpu_model.get_signature()
+                vars['REQUIRED_CPU_MODEL'] = self.required_cpu_model  # For logging/error messages
+                vars['REQUIRED_CPU_VENDOR'] = vendor
+                # Use pipe delimiter instead of comma to avoid gcloud --set-env-vars parsing issues
+                # (gcloud uses comma as separator between key=value pairs)
+                vars['REQUIRED_CPU_FLAGS'] = '|'.join(flags)
+                # Excluded flags: flags that must NOT be present (to distinguish from newer generations)
+                if excluded_flags:
+                    vars['EXCLUDED_CPU_FLAGS'] = '|'.join(excluded_flags)
+            else:
+                # Model name provided but can't be pinned - just pass the name for error messages
+                vars['REQUIRED_CPU_MODEL'] = self.required_cpu_model
+        return vars
 
     def _get_action_line_numbers(self) -> List[int]:
         """

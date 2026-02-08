@@ -35,3 +35,4 @@ class LightrunOverheadBenchmarkCaseDTO:
     lightrun_agent_log_level: str
     deployment_result: Optional[DeploymentResult]
     delete_result: Optional[DeleteFunctionResult]
+    cpu_model: Optional[str] = None  # Identified CPU microarchitecture (e.g., "AMD EPYC 3rd Gen (Milan / Zen 3)")

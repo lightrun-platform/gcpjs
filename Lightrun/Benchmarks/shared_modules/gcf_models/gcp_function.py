@@ -38,6 +38,9 @@ class GCPFunction:
     env_vars: Dict[str, str] = field(default_factory=dict)
     kwargs: Optional[Dict[str, Any]] = None
     labels: Dict[str, str] = field(default_factory=dict)
+    
+    # CPU pinning: if set, deployment will verify CPU model and redeploy until correct hardware is found
+    required_cpu_model: Optional[str] = None
 
     test_result: Optional[Dict[str, Any]] = field(init=False, default=None)
     error: Optional[str] = field(init=False, default=None)

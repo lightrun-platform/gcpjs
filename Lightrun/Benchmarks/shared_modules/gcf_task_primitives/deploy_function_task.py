@@ -11,12 +11,23 @@ from typing import List, Optional, Dict
 from Lightrun.Benchmarks.shared_modules.gcf_models import GCPFunction
 from Lightrun.Benchmarks.shared_modules.gcf_models.deploy_function_result import DeploymentResult, DeploymentSuccess, DeploymentFailure
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcf_deploy_extended_parameters import GCFDeployCommandParameters
-from Lightrun.Benchmarks.shared_modules.cloud_assets import CloudAsset
 from typing import Optional
 
 
 class LabelClashException(Exception):
     pass
+
+
+class CpuModelMismatchException(Exception):
+    """Raised when the deployed function landed on wrong CPU hardware."""
+    def __init__(self, required_model: str, actual_model: str):
+        self.required_model = required_model
+        self.actual_model = actual_model
+        super().__init__(f"CPU model mismatch: required '{required_model}' but got '{actual_model}'")
+
+
+# Maximum number of redeploy attempts when CPU pinning is enabled
+MAX_CPU_PINNING_ATTEMPTS = 10
 
 
 def wait_before_retry(attempt: int) -> int:
@@ -93,85 +104,177 @@ def _get_function_url(ep: GCFDeployCommandParameters, logger: logging.Logger) ->
         return None
 
 
-def deploy_with_extended_gcf_parameters(extended_parameters: GCFDeployCommandParameters, deployment_timeout_seconds: int, retry_triggers: List[str], logger: logging.Logger, function_model: Optional[GCPFunction] = None) -> DeploymentResult:
-    """Execute the deployment task with retry logic for rate limiting."""
+def _verify_cpu_model(url: str, required_cpu_model: str, logger: logging.Logger) -> None:
+    """
+    Verify the deployed function is running on the required CPU model.
+    
+    Sends a probe request to the function. If REQUIRED_CPU_MODEL env var is set
+    in the function, it will throw CPU_MODEL_MISMATCH at module load time if
+    the actual CPU doesn't match.
+    
+    Args:
+        url: Function URL to probe
+        required_cpu_model: The expected CPU model name
+        logger: Logger instance
+        
+    Raises:
+        CpuModelMismatchException: If CPU model doesn't match
+    """
+    import re
+    import requests
+    
+    logger.info(f"Verifying CPU model (expecting: {required_cpu_model})...")
+    
+    try:
+        response = requests.get(url, timeout=60)
+        
+        # Check for CPU mismatch in error response
+        # The JS code throws at module load time, resulting in a 500 error
+        if response.status_code != 200:
+            error_text = response.text
+            if 'CPU_MODEL_MISMATCH' in error_text:
+                # Parse: CPU_MODEL_MISMATCH: Required "X" but got "Y"
+                match = re.search(r'Required "([^"]+)" but got "([^"]+)"', error_text)
+                if match:
+                    required = match.group(1)
+                    actual = match.group(2)
+                    raise CpuModelMismatchException(required, actual)
+                else:
+                    raise CpuModelMismatchException(required_cpu_model, "unknown")
+        
+        logger.info(f"CPU model verified: {required_cpu_model}")
+        
+    except CpuModelMismatchException:
+        raise
+    except Exception as e:
+        # If we can't probe, log warning but don't fail deployment
+        logger.warning(f"Could not verify CPU model: {e}")
+
+
+def deploy_with_extended_gcf_parameters(extended_parameters: GCFDeployCommandParameters, deployment_timeout_seconds: int, retry_triggers: List[str], logger: logging.Logger, function_model: Optional[GCPFunction] = None, required_cpu_model: Optional[str] = None) -> DeploymentResult:
+    """
+    Execute the deployment task with retry logic for rate limiting.
+    
+    If required_cpu_model is set, after successful deployment we verify the function
+    landed on the correct CPU hardware. If not, we redeploy (up to MAX_CPU_PINNING_ATTEMPTS
+    times) until we get the requested hardware. Each redeploy overwrites the previous
+    deployment, so no explicit deletion is needed.
+    """
     ep = extended_parameters
-    logger.info(f"[{ep.function_name}] Deploying to {ep.region}")
 
-    # Stagger deployments to avoid rate limits
-    time.sleep(hash(ep.function_name) % 30)
+    # CPU pinning: outer loop for CPU mismatch retries
+    cpu_pinning_enabled = required_cpu_model is not None
+    max_cpu_attempts = MAX_CPU_PINNING_ATTEMPTS if cpu_pinning_enabled else 1
+    
+    if cpu_pinning_enabled:
+        logger.info(f"[{ep.function_name}] CPU pinning enabled: requiring '{required_cpu_model}'")
+    
+    for cpu_attempt in range(max_cpu_attempts):
+        if cpu_pinning_enabled and cpu_attempt > 0:
+            logger.info(f"[{ep.function_name}] CPU pinning attempt {cpu_attempt + 1}/{max_cpu_attempts}")
+        
+        logger.info(f"[{ep.function_name}] Deploying to {ep.region}")
 
-    max_retries = 3
+        # Stagger deployments to avoid rate limits (only on first CPU attempt)
+        if cpu_attempt == 0:
+            time.sleep(hash(ep.function_name) % 30)
 
-    for attempt in range(max_retries):
-        attempt_start_time = time.time()
-        try:
-            cmd = ep.build_gcloud_command()
-            result = _execute_gcloud_command(cmd, deployment_timeout_seconds)
+        max_retries = 3
 
-            if result.returncode != 0:
-                if _should_retry(retry_triggers, result.stderr):
-                    clean_error = result.stderr.replace('\n', ' ').strip()
-                    _handle_retry_wait(attempt, max_retries, clean_error, logger)
-                    continue
+        for attempt in range(max_retries):
+            attempt_start_time = time.time()
+            try:
+                cmd = ep.build_gcloud_command()
+                result = _execute_gcloud_command(cmd, deployment_timeout_seconds)
 
-                logger.error(f"Deployment failed with non-retriable error: {result.stderr}")
+                if result.returncode != 0:
+                    if _should_retry(retry_triggers, result.stderr):
+                        clean_error = result.stderr.replace('\n', ' ').strip()
+                        _handle_retry_wait(attempt, max_retries, clean_error, logger)
+                        continue
+
+                    logger.error(f"Deployment failed with non-retriable error: {result.stderr}")
+                    
+                    # Attempt to find partial assets even on failure
+                    partial_assets = []
+                    if function_model:
+                        partial_assets = function_model.discover_associated_assets()
+                    
+                    return DeploymentFailure(error=result.stderr, used_region=ep.region, partial_assets=partial_assets)
+
+                # Deployment succeeded
+                duration_sec = time.time() - attempt_start_time
+                duration_ns = int(duration_sec * 1_000_000_000)
+                deploy_time = datetime.now(timezone.utc).isoformat()
+
+                url = _get_function_url(ep, logger)
                 
-                # Attempt to find partial assets even on failure
-                partial_assets = []
-                if function_model:
-                    partial_assets = function_model.discover_associated_assets()
+                # CPU pinning verification
+                if cpu_pinning_enabled and url:
+                    try:
+                        _verify_cpu_model(url, required_cpu_model, logger)
+                    except CpuModelMismatchException as e:
+                        logger.warning(f"CPU mismatch on attempt {cpu_attempt + 1}: got '{e.actual_model}', need '{e.required_model}'")
+                        if cpu_attempt < max_cpu_attempts - 1:
+                            # Small delay before redeploy
+                            time.sleep(5)
+                            break  # Break inner retry loop to trigger outer CPU pinning retry
+                        else:
+                            logger.error(f"Max CPU pinning attempts ({max_cpu_attempts}) reached without finding correct CPU")
+                            return DeploymentFailure(
+                                error=f"CPU pinning failed: required '{required_cpu_model}' but got '{e.actual_model}' after {max_cpu_attempts} attempts",
+                                used_region=ep.region,
+                                partial_assets=[]
+                            )
                 
-                return DeploymentFailure(error=result.stderr, used_region=ep.region, partial_assets=partial_assets)
-
-            # Success
-            duration_sec = time.time() - attempt_start_time
-            duration_ns = int(duration_sec * 1_000_000_000)
-            deploy_time = datetime.now(timezone.utc).isoformat()
-
-            url = _get_function_url(ep, logger)
-            
-            # Discover and label assets
-            assets = []
-            if function_model:
-                assets = function_model.discover_associated_assets()
-                if ep.update_labels:
-                     for asset in assets:
-                         asset.apply_labels(ep.update_labels, logger)
-
-            return DeploymentSuccess(
-                url=url,
-                used_region=ep.region,
-                deployment_duration_seconds=duration_sec,
-                deployment_duration_nanoseconds=duration_ns,
-                deploy_time=deploy_time,
-                assets=assets
-            )
-
-        except subprocess.TimeoutExpired:
-            _handle_retry_wait(attempt, max_retries, "TimeoutExpired", logger)
-            if attempt == max_retries - 1:
-                partial_assets = []
+                # Discover and label assets
+                assets = []
                 if function_model:
-                    partial_assets = function_model.discover_associated_assets()
-                return DeploymentFailure(
-                    error='Deployment timed out after 5 minutes',
+                    assets = function_model.discover_associated_assets()
+                    if ep.update_labels:
+                         for asset in assets:
+                             asset.apply_labels(ep.update_labels, logger)
+
+                return DeploymentSuccess(
+                    url=url,
                     used_region=ep.region,
-                    partial_assets=partial_assets
+                    deployment_duration_seconds=duration_sec,
+                    deployment_duration_nanoseconds=duration_ns,
+                    deploy_time=deploy_time,
+                    assets=assets
                 )
 
-        except Exception as e:
-            logger.exception(f"Encountered an exception during deployment: {e}")
-            _handle_retry_wait(attempt, max_retries, str(e), logger)
-            if attempt == max_retries - 1:
-                partial_assets = []
-                if function_model:
-                    partial_assets = function_model.discover_associated_assets()
-                return DeploymentFailure(
-                    error=str(e),
-                    used_region=ep.region,
-                    partial_assets=partial_assets
-                )
+            except subprocess.TimeoutExpired:
+                _handle_retry_wait(attempt, max_retries, "TimeoutExpired", logger)
+                if attempt == max_retries - 1:
+                    partial_assets = []
+                    if function_model:
+                        partial_assets = function_model.discover_associated_assets()
+                    return DeploymentFailure(
+                        error='Deployment timed out after 5 minutes',
+                        used_region=ep.region,
+                        partial_assets=partial_assets
+                    )
+
+            except Exception as e:
+                logger.exception(f"Encountered an exception during deployment: {e}")
+                _handle_retry_wait(attempt, max_retries, str(e), logger)
+                if attempt == max_retries - 1:
+                    partial_assets = []
+                    if function_model:
+                        partial_assets = function_model.discover_associated_assets()
+                    return DeploymentFailure(
+                        error=str(e),
+                        used_region=ep.region,
+                        partial_assets=partial_assets
+                    )
+        else:
+            # Inner loop completed without break (no CPU mismatch), so we're done
+            # This should only be reached if all retries failed
+            continue
+        
+        # Inner loop was broken (CPU mismatch), continue outer loop
+        continue
 
     # Should be unreachable if logic is correct, but safe fallback
     partial_assets = []
@@ -247,4 +350,4 @@ class DeployFunctionTask:
                                                                update_labels=self.f.labels,
                                                                **create_kwargs)
 
-        return deploy_with_extended_gcf_parameters(command_parameters, self.deployment_timeout_seconds, DeployFunctionTask.RETRY_TRIGGERS, self.logger, function_model=self.f)
+        return deploy_with_extended_gcf_parameters(command_parameters, self.deployment_timeout_seconds, DeployFunctionTask.RETRY_TRIGGERS, self.logger, function_model=self.f, required_cpu_model=self.f.required_cpu_model)

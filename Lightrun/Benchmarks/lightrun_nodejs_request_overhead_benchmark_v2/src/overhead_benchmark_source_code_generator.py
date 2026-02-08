@@ -121,6 +121,82 @@ const crypto = require('crypto');
 const fs = require('fs');
 
 
+// ============================================================================
+// CPU Model Verification
+// ============================================================================
+// GCP doesn't let you choose CPU model, so we verify at startup and fail fast
+// if we didn't get the CPU we wanted. The deployment task will redeploy until
+// we land on the right hardware.
+//
+// The required vendor and flags are passed via environment variables:
+// - REQUIRED_CPU_MODEL: Human-readable name (for error messages)
+// - REQUIRED_CPU_VENDOR: Expected vendor_id (e.g., "GenuineIntel", "AuthenticAMD")
+// - REQUIRED_CPU_FLAGS: Pipe-separated list of required CPU flags (pipe used instead of comma
+//                       because gcloud --set-env-vars uses comma as key=value separator)
+// - EXCLUDED_CPU_FLAGS: Pipe-separated list of flags that must NOT be present (to distinguish
+//                       from newer CPU generations that have all the required flags plus more)
+
+function verifyCpuModel() {{
+    const requiredVendor = process.env.REQUIRED_CPU_VENDOR;
+    const requiredFlagsStr = process.env.REQUIRED_CPU_FLAGS;
+    const excludedFlagsStr = process.env.EXCLUDED_CPU_FLAGS || '';
+    const requiredModelName = process.env.REQUIRED_CPU_MODEL || 'Unknown';
+    
+    if (!requiredVendor || !requiredFlagsStr) {{
+        // No CPU requirement specified, skip verification
+        console.log('CPU verification skipped: REQUIRED_CPU_VENDOR/FLAGS not set');
+        return;
+    }}
+    
+    const requiredFlags = requiredFlagsStr.split('|').map(f => f.trim()).filter(f => f);
+    const excludedFlags = excludedFlagsStr.split('|').map(f => f.trim()).filter(f => f);
+    
+    // Parse /proc/cpuinfo
+    const cpuInfo = fs.readFileSync('/proc/cpuinfo', 'utf8');
+    const vendorMatch = cpuInfo.match(/^vendor_id\\s+:\\s+(.+)$/m);
+    const flagsMatch = cpuInfo.match(/^flags\\s+:\\s+(.+)$/m);
+    
+    if (!vendorMatch || !flagsMatch) {{
+        const error = new Error(`CPU_MODEL_MISMATCH: Required "${{requiredModelName}}" but could not parse /proc/cpuinfo`);
+        error.code = 'CPU_MODEL_MISMATCH';
+        throw error;
+    }}
+    
+    const actualVendor = vendorMatch[1].trim();
+    const actualFlags = new Set(flagsMatch[1].trim().split(/\\s+/));
+    
+    // Check vendor
+    if (actualVendor !== requiredVendor) {{
+        const error = new Error(`CPU_MODEL_MISMATCH: Required "${{requiredModelName}}" (vendor=${{requiredVendor}}) but got vendor=${{actualVendor}}`);
+        error.code = 'CPU_MODEL_MISMATCH';
+        throw error;
+    }}
+    
+    // Check all required flags are present
+    const missingFlags = requiredFlags.filter(f => !actualFlags.has(f));
+    if (missingFlags.length > 0) {{
+        const error = new Error(`CPU_MODEL_MISMATCH: Required "${{requiredModelName}}" but missing flags: ${{missingFlags.join(', ')}}`);
+        error.code = 'CPU_MODEL_MISMATCH';
+        throw error;
+    }}
+    
+    // Check no excluded flags are present (to distinguish from newer generations)
+    const presentExcludedFlags = excludedFlags.filter(f => actualFlags.has(f));
+    if (presentExcludedFlags.length > 0) {{
+        const error = new Error(`CPU_MODEL_MISMATCH: Required "${{requiredModelName}}" but found excluded flags: ${{presentExcludedFlags.join(', ')}} (indicates newer CPU generation)`);
+        error.code = 'CPU_MODEL_MISMATCH';
+        throw error;
+    }}
+    
+    console.log(`CPU Model verified: ${{requiredModelName}} (vendor=${{actualVendor}}, required=${{requiredFlags.join(',')}}, excluded=${{excludedFlags.join(',') || 'none'}})`);
+}}
+
+// Run CPU verification at module load time (before handling any requests)
+verifyCpuModel();
+
+// ============================================================================
+
+
 const displayName = process.env.DISPLAY_NAME;
 if (!displayName || displayName.trim() === '') {{
   throw new Error('DISPLAY_NAME environment variable is required and cannot be empty');

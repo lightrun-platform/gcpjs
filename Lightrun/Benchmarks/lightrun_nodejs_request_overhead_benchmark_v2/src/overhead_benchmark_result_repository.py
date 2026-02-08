@@ -6,14 +6,20 @@ from typing import List, Dict, Any
 
 from Lightrun.Benchmarks.shared_modules.authentication.authenticator import AuthenticationType
 from Lightrun.Benchmarks.shared_modules.benchmark_result_repository import BenchmarkResultRepository
+from Lightrun.Benchmarks.shared_modules.cpu_model import CpuModel
 from .lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO
 from .overhead_benchmark_result import Failure, LightrunOverheadBenchmarkResult, Success
 
 RAW_FILENAME = "benchmark_raw_data.json"
 
 
-def _dict_to_dto(c: Dict[str, Any]) -> LightrunOverheadBenchmarkCaseDTO:
-    """Build LightrunOverheadBenchmarkCaseDTO from saved case dict (missing fields use defaults)."""
+def _dict_to_dto(c: Dict[str, Any], cpu_model: str | None = None) -> LightrunOverheadBenchmarkCaseDTO:
+    """Build LightrunOverheadBenchmarkCaseDTO from saved case dict (missing fields use defaults).
+    
+    Args:
+        c: Dictionary of case fields
+        cpu_model: Optional identified CPU model (parsed from cpu_info at load time)
+    """
     return LightrunOverheadBenchmarkCaseDTO(
         name=c.get("name", ""),
         num_actions=c.get("num_actions", 0),
@@ -39,12 +45,13 @@ def _dict_to_dto(c: Dict[str, Any]) -> LightrunOverheadBenchmarkCaseDTO:
         authentication_type=AuthenticationType(c["authentication_type"]) if isinstance(c.get("authentication_type"), str) else AuthenticationType.API_KEY,
         deployment_result=None,
         delete_result=None,
+        cpu_model=cpu_model or c.get("cpu_model"),  # Use passed value or try from dict
     )
 
 
 def _dto_to_dict(dto: LightrunOverheadBenchmarkCaseDTO) -> Dict[str, Any]:
     """Serialize DTO to dict for JSON (subset of fields we persist)."""
-    return {
+    d = {
         "name": dto.name,
         "num_actions": dto.num_actions,
         "region": dto.region,
@@ -68,6 +75,9 @@ def _dto_to_dict(dto: LightrunOverheadBenchmarkCaseDTO) -> Dict[str, Any]:
         "lightrun_api_hostname": dto.lightrun_api_hostname,
         "authentication_type": dto.authentication_type.value,
     }
+    if dto.cpu_model:
+        d["cpu_model"] = dto.cpu_model
+    return d
 
 
 def _result_to_case_dict(r: LightrunOverheadBenchmarkResult) -> Dict[str, Any]:
@@ -130,7 +140,11 @@ class LightrunOverheadBenchmarkResultRepository(BenchmarkResultRepository[Lightr
     def load_benchmark_data(
         self, path: Path
     ) -> List[LightrunOverheadBenchmarkResult]:
-        """Load benchmark results from the raw JSON file (same format as save)."""
+        """Load benchmark results from the raw JSON file (same format as save).
+        
+        If the case dict has a stored cpu_model, uses that.
+        Otherwise, identifies CPU model from cpu_info and populates it in the DTO.
+        """
         raw_path = path / RAW_FILENAME if path.is_dir() else path
         if not raw_path.exists():
             return []
@@ -141,7 +155,12 @@ class LightrunOverheadBenchmarkResultRepository(BenchmarkResultRepository[Lightr
         for entry in runs:
             case_dict = entry.get("case", {})
             result_dict = entry.get("result", {})
-            dto = _dict_to_dto(case_dict)
+            cpu_info = result_dict.get("cpu_info")
+            # Use stored cpu_model from case dict if available, otherwise identify from cpu_info
+            cpu_model = case_dict.get("cpu_model")
+            if not cpu_model and cpu_info:
+                cpu_model = CpuModel.identify(cpu_info).display_name
+            dto = _dict_to_dto(case_dict, cpu_model=cpu_model)
             success = result_dict.get("success", False)
             if success:
                 results.append(
@@ -149,7 +168,7 @@ class LightrunOverheadBenchmarkResultRepository(BenchmarkResultRepository[Lightr
                         benchmark_dto=dto,
                         handler_run_time_ns=result_dict["handler_run_time_ns"],
                         actions_count=result_dict["actions_count"],
-                        cpu_info=result_dict["cpu_info"],
+                        cpu_info=cpu_info,
                     )
                 )
             else:
@@ -157,7 +176,7 @@ class LightrunOverheadBenchmarkResultRepository(BenchmarkResultRepository[Lightr
                     Failure(
                         benchmark_dto=dto,
                         error=result_dict.get("error", "No result"),
-                        cpu_info=result_dict.get("cpu_info"),
+                        cpu_info=cpu_info,
                     )
                 )
         return results

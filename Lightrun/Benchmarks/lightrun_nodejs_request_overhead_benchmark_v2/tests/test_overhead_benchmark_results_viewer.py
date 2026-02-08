@@ -23,12 +23,13 @@ def _make_report_data(
     successes=None,
     by_actions_count=None,
     regression=None,
+    cpu_model="Intel Xeon 2nd Gen (Cascade Lake)",
 ):
-    """Build report_data.json structure (summary + by_allocation)."""
+    """Build report_data.json structure (summary + by_allocation + by_group)."""
     if successes is None:
         successes = [
-            {"actions_count": 1, "handler_run_time_ns": 100},
-            {"actions_count": 2, "handler_run_time_ns": 200},
+            {"actions_count": 1, "handler_run_time_ns": 100, "memory": "256Mi", "cpu": "1", "cpu_model": cpu_model},
+            {"actions_count": 2, "handler_run_time_ns": 200, "memory": "256Mi", "cpu": "1", "cpu_model": cpu_model},
         ]
     if by_actions_count is None:
         by_actions_count = [
@@ -41,16 +42,23 @@ def _make_report_data(
             "intercept_ns": 0.0,
             "r_squared": 1.0,
         }
+    
+    group_key = f"256Mi-1|{cpu_model}"
     summary = {
         "total_cases": total_cases,
         "success_count": success_count,
         "failure_count": failure_count,
         "allocations": ["256Mi-1"] if success_count else [],
+        "groups": [group_key] if success_count else [],
     }
-    alloc_summary = {"count": success_count}
+    alloc_summary = {"count": success_count, "cpu_models": [cpu_model] if success_count else []}
+    group_summary = {"count": success_count}
     if handler_run_time_ns is not None:
         alloc_summary["handler_run_time_ns"] = handler_run_time_ns
+        group_summary["handler_run_time_ns"] = handler_run_time_ns
+    
     by_allocation = {}
+    by_group = {}
     if success_count:
         by_allocation["256Mi-1"] = {
             "memory": "256Mi",
@@ -60,9 +68,19 @@ def _make_report_data(
             "by_actions_count": by_actions_count,
             "regression": regression,
         }
+        by_group[group_key] = {
+            "memory": "256Mi",
+            "cpu": "1",
+            "cpu_model": cpu_model,
+            "summary": group_summary,
+            "successes": successes,
+            "by_actions_count": by_actions_count,
+            "regression": regression,
+        }
     return {
         "summary": summary,
         "by_allocation": by_allocation,
+        "by_group": by_group,
     }
 
 
@@ -148,6 +166,7 @@ class TestLightrunOverheadReportVisualizer(unittest.TestCase):
             self.assertIn("2", content)
             self.assertIn("Successes", content)
             self.assertIn("Failures", content)
+            self.assertIn("Groups", content)
 
     def test_create_visualizations_includes_handler_run_time_when_present(self):
         """Handler run time table is included when allocation summary has handler_run_time_ns."""
@@ -189,7 +208,7 @@ class TestLightrunOverheadReportVisualizer(unittest.TestCase):
             self.assertIn("1.0000", content)
 
     def test_create_visualizations_embeds_scatter_and_line_data(self):
-        """HTML contains Chart.js and embedded scatter + line data per allocation."""
+        """HTML contains Chart.js and embedded scatter + line data per group."""
         data = _make_report_data()
         with tempfile.TemporaryDirectory() as tmpdir:
             save_path = Path(tmpdir)
@@ -200,8 +219,8 @@ class TestLightrunOverheadReportVisualizer(unittest.TestCase):
             self.assertIn("chart.js", content.lower())
             self.assertIn("scatterData", content)
             self.assertIn("lineData", content)
-            self.assertIn("allocationDatasets", content)
-            self.assertIn("Handler run time vs number of Lightrun actions", content)
+            self.assertIn("groupDatasets", content)
+            self.assertIn("Handler run time vs number of Lightrun actions (by group)", content)
 
     def test_create_visualizations_sets_visualizations_path(self):
         """After create_visualizations, _visualizations_path is set for display()."""
@@ -215,7 +234,7 @@ class TestLightrunOverheadReportVisualizer(unittest.TestCase):
             self.assertEqual(self.visualizer._visualizations_path, out)
 
     def test_create_visualizations_empty_successes_no_regression_line(self):
-        """When no successes, by_allocation is empty; HTML still valid."""
+        """When no successes, by_allocation and by_group are empty; HTML still valid."""
         data = _make_report_data(
             success_count=0,
             failure_count=2,
@@ -232,7 +251,7 @@ class TestLightrunOverheadReportVisualizer(unittest.TestCase):
             self.assertIn("Total cases", content)
             self.assertIn("Failures", content)
             self.assertIn("2", content)
-            self.assertIn("allocationDatasets", content)
+            self.assertIn("groupDatasets", content)
 
     def test_create_visualizations_valid_html_structure(self):
         """Generated HTML has DOCTYPE, head, body, and required elements."""
@@ -249,9 +268,9 @@ class TestLightrunOverheadReportVisualizer(unittest.TestCase):
             self.assertIn("<head>", content)
             self.assertIn("<body>", content)
             self.assertIn("Lightrun Request Overhead Benchmark", content)
-            self.assertIn("chartContainer", content)
+            self.assertIn("chart-container", content)
             self.assertIn("canvas", content)
-            self.assertIn("id=\"chart\"", content)
+            self.assertIn("id=\"groupChart\"", content)
 
 
 if __name__ == "__main__":

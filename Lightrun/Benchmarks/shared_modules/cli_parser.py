@@ -5,6 +5,7 @@ import math
 import logging
 
 from Benchmarks.shared_modules.authentication.authenticator import AuthenticationType
+from Benchmarks.shared_modules.cpu_model import CpuModel
 
 
 def _mask_secret(value: str) -> str:
@@ -376,8 +377,42 @@ class CLIParser:
             default='3.3.0',
             help='Google Cloud Functions Framework version (default: ^3.3.0)'
         )
+        # Build list of valid CPU model values for help text
+        cpu_model_choices = [m.display_name for m in CpuModel if m != CpuModel.UNKNOWN]
+        parser.add_argument(
+            '--required-cpu-model',
+            type=str,
+            default=None,
+            choices=cpu_model_choices,
+            metavar='CPU_MODEL',
+            help='Required CPU model for benchmark (enables CPU pinning). '
+                 'If set, the benchmark will redeploy until it lands on the specified CPU. '
+                 f'Valid values: {", ".join(repr(v) for v in cpu_model_choices[:3])}... '
+                 'Run with --help-cpu-models to see full list.'
+        )
+        parser.add_argument(
+            '--help-cpu-models',
+            action='store_true',
+            help='Show all valid CPU model values for --required-cpu-model and exit'
+        )
         
         args = parser.parse_args()
+        
+        # Handle --help-cpu-models
+        if args.help_cpu_models:
+            print("\nValid CPU model values for --required-cpu-model:\n")
+            print("Intel Xeon Scalable Processors:")
+            for m in [CpuModel.INTEL_SAPPHIRE_RAPIDS, CpuModel.INTEL_ICE_LAKE, CpuModel.INTEL_COOPER_LAKE,
+                      CpuModel.INTEL_CASCADE_LAKE, CpuModel.INTEL_SKYLAKE]:
+                print(f"  {m.display_name!r}")
+            print("\nIntel Xeon E5/E7 (older):")
+            for m in [CpuModel.INTEL_BROADWELL, CpuModel.INTEL_HASWELL, CpuModel.INTEL_IVY_BRIDGE]:
+                print(f"  {m.display_name!r}")
+            print("\nAMD EPYC Processors:")
+            for m in [CpuModel.AMD_GENOA, CpuModel.AMD_MILAN, CpuModel.AMD_ROME, CpuModel.AMD_NAPLES]:
+                print(f"  {m.display_name!r}")
+            print()
+            parser.exit(0)
 
         if args.authentication_type == AuthenticationType.API_KEY and not args.lightrun_api_key:
             parser.error(f"argument --lightrun-api-key is required when --authentication-type is '{AuthenticationType.API_KEY}'")

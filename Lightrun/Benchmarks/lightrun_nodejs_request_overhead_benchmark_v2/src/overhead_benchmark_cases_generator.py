@@ -85,6 +85,7 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
                                 clean_after_run=not benchmark_config.skip_test_cleanup,
                                 agent_actions_update_interval_seconds=benchmark_config.agent_actions_update_interval_seconds,
                                 lightrun_agent_log_level=benchmark_config.lightrun_agent_log_level,
+                                required_cpu_model=benchmark_config.required_cpu_model,
                                 )
                             cases.append(case)
                 
