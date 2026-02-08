@@ -118,6 +118,7 @@ function function{i}() {{
 const functions = require('@google-cloud/functions-framework');
 const lightrun = require('lightrun/gcp');
 const crypto = require('crypto');
+const fs = require('fs');
 
 
 const displayName = process.env.DISPLAY_NAME;
@@ -148,13 +149,15 @@ console.log('Called lightrun.init with the following arguments:', initArguments)
 {dummy_functions}
 
 let func = async (req, res) => {{
+    const cpuInfo = fs.readFileSync('/proc/cpuinfo', 'utf8');
     const handlerStartTime = process.hrtime.bigint();
 {function_calls}
     const handlerEndTime = process.hrtime.bigint();
     res.send({{ 
         handlerRunTime: (handlerEndTime - handlerStartTime).toString(),
         message: 'Function execution complete',
-        initArguments: initArguments
+        initArguments: initArguments,
+        cpuInfo: cpuInfo
     }});
 }};
 
