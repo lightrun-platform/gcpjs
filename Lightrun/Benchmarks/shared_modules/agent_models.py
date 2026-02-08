@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Any, Dict
 
 from Lightrun.Benchmarks.shared_modules.api import LightrunAPI
 
@@ -18,6 +18,10 @@ class LightrunAction(ABC):
     @property
     def is_applied(self) -> bool:
         return self.action_id is not None and self.pool_id is not None
+
+    @abstractmethod
+    def get_info(self, lightrun_api: LightrunAPI) -> Optional[Dict[str, Any]]:
+        pass
 
     @property
     def action_id(self) -> Optional[str]:
@@ -44,9 +48,12 @@ class LightrunAction(ABC):
 @dataclass(frozen=True)
 class LogAction(LightrunAction):
     """Action to log a message at a specific location."""
+
     log_message: str
     name: str = "LogAction"
 
+    def get_info(self, lightrun_api: LightrunAPI) -> Optional[Dict[str, Any]]:
+        return lightrun_api.get_log(self.action_id, self.pool_id)
 
     def apply(self, agent_id: str, agent_pool_id: str, lightrun_api: LightrunAPI) -> Optional[str]:
         self._action_id["value"] =  lightrun_api.add_log_action(agent_id=agent_id,
@@ -66,7 +73,11 @@ class LogAction(LightrunAction):
 @dataclass(frozen=True)
 class BreakpointAction(LightrunAction):
     """Action to set a snapshot/breakpoint at a specific location."""
+
     name: str = "BreakpointAction"
+
+    def get_info(self, lightrun_api: LightrunAPI) -> Optional[Dict[str, Any]]:
+        return lightrun_api.get_snapshot(self.action_id, self.pool_id)
 
     def apply(self, agent_id: str, agent_pool_id: str, lightrun_api: LightrunAPI) -> Optional[str]:
         self._action_id["value"] = lightrun_api.add_snapshot(agent_id=agent_id,

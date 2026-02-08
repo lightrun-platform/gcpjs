@@ -28,9 +28,9 @@ class InteractiveAuthenticator(Authenticator):
         if auth_token:
             headers["Authorization"] = f"Bearer {auth_token}"
 
-        override_headers = kwargs.pop('override_headers', {})
-        return {**headers, **override_headers}
+        return {**headers, **kwargs}
 
     def send_authenticated_request(self, session: requests.Session, method: str, url: str, **kwargs) -> requests.Response:
-        headers = self.get_headers(**kwargs)
+        override_headers = kwargs.pop('headers', {})
+        headers = self.get_headers(**override_headers)
         return session.request(method, url, headers=headers, **kwargs)

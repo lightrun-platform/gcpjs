@@ -322,11 +322,19 @@ class LightrunPluginAPI(LightrunAPI):
     def get_action(self, action_id: str, agent_pool_id: str) -> Optional[dict]:
         try:
             # url = f"{self.api_url}/athena/company/{self.company_id}/{self.api_version}/getAction/{snapshot_id}"
-            url = f"/athena/company/{self.company_id}/agent-pools/{agent_pool_id}/{self.api_version}/action/{action_id}"
+            url = f"{self.api_url}/athena/company/{self.company_id}/agent-pools/{agent_pool_id}/{self.api_version}/action/{action_id}?withHitInfo=true"
             headers = {"client-info": get_client_info_header(self.api_version)}
             response = self.authenticator.send_authenticated_request(self.session, 'GET', url, headers=headers, timeout=10)
             response.raise_for_status()
-            return response.json()
+            res = response.json()
+            if isinstance(res, list):
+                if len(res) == 0:
+                    return None
+                if len(res) > 1:
+                    raise Exception(f"Endpoint response contains more than one element, not sure what to do with it: {res}")
+                return res[0]
+            return res
+
 
         except Exception as e:
             self.logger.exception(f"Error fetching action: {e}")

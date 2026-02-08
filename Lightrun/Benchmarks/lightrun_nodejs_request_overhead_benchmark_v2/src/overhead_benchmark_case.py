@@ -197,7 +197,6 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         
         Args:
             debug_session: The active debugging session with applied actions.
-            poll_interval: Seconds between status checks (default 2).
             
         Returns:
             True if all actions were confirmed ACCEPTED before timeout, False if timed out.
@@ -210,7 +209,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                          f"Polling every {poll_interval}s for early detection.")
 
         expected_bounded_action_ids = {action.action_id for action in debug_session.actions}
-
+        bounded_action_ids = set()
         seconds_until_timeout = max_wait
         for elapsed in range(0, max_wait, poll_interval):
             bounded_action_ids = debug_session.get_bounded_actions_ids()
@@ -235,7 +234,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
             # benchmark case results and different runs.
             SendRequestTask(self.gcp_function).execute()
         
-        self.logger.warning(f"Timed out waiting for actions to be accepted after {max_wait}s. Pending actions: {debug_session.get_unbound_actions()}")
+        self.logger.warning(f"Timed out waiting for actions to be accepted after {max_wait}s. Pending actions: {[action for action in debug_session.actions if action.action_id not in bounded_action_ids ]}")
         return False
 
     def warmup(self):
@@ -327,32 +326,37 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
 
                 # Allow a short buffer for async reporting from agent to server
                 max_retries = 10
-                for _ in range(max_retries):
+                for attempt in range(max_retries):
                     actions_triggered = 0
                     missing_actions = []
                     
-                    for action, action_id in debug_session.applied_actions:
-                        is_hit = False
-                        
-                        if isinstance(action, BreakpointAction):
-                            info = self.lightrun_api.get_snapshot(action_id)
+                    for action in debug_session.applied_actions:
+                        try:
+                            status = None
+                            is_hit = False
+                            info = action.get_info(self.lightrun_api)
                             # Check if CAPTURED or if hit count > 0 (snapshots might be consumable)
-                            if info and (info.get('captureState') == 'CAPTURED' or info.get('hitCount', 0) > 0):
-                                is_hit = True
-                        elif isinstance(action, LogAction):
-                            info = self.lightrun_api.get_log(action_id)
-                            if info and info.get('hitCount', 0) > 0:
-                                is_hit = True
+                            if info:
+                                hit_count = info.get('hitCount', 0)
+                                if hit_count > 0:
+                                    is_hit = True
+
+                                status = f"Hits={hit_count}"
+                            else:
+                                status = "Info=None"
+                        except Exception as e:
+                            status = f"Error fetching snapshot: {e}"
                         
                         if is_hit:
                             actions_triggered += 1
                         else:
-                            missing_actions.append(f"{action.__class__.__name__}:{action_id}")
+                            missing_actions.append(f"{action.__class__.__name__}:{action.action_id} ({status})")
                     
                     if actions_triggered == len(debug_session.applied_actions):
                         break
                     
-                    time.sleep(1) # Wait before retry
+                    self.logger.info(f"Verification attempt {attempt+1}/{max_retries}: {actions_triggered}/{self.num_actions} triggered. Missing: {missing_actions}")
+                    time.sleep(2) # Wait before retry
 
                 if actions_triggered < self.num_actions:
                      self.logger.warning(f"Verification Failed: Only {actions_triggered}/{self.num_actions} actions triggered. Missing: {missing_actions}")
