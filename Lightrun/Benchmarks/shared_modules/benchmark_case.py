@@ -18,7 +18,7 @@ class BenchmarkCase[T](ABC):
         self.deploy_task: Optional[DeployFunctionTask] = None
         self.deployment_result: Optional[DeploymentResult] = None
         self.delete_result: Optional[DeleteFunctionResult] = None
-        self.benchmark_result: Optional[T] = None
+        self._benchmark_result: Optional[T] = None
         self.errors: List[Exception] = []
         self.summary: Optional[str] = None
 
@@ -47,6 +47,9 @@ class BenchmarkCase[T](ABC):
     def execute_benchmark(self) -> T:
         pass
 
+    def get_benchmark_result(self) -> T:
+        return self._benchmark_result
+
     def run(self):
         self.logger.info(f"Starting benchmark case: {self.name}")
         try:
@@ -56,7 +59,7 @@ class BenchmarkCase[T](ABC):
                 case DeploymentFailure(error=error):
                     raise Exception(error)
                 case DeploymentSuccess():
-                    self.benchmark_result = self.execute_benchmark()
+                    self._benchmark_result = self.execute_benchmark()
                 case _:
                     raise Exception(f"Unknown deployment result type: {type(self.deployment_result)}")
 
@@ -78,7 +81,7 @@ class BenchmarkCase[T](ABC):
                 case DeploymentSuccess():
                     summary += f"Success\n"
                     # Only show benchmark result if deployment succeeded
-                    if self.benchmark_result is None:
+                    if self._benchmark_result is None:
                         summary += "Benchmark result: benchmark did not run or info is missing"
                     else:
                         from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import (
@@ -86,7 +89,7 @@ class BenchmarkCase[T](ABC):
                             BenchmarkSuccess,
                         )
                         summary += f"Benchmark result: "
-                        match self.benchmark_result:
+                        match self._benchmark_result:
                             case BenchmarkFailure(error=error, cpu_info=cpu_info):
                                 summary += f"Failure\n"
                                 summary += f"Error: {error}\n"
