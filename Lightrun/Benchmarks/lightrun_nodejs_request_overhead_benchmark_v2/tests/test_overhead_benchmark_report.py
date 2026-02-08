@@ -168,9 +168,9 @@ class TestLightrunOverheadReportGenerator(unittest.TestCase):
                 data = json.load(f)
             self.assertEqual(data["summary"]["total_cases"], 2)
             self.assertEqual(data["summary"]["success_count"], 2)
-            self.assertIn("regression", data)
+            alloc = data["by_allocation"]["256Mi-1"]
             self.assertAlmostEqual(
-                data["regression"]["slope_ns_per_action"], 50.0, places=2
+                alloc["regression"]["slope_ns_per_action"], 50.0, places=2
             )
 
     def test_generate_report_empty_results(self):
@@ -187,8 +187,7 @@ class TestLightrunOverheadReportGenerator(unittest.TestCase):
             self.assertEqual(data["summary"]["total_cases"], 0)
             self.assertEqual(data["summary"]["success_count"], 0)
             self.assertEqual(data["summary"]["failure_count"], 0)
-            self.assertEqual(data["successes"], [])
-            self.assertEqual(data["regression"], {})
+            self.assertEqual(data["by_allocation"], {})
             content = report_path.read_text()
             self.assertIn("Total cases:     0", content)
             self.assertIn("Failures:       0", content)
@@ -207,8 +206,7 @@ class TestLightrunOverheadReportGenerator(unittest.TestCase):
             self.assertEqual(data["summary"]["total_cases"], 2)
             self.assertEqual(data["summary"]["success_count"], 0)
             self.assertEqual(data["summary"]["failure_count"], 2)
-            self.assertNotIn("handler_run_time_ns", data["summary"])
-            self.assertEqual(data["regression"], {})
+            self.assertEqual(data["by_allocation"], {})
 
     def test_generate_report_single_success_no_regression(self):
         """Single success: stats present, regression empty (need >=2 points)."""
@@ -219,10 +217,11 @@ class TestLightrunOverheadReportGenerator(unittest.TestCase):
             with open(path / "report_data.json") as f:
                 data = json.load(f)
             self.assertEqual(data["summary"]["success_count"], 1)
-            self.assertEqual(data["summary"]["handler_run_time_ns"]["min"], 50_000)
-            self.assertEqual(data["summary"]["handler_run_time_ns"]["max"], 50_000)
-            self.assertEqual(data["summary"]["handler_run_time_ns"]["mean"], 50_000)
-            self.assertEqual(data["regression"], {})
+            alloc = data["by_allocation"]["256Mi-1"]
+            self.assertEqual(alloc["summary"]["handler_run_time_ns"]["min"], 50_000)
+            self.assertEqual(alloc["summary"]["handler_run_time_ns"]["max"], 50_000)
+            self.assertEqual(alloc["summary"]["handler_run_time_ns"]["mean"], 50_000)
+            self.assertEqual(alloc["regression"], {})
 
     def test_generate_report_two_successes_produces_regression(self):
         """Two or more successes produce regression slope, intercept, r_squared."""
@@ -236,7 +235,7 @@ class TestLightrunOverheadReportGenerator(unittest.TestCase):
             with open(path / "report_data.json") as f:
                 data = json.load(f)
             self.assertEqual(data["summary"]["success_count"], 2)
-            reg = data["regression"]
+            reg = data["by_allocation"]["256Mi-1"]["regression"]
             self.assertIn("slope_ns_per_action", reg)
             self.assertIn("intercept_ns", reg)
             self.assertIn("r_squared", reg)
@@ -255,7 +254,7 @@ class TestLightrunOverheadReportGenerator(unittest.TestCase):
             self.generator.generate_report(cases, path)
             with open(path / "report_data.json") as f:
                 data = json.load(f)
-            by_actions = data["by_actions_count"]
+            by_actions = data["by_allocation"]["256Mi-1"]["by_actions_count"]
             self.assertEqual(len(by_actions), 2)
             one = next(r for r in by_actions if r["actions_count"] == 1)
             two = next(r for r in by_actions if r["actions_count"] == 2)
@@ -278,13 +277,14 @@ class TestLightrunOverheadReportGenerator(unittest.TestCase):
             self.assertIn("Lightrun Request Overhead Benchmark Report", content)
             self.assertIn("Total cases:     2", content)
             self.assertIn("Successes:      2", content)
+            self.assertIn("Allocation: 256Mi / 1 CPU", content)
             self.assertIn("Handler run time (ns):", content)
             self.assertIn("Linear fit:", content)
             self.assertIn("Slope (ns per action)", content)
             self.assertIn("R²", content)
 
     def test_generate_report_writes_report_data_json_for_visualizer(self):
-        """report_data.json has structure expected by visualizer (summary, successes, regression)."""
+        """report_data.json has structure expected by visualizer (summary, by_allocation)."""
         cases = [
             _make_fake_case(benchmark_result=_make_success(100, 1)),
             _make_fake_case(benchmark_result=_make_success(200, 2)),
@@ -295,12 +295,14 @@ class TestLightrunOverheadReportGenerator(unittest.TestCase):
             with open(path / "report_data.json") as f:
                 data = json.load(f)
             self.assertIn("summary", data)
-            self.assertIn("successes", data)
-            self.assertIn("by_actions_count", data)
-            self.assertIn("regression", data)
-            self.assertEqual(len(data["successes"]), 2)
-            self.assertEqual(data["successes"][0]["actions_count"], 1)
-            self.assertEqual(data["successes"][0]["handler_run_time_ns"], 100)
+            self.assertIn("by_allocation", data)
+            alloc = data["by_allocation"]["256Mi-1"]
+            self.assertIn("successes", alloc)
+            self.assertIn("by_actions_count", alloc)
+            self.assertIn("regression", alloc)
+            self.assertEqual(len(alloc["successes"]), 2)
+            self.assertEqual(alloc["successes"][0]["actions_count"], 1)
+            self.assertEqual(alloc["successes"][0]["handler_run_time_ns"], 100)
 
 
 if __name__ == "__main__":

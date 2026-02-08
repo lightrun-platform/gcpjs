@@ -24,7 +24,7 @@ def _make_report_data(
     by_actions_count=None,
     regression=None,
 ):
-    """Build report_data.json structure."""
+    """Build report_data.json structure (summary + by_allocation)."""
     if successes is None:
         successes = [
             {"actions_count": 1, "handler_run_time_ns": 100},
@@ -45,14 +45,24 @@ def _make_report_data(
         "total_cases": total_cases,
         "success_count": success_count,
         "failure_count": failure_count,
+        "allocations": ["256Mi-1"] if success_count else [],
     }
+    alloc_summary = {"count": success_count}
     if handler_run_time_ns is not None:
-        summary["handler_run_time_ns"] = handler_run_time_ns
+        alloc_summary["handler_run_time_ns"] = handler_run_time_ns
+    by_allocation = {}
+    if success_count:
+        by_allocation["256Mi-1"] = {
+            "memory": "256Mi",
+            "cpu": "1",
+            "summary": alloc_summary,
+            "successes": successes,
+            "by_actions_count": by_actions_count,
+            "regression": regression,
+        }
     return {
         "summary": summary,
-        "successes": successes,
-        "by_actions_count": by_actions_count,
-        "regression": regression,
+        "by_allocation": by_allocation,
     }
 
 
@@ -140,7 +150,7 @@ class TestLightrunOverheadReportVisualizer(unittest.TestCase):
             self.assertIn("Failures", content)
 
     def test_create_visualizations_includes_handler_run_time_when_present(self):
-        """Handler run time table is included when summary has handler_run_time_ns."""
+        """Handler run time table is included when allocation summary has handler_run_time_ns."""
         data = _make_report_data(
             handler_run_time_ns={
                 "min": 50,
@@ -179,7 +189,7 @@ class TestLightrunOverheadReportVisualizer(unittest.TestCase):
             self.assertIn("1.0000", content)
 
     def test_create_visualizations_embeds_scatter_and_line_data(self):
-        """HTML contains Chart.js and embedded scatter + line data."""
+        """HTML contains Chart.js and embedded scatter + line data per allocation."""
         data = _make_report_data()
         with tempfile.TemporaryDirectory() as tmpdir:
             save_path = Path(tmpdir)
@@ -190,9 +200,8 @@ class TestLightrunOverheadReportVisualizer(unittest.TestCase):
             self.assertIn("chart.js", content.lower())
             self.assertIn("scatterData", content)
             self.assertIn("lineData", content)
-            self.assertIn('"x": 1', content)
-            self.assertIn('"y": 100', content)
-            self.assertIn("Benchmark length vs number of Lightrun actions", content)
+            self.assertIn("allocationDatasets", content)
+            self.assertIn("Handler run time vs number of Lightrun actions", content)
 
     def test_create_visualizations_sets_visualizations_path(self):
         """After create_visualizations, _visualizations_path is set for display()."""
@@ -206,7 +215,7 @@ class TestLightrunOverheadReportVisualizer(unittest.TestCase):
             self.assertEqual(self.visualizer._visualizations_path, out)
 
     def test_create_visualizations_empty_successes_no_regression_line(self):
-        """When successes is empty, regression line data is empty but HTML still valid."""
+        """When no successes, by_allocation is empty; HTML still valid."""
         data = _make_report_data(
             success_count=0,
             failure_count=2,
@@ -214,7 +223,6 @@ class TestLightrunOverheadReportVisualizer(unittest.TestCase):
             by_actions_count=[],
             regression={},
         )
-        data["summary"].pop("handler_run_time_ns", None)
         with tempfile.TemporaryDirectory() as tmpdir:
             save_path = Path(tmpdir)
             with open(save_path / "report_data.json", "w") as f:
@@ -224,9 +232,7 @@ class TestLightrunOverheadReportVisualizer(unittest.TestCase):
             self.assertIn("Total cases", content)
             self.assertIn("Failures", content)
             self.assertIn("2", content)
-            # Chart data should be empty arrays
-            self.assertIn("scatterData", content)
-            self.assertIn("lineData", content)
+            self.assertIn("allocationDatasets", content)
 
     def test_create_visualizations_valid_html_structure(self):
         """Generated HTML has DOCTYPE, head, body, and required elements."""
