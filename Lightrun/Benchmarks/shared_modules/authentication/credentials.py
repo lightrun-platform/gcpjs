@@ -2,8 +2,6 @@ import json
 import logging
 import time
 import webbrowser
-import platform
-import subprocess
 from typing import Optional
 
 import requests
@@ -139,7 +137,7 @@ class Credentials:
                                 self.logger.info(f"Time window: {time_window} seconds")
                                 self.logger.info(f"Company ID: {self.company_id}")
                                 self.logger.info(f"api url: {self.api_url}")
-                                self._close_active_tab_macos()
+
                                 return access_token, refresh_token, expiration_time
                         except json.JSONDecodeError:
                             self.logger.warning(f"Failed to decode JSON from 200 response: {resp.text}")
@@ -157,23 +155,3 @@ class Credentials:
             return None, None, None
 
 
-    def _close_active_tab_macos(self):
-        """Attempts to close the active tab in Google Chrome on macOS."""
-        try:
-            # Only run on macOS
-            if platform.system() != 'Darwin':
-                return
-
-            # AppleScript to close the active tab of the front window of Google Chrome
-            # We check if it's running to avoid launching it if it's not open (though it must be if used for auth)
-            script = '''
-            tell application "Google Chrome"
-                if running then
-                    close active tab of front window
-                end if
-            end tell
-            '''
-            subprocess.run(['osascript', '-e', script], capture_output=True, check=False)
-            self.logger.info("Attempted to close browser tab.")
-        except Exception as e:
-            self.logger.exception(f"Failed to auto-close browser tab: {e}")

@@ -26,6 +26,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
     """Benchmark case for Lightrun overhead measurement."""
 
     AGENT_POLL_INTERVAL_SECONDS = 1
+    AGENT_POLL_TIMEOUT_GRACE_SECONDS = 40
 
     def __init__(self,
                  *,
@@ -235,7 +236,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
             True if all actions were confirmed ACCEPTED before timeout, False if timed out.
         """
 
-        max_wait = self.agent_actions_update_interval_seconds + 10  # + grace period
+        max_wait = self.agent_actions_update_interval_seconds + LightrunOverheadBenchmarkCase.AGENT_POLL_TIMEOUT_GRACE_SECONDS
         poll_interval = LightrunOverheadBenchmarkCase.AGENT_POLL_INTERVAL_SECONDS
 
         self.logger.info(f"Waiting up to {max_wait}s for agent to accept {len(debug_session.actions)} actions. "

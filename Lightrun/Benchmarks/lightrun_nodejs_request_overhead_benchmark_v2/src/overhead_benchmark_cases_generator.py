@@ -10,8 +10,6 @@ from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overh
 from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import LightrunOverheadBenchmarkResult
 from Lightrun.Benchmarks.shared_modules.logger_factory import LoggerFactory
 
-from Lightrun.Benchmarks.shared_modules.authentication import ApiKeyAuthenticator, InteractiveAuthenticator
-
 
 class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOverheadBenchmarkResult]):
     """Generates benchmark cases for the Lightrun overhead benchmark."""
