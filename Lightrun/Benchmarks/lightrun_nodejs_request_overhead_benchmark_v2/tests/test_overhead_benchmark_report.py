@@ -21,8 +21,8 @@ from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overh
     _linear_regression,
 )
 from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import (
-    BenchmarkFailure,
-    BenchmarkSuccess,
+    LightrunOverheadBenchmarkFailure,
+    LightrunOverheadBenchmarkSuccess,
 )
 
 
@@ -39,7 +39,7 @@ def _make_fake_case(name="fake", num_actions=0, region="r", runtime="nodejs20", 
 
 
 def _make_success(handler_run_time_ns, actions_count, cpu_info="cpu"):
-    return BenchmarkSuccess(
+    return LightrunOverheadBenchmarkSuccess(
         benchmark_case=MagicMock(),
         handler_run_time_ns=handler_run_time_ns,
         actions_count=actions_count,
@@ -48,7 +48,7 @@ def _make_success(handler_run_time_ns, actions_count, cpu_info="cpu"):
 
 
 def _make_failure(error="err", cpu_info=None):
-    return BenchmarkFailure(
+    return LightrunOverheadBenchmarkFailure(
         benchmark_case=MagicMock(),
         error=error,
         cpu_info=cpu_info,

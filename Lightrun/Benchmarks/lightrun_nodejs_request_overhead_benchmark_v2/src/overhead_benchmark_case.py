@@ -7,8 +7,8 @@ import time
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
 from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import (
-    BenchmarkFailure,
-    BenchmarkSuccess,
+    LightrunOverheadBenchmarkFailure,
+    LightrunOverheadBenchmarkSuccess,
     LightrunOverheadBenchmarkResult,
 )
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import MAX_GCP_FUNCTION_NAME_LENGTH
@@ -317,12 +317,12 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 
                 # 7. Parse Result
                 if not result or 'handlerRunTime' not in result:
-                     return BenchmarkFailure(benchmark_case=self, error=f"Invalid response from function, missing 'handlerRunTime' attribute: {result}", cpu_info=None)
+                     return LightrunOverheadBenchmarkFailure(benchmark_case=self, error=f"Invalid response from function, missing 'handlerRunTime' attribute: {result}", cpu_info=None)
 
                 handler_run_time_ns = int(result['handlerRunTime'])
 
                 if not result or 'cpuInfo' not in result:
-                     return BenchmarkFailure(benchmark_case=self, error=f"Invalid response from function, missing 'cpuInfo' attribute: {result}", cpu_info=None)
+                     return LightrunOverheadBenchmarkFailure(benchmark_case=self, error=f"Invalid response from function, missing 'cpuInfo' attribute: {result}", cpu_info=None)
 
                 cpu_info = result['cpuInfo']
                 
@@ -367,7 +367,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
 
                 if actions_triggered < self.num_actions:
                      self.logger.warning(f"Verification Failed: Only {actions_triggered}/{self.num_actions} actions triggered. Missing: {missing_actions}")
-                     return BenchmarkFailure(
+                     return LightrunOverheadBenchmarkFailure(
                          benchmark_case=self,
                          error=f"Partial action triggering: {actions_triggered}/{self.num_actions} triggered. Potential throttling or agent lag.",
                          cpu_info=cpu_info,
@@ -375,7 +375,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
 
                 self.logger.info(f"Verification Successful: All {actions_triggered} actions triggered.")
 
-                return BenchmarkSuccess(
+                return LightrunOverheadBenchmarkSuccess(
                     benchmark_case=self,
                     handler_run_time_ns=handler_run_time_ns,
                     actions_count=self.num_actions,
@@ -384,4 +384,4 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
 
         except Exception as e:
             self.logger.exception(f"Benchmark execution failed with an exception: {e}")
-            return BenchmarkFailure(benchmark_case=self, error=str(e), cpu_info=None)
+            return LightrunOverheadBenchmarkFailure(benchmark_case=self, error=str(e), cpu_info=None)

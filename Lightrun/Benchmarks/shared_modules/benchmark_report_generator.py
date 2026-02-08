@@ -4,13 +4,10 @@ from pathlib import Path
 from typing import List, Dict
 
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
+from Lightrun.Benchmarks.shared_modules.gcf_models.benchmark_result import LightrunBenchmarkResult
 
 
-class BenchmarkReportGenerator[T](ABC):
-
-    @abstractmethod
-    def save_benchmark_data(self, benchmark_results: List[BenchmarkCase[T]], save_path: Path) -> Path:
-        pass
+class BenchmarkReportGenerator[T: LightrunBenchmarkResult](ABC):
 
     @abstractmethod
     def generate_report(self, benchmark_results: List[BenchmarkCase[T]], save_path: Path) -> Path:

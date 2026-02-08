@@ -8,8 +8,8 @@ from Lightrun.Benchmarks.shared_modules.benchmark_report_generator import Benchm
 
 from .overhead_benchmark_case import LightrunOverheadBenchmarkCase
 from .overhead_benchmark_result import (
-    BenchmarkFailure,
-    BenchmarkSuccess,
+    LightrunOverheadBenchmarkFailure,
+    LightrunOverheadBenchmarkSuccess,
     LightrunOverheadBenchmarkResult,
 )
 
@@ -65,14 +65,14 @@ class LightrunOverheadReportGenerator(
             result = case._benchmark_result
             if result is None:
                 entry["result"] = {"success": False, "error": "No result", "cpu_info": None}
-            elif isinstance(result, BenchmarkSuccess):
+            elif isinstance(result, LightrunOverheadBenchmarkSuccess):
                 entry["result"] = {
                     "success": True,
                     "handler_run_time_ns": result.handler_run_time_ns,
                     "actions_count": result.actions_count,
                     "cpu_info": result.cpu_info,
                 }
-            elif isinstance(result, BenchmarkFailure):
+            elif isinstance(result, LightrunOverheadBenchmarkFailure):
                 entry["result"] = {
                     "success": False,
                     "error": result.error,
@@ -100,7 +100,7 @@ class LightrunOverheadReportGenerator(
             if result is None:
                 failures_count += 1
                 continue
-            if isinstance(result, BenchmarkSuccess):
+            if isinstance(result, LightrunOverheadBenchmarkSuccess):
                 successes.append({
                     "actions_count": result.actions_count,
                     "handler_run_time_ns": result.handler_run_time_ns,

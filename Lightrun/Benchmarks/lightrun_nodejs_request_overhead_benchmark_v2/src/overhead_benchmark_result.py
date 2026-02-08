@@ -1,24 +1,13 @@
-from abc import ABC
 from dataclasses import dataclass
-from typing import Optional
-from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 
-@dataclass
-class LightrunOverheadBenchmarkResult(ABC):
-    """Class to hold the result of a single benchmark case run."""
-
-    benchmark_case: BenchmarkCase
+from Lightrun.Benchmarks.shared_modules.gcf_models.benchmark_result import BenchmarkSuccess, BenchmarkFailure
 
 
 @dataclass
-class BenchmarkFailure(LightrunOverheadBenchmarkResult):
-    error: str
-    cpu_info: Optional[str] = None
+class LightrunOverheadBenchmarkFailure(BenchmarkFailure):
+    pass
 
 @dataclass
-class BenchmarkSuccess(LightrunOverheadBenchmarkResult):
-    handler_run_time_ns: int
-    actions_count: int
-    cpu_info: str
-
+class LightrunOverheadBenchmarkSuccess(BenchmarkSuccess):
+    pass
 

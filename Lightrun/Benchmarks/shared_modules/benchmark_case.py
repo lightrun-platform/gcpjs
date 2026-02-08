@@ -85,17 +85,17 @@ class BenchmarkCase[T](ABC):
                         summary += "Benchmark result: benchmark did not run or info is missing"
                     else:
                         from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.overhead_benchmark_result import (
-                            BenchmarkFailure,
-                            BenchmarkSuccess,
+                            LightrunOverheadBenchmarkFailure,
+                            LightrunOverheadBenchmarkSuccess,
                         )
                         summary += f"Benchmark result: "
                         match self._benchmark_result:
-                            case BenchmarkFailure(error=error, cpu_info=cpu_info):
+                            case LightrunOverheadBenchmarkFailure(error=error, cpu_info=cpu_info):
                                 summary += f"Failure\n"
                                 summary += f"Error: {error}\n"
                                 if cpu_info is not None:
                                     summary += f"CPU info: {cpu_info}\n"
-                            case BenchmarkSuccess(cpu_info=cpu_info):
+                            case LightrunOverheadBenchmarkSuccess(cpu_info=cpu_info):
                                 summary += f"Success\n"
                                 summary += f"CPU info: {cpu_info}\n"
                             case _:
