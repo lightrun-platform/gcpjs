@@ -27,7 +27,7 @@ def _make_fake_case(name="fake", num_actions=0, region="r", runtime="nodejs20", 
     """Minimal case-like object for generator tests (get_benchmark_result returns the result)."""
     obj = MagicMock()
     obj.name = name
-    obj.num_actions = num_actions
+    obj.test_size = num_actions
     obj.region = region
     obj.runtime = runtime
     obj.action_type = action_type
@@ -35,8 +35,12 @@ def _make_fake_case(name="fake", num_actions=0, region="r", runtime="nodejs20", 
     return obj
 
 
-def _default_dto(cpu_model: str | None = "Intel Xeon 2nd Gen (Cascade Lake)") -> LightrunOverheadBenchmarkCaseDTO:
-    """Minimal DTO for test result construction."""
+def _default_dto(cpu_model: str | None = "Intel Xeon 2nd Gen (Cascade Lake)", benchmark_results=None) -> LightrunOverheadBenchmarkCaseDTO:
+    """Minimal DTO for test result construction.
+    
+    benchmark_results should be a Dict[int, BenchmarkMeasurement] if provided.
+    """
+    from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.lightrun_overhead_benchmark_case_dto import BenchmarkMeasurement
     return LightrunOverheadBenchmarkCaseDTO(
         benchmark_name="bench",
         name="fake",
@@ -44,7 +48,7 @@ def _default_dto(cpu_model: str | None = "Intel Xeon 2nd Gen (Cascade Lake)") ->
         region="r",
         source_code_dir=Path("."),
         entry_point="index.js",
-        num_actions=0,
+        test_size=0,
         action_type="snapshot",
         lightrun_company_id="",
         lightrun_api_hostname="",
@@ -63,6 +67,7 @@ def _default_dto(cpu_model: str | None = "Intel Xeon 2nd Gen (Cascade Lake)") ->
         deployment_result=None,
         delete_result=None,
         cpu_model=cpu_model,
+        benchmark_results=benchmark_results if benchmark_results is not None else {},
     )
 
 

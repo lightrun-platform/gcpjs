@@ -60,22 +60,49 @@ def _build_report_data_from_results(
     - summary: global stats
     - by_allocation: grouped by memory/cpu allocation only (for backward compatibility)
     - by_group: grouped by (allocation, cpu_model) for precise comparisons
+    
+    Note: Results can contain individual measurements in benchmark_results dict (new format)
+    or a single measurement (legacy format). This function handles both.
     """
     failures_count = 0
     # Group by (allocation, cpu_model) for precise comparisons
     grouped: Dict[str, List[Dict[str, Any]]] = {}
+    
     for result in results:
         if result is None:
             failures_count += 1
             continue
-        if isinstance(result, Success):
-            memory = result.benchmark_dto.memory
-            cpu = result.benchmark_dto.cpu
-            # Get cpu_model from DTO (populated during load) or identify from cpu_info
-            cpu_model = result.benchmark_dto.cpu_model
-            if not cpu_model and result.cpu_info:
-                cpu_model = CpuModel.identify(result.cpu_info).display_name
-            key = _group_key(memory, cpu, cpu_model)
+        
+        if not isinstance(result, Success):
+            failures_count += 1
+            continue
+            
+        memory = result.benchmark_dto.memory
+        cpu = result.benchmark_dto.cpu
+        # Get cpu_model from DTO (populated during load) or identify from cpu_info
+        cpu_model = result.benchmark_dto.cpu_model
+        if not cpu_model and result.cpu_info:
+            cpu_model = CpuModel.identify(result.cpu_info).display_name
+        
+        key = _group_key(memory, cpu, cpu_model)
+        
+        # Check if this result has benchmark_results dict (new format)
+        benchmark_results = result.benchmark_dto.benchmark_results
+        if benchmark_results:
+            # Extract individual measurements from benchmark_results dict
+            for num_actions, measurement in benchmark_results.items():
+                if measurement.success:
+                    grouped.setdefault(key, []).append({
+                        "memory": memory,
+                        "cpu": cpu,
+                        "cpu_model": cpu_model,
+                        "actions_count": measurement.actions_count,
+                        "handler_run_time_ns": measurement.handler_run_time_ns,
+                    })
+                else:
+                    failures_count += 1
+        else:
+            # Legacy format: single measurement per result
             grouped.setdefault(key, []).append({
                 "memory": memory,
                 "cpu": cpu,
@@ -83,8 +110,7 @@ def _build_report_data_from_results(
                 "actions_count": result.actions_count,
                 "handler_run_time_ns": result.handler_run_time_ns,
             })
-        else:
-            failures_count += 1
+    
     total = len(results)
     success_count = sum(len(s) for s in grouped.values())
 

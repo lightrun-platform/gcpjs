@@ -55,38 +55,37 @@ class LightrunOverheadBenchmarkCasesGenerator(BenchmarkCasesGenerator[LightrunOv
                 
                 for memory in benchmark_config.memory:
                     for cpu in benchmark_config.cpus:
-                        # Generate cases: 0 to test_size actions
-                        for num_actions in range(benchmark_config.test_size + 1):
-
-                            region = next(regions_allocation_order)
-                            
-                            case = LightrunOverheadBenchmarkCase(
-                                benchmark_name=benchmark_name,
-                                runtime=runtime,
-                                region=region,
-                                source_code_dir=generated_source.path,
-                                entry_point=generated_source.entry_point,
-                                num_actions=num_actions,
-                                action_type=benchmark_config.lightrun_action_type,
-                                lightrun_secret=benchmark_config.lightrun_secret,
-                                lightrun_api_key=benchmark_config.lightrun_api_key,
-                                lightrun_company_id=benchmark_config.lightrun_company_id,
-                                lightrun_api_hostname=benchmark_config.lightrun_api_hostname,
-                                project=benchmark_config.project,
-                                memory=memory,
-                                cpu=cpu,
-                                timeout=benchmark_config.request_timeout,
-                                gen2=is_gen2,
-                                deployment_timeout=benchmark_config.deployment_timeout,
-                                delete_timeout=benchmark_config.delete_timeout,
-                                authentication_type=benchmark_config.authentication_type,
-                                logger_factory=logger_factory,
-                                lightrun_version=benchmark_config.lightrun_version,
-                                clean_after_run=not benchmark_config.skip_test_cleanup,
-                                agent_actions_update_interval_seconds=benchmark_config.agent_actions_update_interval_seconds,
-                                lightrun_agent_log_level=benchmark_config.lightrun_agent_log_level,
-                                required_cpu_model=benchmark_config.required_cpu_model,
-                                )
-                            cases.append(case)
+                        # Each case tests 0 to test_size actions within a single deployment
+                        region = next(regions_allocation_order)
+                        
+                        case = LightrunOverheadBenchmarkCase(
+                            benchmark_name=benchmark_name,
+                            runtime=runtime,
+                            region=region,
+                            source_code_dir=generated_source.path,
+                            entry_point=generated_source.entry_point,
+                            test_size=benchmark_config.test_size,
+                            action_type=benchmark_config.lightrun_action_type,
+                            lightrun_secret=benchmark_config.lightrun_secret,
+                            lightrun_api_key=benchmark_config.lightrun_api_key,
+                            lightrun_company_id=benchmark_config.lightrun_company_id,
+                            lightrun_api_hostname=benchmark_config.lightrun_api_hostname,
+                            project=benchmark_config.project,
+                            memory=memory,
+                            cpu=cpu,
+                            timeout=benchmark_config.request_timeout,
+                            gen2=is_gen2,
+                            deployment_timeout=benchmark_config.deployment_timeout,
+                            delete_timeout=benchmark_config.delete_timeout,
+                            authentication_type=benchmark_config.authentication_type,
+                            logger_factory=logger_factory,
+                            lightrun_version=benchmark_config.lightrun_version,
+                            clean_after_run=not benchmark_config.skip_test_cleanup,
+                            agent_actions_update_interval_seconds=benchmark_config.agent_actions_update_interval_seconds,
+                            lightrun_agent_log_level=benchmark_config.lightrun_agent_log_level,
+                            required_cpu_model=benchmark_config.required_cpu_model,
+                            delay_between_tests_seconds=benchmark_config.delay_between_requests,
+                        )
+                        cases.append(case)
                 
         return cases

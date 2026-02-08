@@ -1,10 +1,10 @@
 from logging import Logger
 from pathlib import Path
-from typing import List
+from typing import List, Dict
 
 import time
 
-from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO
+from Lightrun.Benchmarks.lightrun_nodejs_request_overhead_benchmark_v2.src.lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO, BenchmarkMeasurement
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.gcf_models.benchmark_result import LightrunBenchmarkResult
 from Lightrun.Benchmarks.shared_modules.gcf_models.gcp_function import GCPFunction
@@ -28,6 +28,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
 
     AGENT_POLL_INTERVAL_SECONDS = 1
     AGENT_POLL_TIMEOUT_GRACE_SECONDS = 40
+    DEFAULT_DELAY_BETWEEN_TESTS_SECONDS = 10
 
     def __init__(self,
                  *,
@@ -36,7 +37,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  region: str,
                  source_code_dir: Path,
                  entry_point: str,
-                 num_actions: int,
+                 test_size: int,
                  action_type: str,
                  lightrun_secret: str,
                  lightrun_api_key: str,
@@ -55,14 +56,15 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
                  clean_after_run: bool,
                  agent_actions_update_interval_seconds: int,
                  lightrun_agent_log_level: str,
-                 required_cpu_model: str | None = None):
+                 required_cpu_model: str | None = None,
+                 delay_between_tests_seconds: int | None = None):
         super().__init__(deployment_timeout, delete_timeout, clean_after_run=clean_after_run)
         self.benchmark_name = benchmark_name
         self.runtime = runtime
         self.region = region
         self.source_code_dir = source_code_dir
         self.entry_point = entry_point
-        self.num_actions = num_actions
+        self.test_size = test_size
         self.action_type = action_type
         self.lightrun_secret = lightrun_secret
         self.lightrun_api_key = lightrun_api_key
@@ -78,8 +80,11 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         self.lightrun_agent_log_level = lightrun_agent_log_level
         self.authentication_type = authentication_type
         self.required_cpu_model = required_cpu_model
+        self.delay_between_tests_seconds = delay_between_tests_seconds or self.DEFAULT_DELAY_BETWEEN_TESTS_SECONDS
         self._gcp_function = None
         self._logger = logger_factory.get_logger(self.name)
+        # Results for each action count tested (key: num_actions, value: measurement result)
+        self.benchmark_results: Dict[int, BenchmarkMeasurement] = {}
 
 
         match authentication_type:
@@ -102,7 +107,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         region = self.region,
         source_code_dir = self.source_code_dir,
         entry_point = self.entry_point,
-        num_actions = self.num_actions,
+        test_size = self.test_size,
         action_type = self.action_type,
         authentication_type=self.authentication_type,
         lightrun_company_id = self.lightrun_company_id,
@@ -116,7 +121,8 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         agent_actions_update_interval_seconds = self.agent_actions_update_interval_seconds,
         lightrun_agent_log_level = self.lightrun_agent_log_level,
         deployment_result=self.deployment_result,
-        delete_result=self.delete_result
+        delete_result=self.delete_result,
+        benchmark_results=self.benchmark_results
         )
 
     @property
@@ -127,7 +133,7 @@ class LightrunOverheadBenchmarkCase(BenchmarkCase[LightrunOverheadBenchmarkResul
         sanitized_mem = self.memory.lower()
         sanitized_cpu = self.cpu.replace('.', 'p')
         generation = "gen2" if self.gen2 else "gen1"
-        return f"{self.runtime}-{generation}-{sanitized_mem}-{sanitized_cpu}cpu-{self.num_actions}actions-{self.region}"
+        return f"{self.runtime}-{generation}-{sanitized_mem}-{sanitized_cpu}cpu-{self.test_size}size-{self.region}"
 
     @property
     def name(self) -> str:
@@ -220,7 +226,7 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         #     return ...  <-- Target
         # }
         
-        for i in range(1, self.num_actions + 1):
+        for i in range(1, self.test_size + 1):
             func_def_str = f"function function{i}() {{"
             found_func = False
             for line_idx, line in enumerate(lines):
@@ -304,43 +310,179 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
         # Todo - important! add definition later.
         pass # stub
 
-    def execute_benchmark(self) -> LightrunOverheadBenchmarkResult:
-        """Execute the benchmark logic."""
-
-        self.logger.info(f"Executing benchmark with {self.num_actions} {self.action_type} actions on {self.runtime}")
+    def _create_actions_for_count(self, num_actions: int) -> List[BreakpointAction | LogAction]:
+        """Create a list of actions for a given action count."""
+        if num_actions <= 0:
+            return []
         
-        # 1. get Agent Display Name (used to identify the agent on the server)
-        agent_display_name = self.name
-
-        # 2. Determine Action Lines
-        if self.num_actions > 0:
-            action_lines = self._get_action_line_numbers()
-            if len(action_lines) != self.num_actions:
-                 self.logger.warning(f"Expected {self.num_actions} action lines but found {len(action_lines)}. Adjusting action count.")
-        else:
-            action_lines = []
-
-        # 3. Create Actions
+        action_lines = self._get_action_line_numbers()
+        if len(action_lines) < num_actions:
+            self.logger.warning(f"Requested {num_actions} actions but only {len(action_lines)} action lines available.")
+            num_actions = len(action_lines)
+        
         actions = []
         filename = "lightrunOverheadBenchmark.js"
         
-        for line in action_lines:
+        for line in action_lines[:num_actions]:
             if self.action_type.lower() == 'snapshot':
                 actions.append(BreakpointAction(filename=filename, line_number=line, max_hit_count=1, expire_seconds=3600))
             elif self.action_type.lower() == 'log':
                 actions.append(LogAction(filename=filename, line_number=line, max_hit_count=1, expire_seconds=3600, log_message="deployment-test-log: Hello from Lightrun!"))
+        
+        return actions
 
-        # 4. Execute with Actions Context
+    def _verify_actions_triggered(self, debug_session: DebuggingSession, num_actions: int) -> tuple[bool, int, List[str]]:
+        """Verify that all actions were triggered.
+        
+        Returns:
+            Tuple of (success, actions_triggered_count, missing_actions_list)
+        """
+        max_retries = 10
+        actions_triggered = 0
+        missing_actions = []
+        
+        for attempt in range(max_retries):
+            actions_triggered = 0
+            missing_actions = []
+            
+            for action in debug_session.applied_actions:
+                try:
+                    is_hit = False
+                    info = action.get_info(self.lightrun_api)
+                    if info:
+                        hit_count = info.get('hitCount', 0)
+                        if hit_count > 0:
+                            is_hit = True
+                        status = f"Hits={hit_count}"
+                    else:
+                        status = "Info=None"
+                except Exception as e:
+                    status = f"Error fetching snapshot: {e}"
+                
+                if is_hit:
+                    actions_triggered += 1
+                else:
+                    missing_actions.append(f"{action.__class__.__name__}:{action.action_id} ({status})")
+            
+            if actions_triggered == len(debug_session.applied_actions):
+                return True, actions_triggered, []
+            
+            self.logger.info(f"Verification attempt {attempt+1}/{max_retries}: {actions_triggered}/{num_actions} triggered. Missing: {missing_actions}")
+            time.sleep(2)
+        
+        return False, actions_triggered, missing_actions
+
+    def _run_single_measurement(self, send_task: SendRequestTask, num_actions: int, 
+                                 agent_display_name: str, cpu_info_cache: dict) -> BenchmarkMeasurement:
+        """Run a single measurement for a given action count.
+        
+        Args:
+            send_task: The task to send requests to the function
+            num_actions: Number of actions for this measurement
+            agent_display_name: The agent display name for the debugging session
+            cpu_info_cache: Dict to cache cpu_info (populated on first measurement)
+        
+        Returns:
+            BenchmarkMeasurement with the result
+        """
+        self.logger.info(f"--- Running measurement with {num_actions} actions ---")
+        
+        # Create actions for this measurement
+        actions = self._create_actions_for_count(num_actions)
+        
+        # Use a new DebuggingSession for each measurement
+        with DebuggingSession(self.lightrun_api, agent_display_name, actions, self.logger) as debug_session:
+            
+            # Clear any existing actions on the agent
+            debug_session.clear_all_actions_from_agent()
+            
+            # Apply actions (only if we have any)
+            if num_actions > 0:
+                debug_session.apply_actions()
+                
+                # Wait for actions to bind
+                if not self._wait_for_actions_to_bind(debug_session):
+                    return BenchmarkMeasurement(
+                        success=False,
+                        actions_count=num_actions,
+                        error=f"Timed out waiting for {num_actions} actions to bind",
+                        cpu_info=cpu_info_cache.get('cpu_info')
+                    )
+            
+            # Send measurement request
+            self.logger.info("Sending measurement request...")
+            result = send_task.execute()
+            
+            # Parse result
+            if not result or 'handlerRunTime' not in result:
+                return BenchmarkMeasurement(
+                    success=False,
+                    actions_count=num_actions,
+                    error=f"Invalid response from function, missing 'handlerRunTime' attribute: {result}",
+                    cpu_info=cpu_info_cache.get('cpu_info')
+                )
+            
+            handler_run_time_ns = int(result['handlerRunTime'])
+            
+            if not result or 'cpuInfo' not in result:
+                return BenchmarkMeasurement(
+                    success=False,
+                    actions_count=num_actions,
+                    error=f"Invalid response from function, missing 'cpuInfo' attribute: {result}",
+                    cpu_info=cpu_info_cache.get('cpu_info')
+                )
+            
+            cpu_info = result['cpuInfo']
+            cpu_info_cache['cpu_info'] = cpu_info  # Cache for future failures
+            
+            # Verify actions triggered (only if we have actions)
+            if num_actions > 0:
+                success, actions_triggered, missing_actions = self._verify_actions_triggered(debug_session, num_actions)
+                if not success:
+                    self.logger.warning(f"Verification Failed: Only {actions_triggered}/{num_actions} actions triggered. Missing: {missing_actions}")
+                    return BenchmarkMeasurement(
+                        success=False,
+                        actions_count=num_actions,
+                        error=f"Partial action triggering: {actions_triggered}/{num_actions} triggered. Potential throttling or agent lag.",
+                        cpu_info=cpu_info
+                    )
+                self.logger.info(f"Verification Successful: All {actions_triggered} actions triggered.")
+            else:
+                self.logger.info("No actions to verify (baseline measurement with 0 actions).")
+            
+            return BenchmarkMeasurement(
+                success=True,
+                actions_count=num_actions,
+                handler_run_time_ns=handler_run_time_ns,
+                cpu_info=cpu_info
+            )
+
+    def execute_benchmark(self) -> LightrunOverheadBenchmarkResult:
+        """Execute the benchmark logic for all action counts (0 to test_size).
+        
+        This method deploys a single function and runs multiple measurements,
+        varying the number of actions from 0 to test_size. This is more efficient
+        than deploying separate functions for each action count.
+        
+        Results for each action count are stored in self.benchmark_results dict.
+        
+        Returns:
+            A single result indicating overall success/failure with the DTO containing all measurements.
+        """
+        cpu_info_cache: dict = {}  # Cache CPU info for failures that happen before we get it
+        
+        self.logger.info(f"Executing benchmark with action counts 0 to {self.test_size} using {self.action_type} actions on {self.runtime}")
+        
+        agent_display_name = self.name
+        
         try:
             send_task = SendRequestTask(self.gcp_function)
             
-            # Step 1: Warmup request - triggers agent startup and registration
-            # The agent registers with the server during the first request execution.
-            # Once this request completes, the agent is already registered (sends "isLambda: true" header).
-            self.logger.info("Sending warmup request to trigger agent registration...")
+            # Initial warmup request - triggers agent startup and registration
+            self.logger.info("Sending initial warmup request to trigger agent registration...")
             cold_start_request = send_task.execute()
             
-            # Validate that the agent initialized with the correct display name
+            # Validate agent initialization
             if cold_start_request and 'initArguments' in cold_start_request:
                 init_args = cold_start_request['initArguments']
                 returned_display_name = init_args.get('metadata', {}).get('registration', {}).get('displayName')
@@ -354,88 +496,56 @@ Max allowed length for google cloud functions is {MAX_GCP_FUNCTION_NAME_LENGTH} 
                 self.logger.info(f"Agent registered with display name: '{returned_display_name}'")
             else:
                 self.logger.warning(f"Cold Start response did not contain initArguments. Response: {cold_start_request}")
-
-
-            with DebuggingSession(self.lightrun_api, agent_display_name, actions, self.logger) as debug_session:
-
-                # Step 1: Clear any existing actions on the agent to ensure a clean slate
-                debug_session.clear_all_actions_from_agent()
-
-                # Step 2: Warmup the function so it has stable results that can be compared with other benchmark cases
-                self.warmup()
-
-                # Step 2: Apply benchmark actions
-                debug_session.apply_actions()
-
-                # Step 3: Wait for the agent to fetch the actions
-                self._wait_for_actions_to_bind(debug_session)
-
-                # Step 4: Measurement request
-                self.logger.info("Sending measurement request...")
-                result = send_task.execute()
+            
+            # Cache CPU info from cold start if available
+            if cold_start_request and 'cpuInfo' in cold_start_request:
+                cpu_info_cache['cpu_info'] = cold_start_request['cpuInfo']
+            
+            # Warmup phase
+            self.warmup()
+            
+            # Run measurements for each action count: 0, 1, 2, ..., test_size
+            for num_actions in range(self.test_size + 1):
+                measurement = self._run_single_measurement(send_task, num_actions, agent_display_name, cpu_info_cache)
+                self.benchmark_results[num_actions] = measurement
                 
-                # 7. Parse Result
-                if not result or 'handlerRunTime' not in result:
-                     return LightrunBenchmarkResult.FAILURE(benchmark_case_dto=self.to_dto(), error=f"Invalid response from function, missing 'handlerRunTime' attribute: {result}", cpu_info=None)
-
-                handler_run_time_ns = int(result['handlerRunTime'])
-
-                if not result or 'cpuInfo' not in result:
-                     return LightrunBenchmarkResult.FAILURE(benchmark_case_dto=self.to_dto(), error=f"Invalid response from function, missing 'cpuInfo' attribute: {result}", cpu_info=None)
-
-                cpu_info = result['cpuInfo']
+                # Log result summary
+                if measurement.success:
+                    self.logger.info(f"Measurement {num_actions}/{self.test_size}: SUCCESS - {measurement.handler_run_time_ns}ns")
+                else:
+                    self.logger.warning(f"Measurement {num_actions}/{self.test_size}: FAILURE - {measurement.error}")
                 
-                # 8. Verify Action Triggering
-                # Iterate over applied actions and check their hit count/status
-                actions_triggered = 0
-                missing_actions = []
-
-                # Allow a short buffer for async reporting from agent to server
-                max_retries = 10
-                for attempt in range(max_retries):
-                    actions_triggered = 0
-                    missing_actions = []
-                    
-                    for action in debug_session.applied_actions:
-                        try:
-                            is_hit = False
-                            info = action.get_info(self.lightrun_api)
-                            # Check if CAPTURED or if hit count > 0 (snapshots might be consumable)
-                            if info:
-                                hit_count = info.get('hitCount', 0)
-                                if hit_count > 0:
-                                    is_hit = True
-
-                                status = f"Hits={hit_count}"
-                            else:
-                                status = "Info=None"
-                        except Exception as e:
-                            status = f"Error fetching snapshot: {e}"
-                        
-                        if is_hit:
-                            actions_triggered += 1
-                        else:
-                            missing_actions.append(f"{action.__class__.__name__}:{action.action_id} ({status})")
-                    
-                    if actions_triggered == len(debug_session.applied_actions):
-                        break
-                    
-                    self.logger.info(f"Verification attempt {attempt+1}/{max_retries}: {actions_triggered}/{self.num_actions} triggered. Missing: {missing_actions}")
-                    time.sleep(2) # Wait before retry
-
-                if actions_triggered < self.num_actions:
-                     self.logger.warning(f"Verification Failed: Only {actions_triggered}/{self.num_actions} actions triggered. Missing: {missing_actions}")
-                     return LightrunBenchmarkResult.FAILURE(benchmark_case_dto=self.to_dto(),
-                                                            error=f"Partial action triggering: {actions_triggered}/{self.num_actions} triggered. Potential throttling or agent lag.",
-                                                            cpu_info=cpu_info)
-
-                self.logger.info(f"Verification Successful: All {actions_triggered} actions triggered.")
-
-                return LightrunBenchmarkResult.SUCCESS(benchmark_case_dto=self.to_dto(),
-                                                       handler_run_time_ns=handler_run_time_ns,
-                                                       actions_count=self.num_actions,
-                                                       cpu_info=cpu_info)
-
+                # Pause between tests to avoid exhausting CPU quota
+                # (skip pause after the last measurement)
+                if num_actions < self.test_size:
+                    self.logger.info(f"Pausing {self.delay_between_tests_seconds}s before next measurement...")
+                    time.sleep(self.delay_between_tests_seconds)
+            
+            # Determine overall success (all measurements succeeded)
+            all_success = all(m.success for m in self.benchmark_results.values())
+            success_count = sum(1 for m in self.benchmark_results.values() if m.success)
+            
+            self.logger.info(f"Benchmark completed. {success_count}/{len(self.benchmark_results)} measurements succeeded.")
+            
+            if all_success:
+                return LightrunBenchmarkResult.SUCCESS(
+                    benchmark_case_dto=self.to_dto(),
+                    handler_run_time_ns=0,  # Not applicable for aggregate result
+                    actions_count=self.test_size,
+                    cpu_info=cpu_info_cache.get('cpu_info')
+                )
+            else:
+                failed_actions = [k for k, v in self.benchmark_results.items() if not v.success]
+                return LightrunBenchmarkResult.FAILURE(
+                    benchmark_case_dto=self.to_dto(),
+                    error=f"Some measurements failed: action counts {failed_actions}",
+                    cpu_info=cpu_info_cache.get('cpu_info')
+                )
+            
         except Exception as e:
             self.logger.exception(f"Benchmark execution failed with an exception: {e}")
-            return LightrunBenchmarkResult.FAILURE(benchmark_case_dto=self.to_dto(), error=str(e), cpu_info=None)
+            return LightrunBenchmarkResult.FAILURE(
+                benchmark_case_dto=self.to_dto(),
+                error=str(e),
+                cpu_info=cpu_info_cache.get('cpu_info')
+            )

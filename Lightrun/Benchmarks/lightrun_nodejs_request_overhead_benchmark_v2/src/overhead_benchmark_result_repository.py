@@ -1,28 +1,30 @@
 """Repository for saving and loading Lightrun overhead benchmark raw data."""
 
 import json
+from dataclasses import asdict
 from pathlib import Path
 from typing import List, Dict, Any
 
 from Lightrun.Benchmarks.shared_modules.authentication.authenticator import AuthenticationType
 from Lightrun.Benchmarks.shared_modules.benchmark_result_repository import BenchmarkResultRepository
 from Lightrun.Benchmarks.shared_modules.cpu_model import CpuModel
-from .lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO
+from .lightrun_overhead_benchmark_case_dto import LightrunOverheadBenchmarkCaseDTO, BenchmarkMeasurement
 from .overhead_benchmark_result import Failure, LightrunOverheadBenchmarkResult, Success
 
 RAW_FILENAME = "benchmark_raw_data.json"
 
 
-def _dict_to_dto(c: Dict[str, Any], cpu_model: str | None = None) -> LightrunOverheadBenchmarkCaseDTO:
+def _dict_to_dto(c: Dict[str, Any], cpu_model: str | None = None, benchmark_results: Dict[int, BenchmarkMeasurement] | None = None) -> LightrunOverheadBenchmarkCaseDTO:
     """Build LightrunOverheadBenchmarkCaseDTO from saved case dict (missing fields use defaults).
     
     Args:
         c: Dictionary of case fields
         cpu_model: Optional identified CPU model (parsed from cpu_info at load time)
+        benchmark_results: Optional dict of measurement results keyed by action count
     """
     return LightrunOverheadBenchmarkCaseDTO(
         name=c.get("name", ""),
-        num_actions=c.get("num_actions", 0),
+        test_size=c.get("test_size", c.get("num_actions", 0)),  # Support legacy num_actions
         region=c.get("region", ""),
         runtime=c.get("runtime", ""),
         action_type=c.get("action_type", ""),
@@ -46,6 +48,7 @@ def _dict_to_dto(c: Dict[str, Any], cpu_model: str | None = None) -> LightrunOve
         deployment_result=None,
         delete_result=None,
         cpu_model=cpu_model or c.get("cpu_model"),  # Use passed value or try from dict
+        benchmark_results=benchmark_results or c.get("benchmark_results", {}),
     )
 
 
@@ -53,7 +56,7 @@ def _dto_to_dict(dto: LightrunOverheadBenchmarkCaseDTO) -> Dict[str, Any]:
     """Serialize DTO to dict for JSON (subset of fields we persist)."""
     d = {
         "name": dto.name,
-        "num_actions": dto.num_actions,
+        "test_size": dto.test_size,
         "region": dto.region,
         "runtime": dto.runtime,
         "action_type": dto.action_type,
@@ -74,6 +77,8 @@ def _dto_to_dict(dto: LightrunOverheadBenchmarkCaseDTO) -> Dict[str, Any]:
         "lightrun_company_id": dto.lightrun_company_id,
         "lightrun_api_hostname": dto.lightrun_api_hostname,
         "authentication_type": dto.authentication_type.value,
+        # Convert benchmark_results to dict for JSON serialization (keys as strings, values as dicts)
+        "benchmark_results": {str(k): asdict(v) for k, v in dto.benchmark_results.items()},
     }
     if dto.cpu_model:
         d["cpu_model"] = dto.cpu_model
@@ -144,6 +149,9 @@ class LightrunOverheadBenchmarkResultRepository(BenchmarkResultRepository[Lightr
         
         If the case dict has a stored cpu_model, uses that.
         Otherwise, identifies CPU model from cpu_info and populates it in the DTO.
+        
+        For new-format data with benchmark_results dict, loads that directly.
+        For legacy data without benchmark_results, creates a single-entry dict.
         """
         raw_path = path / RAW_FILENAME if path.is_dir() else path
         if not raw_path.exists():
@@ -156,11 +164,20 @@ class LightrunOverheadBenchmarkResultRepository(BenchmarkResultRepository[Lightr
             case_dict = entry.get("case", {})
             result_dict = entry.get("result", {})
             cpu_info = result_dict.get("cpu_info")
+            
             # Use stored cpu_model from case dict if available, otherwise identify from cpu_info
             cpu_model = case_dict.get("cpu_model")
             if not cpu_model and cpu_info:
                 cpu_model = CpuModel.identify(cpu_info).display_name
-            dto = _dict_to_dto(case_dict, cpu_model=cpu_model)
+            
+            # Parse benchmark_results - convert string keys back to int and dicts to BenchmarkMeasurement
+            raw_benchmark_results = case_dict.get("benchmark_results", {})
+            benchmark_results = {
+                int(k): BenchmarkMeasurement(**v) 
+                for k, v in raw_benchmark_results.items()
+            } if raw_benchmark_results else {}
+            
+            dto = _dict_to_dto(case_dict, cpu_model=cpu_model, benchmark_results=benchmark_results)
             success = result_dict.get("success", False)
             if success:
                 results.append(
