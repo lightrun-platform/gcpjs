@@ -63,6 +63,8 @@ class LightrunOverheadReportVisualizer(BenchmarkResultsVisualizer[LightrunOverhe
         # Section: Results by group (allocation + cpu_model) - preferred for comparison
         group_sections = []
         group_datasets_js = []
+        failed_measurements_all = data.get("failed_measurements", [])
+        
         for idx, key in enumerate(sorted(by_group.keys())):
             group = by_group[key]
             memory = group["memory"]
@@ -71,6 +73,7 @@ class LightrunOverheadReportVisualizer(BenchmarkResultsVisualizer[LightrunOverhe
             successes = group.get("successes", [])
             regression = group.get("regression") or {}
             group_summary = group.get("summary", {})
+            failed_action_counts = group.get("failed_action_counts", [])
 
             section_lines = [
                 f"<h3>Group: {memory} / {cpu} CPU | {cpu_model}</h3>",
@@ -86,6 +89,10 @@ class LightrunOverheadReportVisualizer(BenchmarkResultsVisualizer[LightrunOverhe
                     f"<tr><td>Median (ns)</td><td>{h['median']:.0f}</td></tr>",
                     f"<tr><td>Stdev (ns)</td><td>{h['stdev']:.0f}</td></tr>",
                     "</tbody></table>",
+                ])
+            if failed_action_counts:
+                section_lines.extend([
+                    f"<p><span style='color: red;'>Failed measurements at action counts:</span> {', '.join(map(str, failed_action_counts))}</p>",
                 ])
             if regression:
                 section_lines.extend([
@@ -111,12 +118,16 @@ class LightrunOverheadReportVisualizer(BenchmarkResultsVisualizer[LightrunOverhe
                     for x in line_x
                 ]
             line_data = [{"x": x, "y": y} for x, y in zip(line_x, line_y)]
+            # Failed points (X marks on the x-axis at y=0)
+            failed_data = [{"x": x, "y": None} for x in failed_action_counts]
             # Shorten cpu_model for chart label
             short_model = cpu_model.split("(")[0].strip() if "(" in cpu_model else cpu_model[:20]
             group_datasets_js.append({
                 "label": f"{memory}/{cpu} | {short_model}",
                 "scatterData": scatter_data,
                 "lineData": line_data,
+                "failedData": failed_data,
+                "failedActionCounts": failed_action_counts,
             })
 
         # Section: Aggregated by allocation (backward compat, but warns about mixed processors)
@@ -351,6 +362,16 @@ class LightrunOverheadReportVisualizer(BenchmarkResultsVisualizer[LightrunOverhe
       {{ scatter: 'rgba(199, 199, 199, 0.6)', line: 'rgba(199, 199, 199, 1)' }},
       {{ scatter: 'rgba(83, 102, 255, 0.6)', line: 'rgba(83, 102, 255, 1)' }},
     ];
+    // Collect all failed action counts for X marks on axis
+    const allFailedActionCounts = [];
+    groupDatasets.forEach(group => {{
+      if (group.failedActionCounts) {{
+        group.failedActionCounts.forEach(x => {{
+          if (!allFailedActionCounts.includes(x)) allFailedActionCounts.push(x);
+        }});
+      }}
+    }});
+    
     const chartDatasets = [];
     groupDatasets.forEach((group, i) => {{
       const c = colors[i % colors.length];
@@ -371,6 +392,40 @@ class LightrunOverheadReportVisualizer(BenchmarkResultsVisualizer[LightrunOverhe
         fill: false,
       }});
     }});
+    
+    // Custom plugin to draw X marks on the x-axis for failed measurements
+    const failedMarksPlugin = {{
+      id: 'failedMarks',
+      afterDatasetsDraw(chart) {{
+        const ctx = chart.ctx;
+        const xScale = chart.scales.x;
+        const yScale = chart.scales.y;
+        const yAxisBottom = yScale.bottom;
+        
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+        ctx.lineWidth = 2;
+        
+        allFailedActionCounts.forEach(actionCount => {{
+          const xPixel = xScale.getPixelForValue(actionCount);
+          const markSize = 8;
+          
+          // Draw X mark at the bottom of the chart (on x-axis)
+          ctx.beginPath();
+          ctx.moveTo(xPixel - markSize, yAxisBottom - markSize);
+          ctx.lineTo(xPixel + markSize, yAxisBottom + markSize);
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.moveTo(xPixel + markSize, yAxisBottom - markSize);
+          ctx.lineTo(xPixel - markSize, yAxisBottom + markSize);
+          ctx.stroke();
+        }});
+        
+        ctx.restore();
+      }}
+    }};
+    
     const ctx = document.getElementById('groupChart').getContext('2d');
     new Chart(ctx, {{
       type: 'scatter',
@@ -399,6 +454,7 @@ class LightrunOverheadReportVisualizer(BenchmarkResultsVisualizer[LightrunOverhe
           }},
         }},
       }},
+      plugins: [failedMarksPlugin],
     }});
     {warmup_chart_script}
   </script>

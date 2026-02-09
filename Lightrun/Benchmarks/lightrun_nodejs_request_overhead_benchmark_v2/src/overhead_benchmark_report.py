@@ -6,7 +6,7 @@ from typing import List, Dict, Any
 from Lightrun.Benchmarks.shared_modules.benchmark_case import BenchmarkCase
 from Lightrun.Benchmarks.shared_modules.benchmark_report_generator import BenchmarkReportGenerator
 from Lightrun.Benchmarks.shared_modules.cpu_model import CpuModel
-from .overhead_benchmark_result import Success, LightrunOverheadBenchmarkResult
+from .overhead_benchmark_result import Success, Failure, LightrunOverheadBenchmarkResult
 from .overhead_benchmark_result_repository import LightrunOverheadBenchmarkResultRepository, RAW_FILENAME
 
 
@@ -141,37 +141,52 @@ def _build_report_data_from_results(
     - by_allocation: grouped by memory/cpu allocation only (for backward compatibility)
     - by_group: grouped by (allocation, cpu_model) for precise comparisons
     - warmup: warmup phase data from all cases
+    - failed_measurements: list of failed measurements with their action counts (for visualization)
     
     Note: Results can contain individual measurements in benchmark_results dict (new format)
     or a single measurement (legacy format). This function handles both.
+    
+    Also handles partial failures: even if a result is marked as Failure overall, 
+    it may contain some successful individual measurements that we can still use.
     """
     failures_count = 0
     # Group by (allocation, cpu_model) for precise comparisons
     grouped: Dict[str, List[Dict[str, Any]]] = {}
+    # Track failed measurements for visualization (show X marks on chart)
+    failed_measurements: Dict[str, List[Dict[str, Any]]] = {}
     
     for result in results:
         if result is None:
             failures_count += 1
             continue
         
-        if not isinstance(result, Success):
+        # Process both Success and Failure results - Failure may have partial data
+        if not isinstance(result, (Success, Failure)):
+            failures_count += 1
+            continue
+        
+        # Get DTO - both Success and Failure have benchmark_dto
+        dto = result.benchmark_dto
+        if dto is None:
             failures_count += 1
             continue
             
-        memory = result.benchmark_dto.memory
-        cpu = result.benchmark_dto.cpu
+        memory = dto.memory
+        cpu = dto.cpu
         # Get cpu_model from DTO (populated during load) or identify from cpu_info
-        cpu_model = result.benchmark_dto.cpu_model
+        cpu_model = dto.cpu_model
         if not cpu_model and result.cpu_info:
             cpu_model = CpuModel.identify(result.cpu_info).display_name
         
         key = _group_key(memory, cpu, cpu_model)
         
         # Check if this result has benchmark_results dict (new format)
-        benchmark_results = result.benchmark_dto.benchmark_results
+        benchmark_results = dto.benchmark_results
         if benchmark_results:
             # Extract individual measurements from benchmark_results dict
+            recorded_action_counts = set()
             for num_actions, measurement in benchmark_results.items():
+                recorded_action_counts.add(int(num_actions))
                 if measurement.success:
                     grouped.setdefault(key, []).append({
                         "memory": memory,
@@ -182,8 +197,32 @@ def _build_report_data_from_results(
                     })
                 else:
                     failures_count += 1
-        else:
-            # Legacy format: single measurement per result
+                    # Track failed measurement for visualization
+                    failed_measurements.setdefault(key, []).append({
+                        "memory": memory,
+                        "cpu": cpu,
+                        "cpu_model": cpu_model,
+                        "actions_count": measurement.actions_count,
+                        "error": measurement.error,
+                    })
+            
+            # Check for missing measurements (action counts that should have been tested but weren't)
+            # test_size means we should test 0 through test_size (inclusive)
+            test_size = dto.test_size
+            if test_size is not None:
+                expected_action_counts = set(range(test_size + 1))
+                missing_action_counts = expected_action_counts - recorded_action_counts
+                for missing_count in missing_action_counts:
+                    failures_count += 1
+                    failed_measurements.setdefault(key, []).append({
+                        "memory": memory,
+                        "cpu": cpu,
+                        "cpu_model": cpu_model,
+                        "actions_count": missing_count,
+                        "error": "Measurement not recorded (benchmark stopped early)",
+                    })
+        elif isinstance(result, Success):
+            # Legacy format: single measurement per result (only for Success)
             grouped.setdefault(key, []).append({
                 "memory": memory,
                 "cpu": cpu,
@@ -191,6 +230,9 @@ def _build_report_data_from_results(
                 "actions_count": result.actions_count,
                 "handler_run_time_ns": result.handler_run_time_ns,
             })
+        else:
+            # Legacy Failure without benchmark_results
+            failures_count += 1
     
     total = len(results)
     success_count = sum(len(s) for s in grouped.values())
@@ -244,6 +286,10 @@ def _build_report_data_from_results(
                 "intercept_ns": intercept,
                 "r_squared": r_squared,
             }
+        # Get failed measurements for this group
+        group_failures = failed_measurements.get(key, [])
+        failed_action_counts = sorted(set(f["actions_count"] for f in group_failures))
+        
         by_group[key] = {
             "memory": memory,
             "cpu": cpu,
@@ -252,6 +298,8 @@ def _build_report_data_from_results(
             "successes": successes,
             "by_actions_count": by_actions_count,
             "regression": regression,
+            "failed_measurements": group_failures,
+            "failed_action_counts": failed_action_counts,  # For easy chart rendering
         }
 
     # Build by_allocation (backward compatible structure, aggregates cpu_models)
@@ -328,11 +376,17 @@ def _build_report_data_from_results(
     # Build warmup data
     warmup_data = _build_warmup_summary(results)
     
+    # Aggregate all failed measurements for summary
+    all_failed = []
+    for group_failures in failed_measurements.values():
+        all_failed.extend(group_failures)
+    
     return {
         "summary": summary,
         "by_allocation": by_allocation,
         "by_group": by_group,
         "warmup": warmup_data,
+        "failed_measurements": all_failed,
     }
 
 
